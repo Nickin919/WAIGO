@@ -71,6 +71,9 @@ model User {
   costTables      CostTable[]
   catalogsCreated Catalog[] @relation("CatalogCreator")
   catalogAssignments CatalogAssignment[]
+  priceContractAssignments UserPriceContractAssignment[]
+  priceContractsCreated    PriceContract[]
+  priceContractAssignmentsGiven UserPriceContractAssignment[] @relation("PriceContractAssigner")
   priceChanges    PriceHistory[] @relation("PriceChanges")
 
   @@map("users")
@@ -139,17 +142,19 @@ model CostTableItem {
 // ============================================================================
 
 model CatalogAssignment {
-  id          String    @id @default(uuid())
-  catalogId   String    @map("catalog_id")
-  userId      String    @map("user_id")
-  assignedById String   @map("assigned_by_id") // Distributor/RSM/Admin who assigned
-  assignedAt  DateTime  @default(now()) @map("assigned_at")
+  id           String    @id @default(uuid())
+  catalogId    String    @map("catalog_id")
+  userId       String    @map("user_id")
+  isPrimary    Boolean   @default(false) @map("is_primary") // Exactly one primary per user
+  assignedById String   @map("assigned_by_id")
+  assignedAt   DateTime  @default(now()) @map("assigned_at")
 
   // Relations
-  catalog     Catalog   @relation(fields: [catalogId], references: [id], onDelete: Cascade)
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  catalog      Catalog   @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([catalogId, userId])
+  @@index([userId])
   @@map("catalog_assignments")
 }
 
@@ -162,8 +167,9 @@ model Catalog {
   name        String
   description String?
   isActive    Boolean   @default(true) @map("is_active")
-  isPublic    Boolean   @default(false) @map("is_public") // Public catalogs for FREE users
-  createdById String?   @map("created_by_id") // Distributor/Admin who created
+  isPublic    Boolean   @default(false) @map("is_public")
+  isMaster    Boolean   @default(false) @map("is_master") // Label: single source of truth (ADMIN)
+  createdById String?   @map("created_by_id")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
@@ -258,7 +264,8 @@ model Part {
   projectItems  ProjectItem[]
   wagoEquivalents CrossReference[] @relation("WagoPart")
   priceHistory  PriceHistory[]
-  catalogItems  CatalogItem[] // Products selected in user catalogs
+  catalogItems  CatalogItem[]
+  priceContractItems PriceContractItem[]
 
   @@unique([catalogId, partNumber])
   @@index([catalogId])
@@ -424,6 +431,7 @@ model Quote {
   id              String    @id @default(uuid())
   quoteNumber     String    @unique @map("quote_number")
   catalogId       String    @map("catalog_id")
+  priceContractId String?   @map("price_contract_id") // Optional: special pricing overlay used for this quote
   userId          String    @map("user_id")
   customerId      String?   @map("customer_id")
   customerName    String?   @map("customer_name")
@@ -440,14 +448,16 @@ model Quote {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  user     User    @relation(fields: [userId], references: [id])
-  customer Customer? @relation(fields: [customerId], references: [id])
-  items    QuoteItem[]
-  discounts QuoteDiscount[]
+  user          User         @relation(fields: [userId], references: [id])
+  customer      Customer?    @relation(fields: [customerId], references: [id])
+  priceContract PriceContract? @relation(fields: [priceContractId], references: [id])
+  items         QuoteItem[]
+  discounts     QuoteDiscount[]
 
   @@index([catalogId])
   @@index([userId])
   @@index([customerId])
+  @@index([priceContractId])
   @@map("quotes")
 }
 
@@ -498,6 +508,70 @@ model QuoteDiscount {
 
   @@index([quoteId])
   @@map("quote_discounts")
+}
+
+// ============================================================================
+// PRICE CONTRACTS (Special pricing overlays – ADMIN/RSM only)
+// ============================================================================
+
+model PriceContract {
+  id          String    @id @default(uuid())
+  name        String
+  description String?   @db.Text
+  validFrom   DateTime? @map("valid_from")
+  validTo     DateTime? @map("valid_to")
+  createdById String    @map("created_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  items       PriceContractItem[]
+  userAssignments UserPriceContractAssignment[]
+  quotes      Quote[]
+
+  @@index([createdById])
+  @@map("price_contracts")
+}
+
+model PriceContractItem {
+  id                String    @id @default(uuid())
+  contractId        String    @map("contract_id")
+  partId            String?   @map("part_id") // Specific product
+  seriesOrGroup     String?   @map("series_or_group") // Or series/group name
+  costPrice         Float     @map("cost_price")
+  suggestedSellPrice Float?   @map("suggested_sell_price") // Editable by assignees
+  discountPercent   Float?    @map("discount_percent")
+  minQuantity       Int       @default(1) @map("min_quantity")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  contract    PriceContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  part        Part?         @relation(fields: [partId], references: [id], onDelete: SetNull)
+
+  @@index([contractId])
+  @@index([partId])
+  @@index([seriesOrGroup])
+  @@map("price_contract_items")
+}
+
+model UserPriceContractAssignment {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  contractId   String   @map("contract_id")
+  assignedById String   @map("assigned_by_id")
+  assignedAt   DateTime @default(now()) @map("assigned_at")
+
+  // Relations
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contract     PriceContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  assignedBy   User          @relation("PriceContractAssigner", fields: [assignedById], references: [id])
+
+  @@unique([userId, contractId])
+  @@index([userId])
+  @@index([contractId])
+  @@map("user_price_contract_assignments")
 }
 
 // ============================================================================

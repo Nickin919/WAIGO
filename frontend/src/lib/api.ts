@@ -215,6 +215,39 @@ export const quoteApi = {
 };
 
 // ============================================================================
+// Assignments API (ADMIN/RSM/DISTRIBUTOR)
+// ============================================================================
+
+export const assignmentsApi = {
+  getTree: () => api.get('/assignments/tree'),
+  getUsers: (params?: { search?: string; page?: number; limit?: number }) =>
+    api.get('/assignments/users', { params }),
+  getMyAssignments: () => api.get('/assignments/me'),
+  assignCatalogs: (data: { userId?: string; userIds?: string[]; catalogIds: string[]; primaryCatalogId?: string }) =>
+    api.post('/assignments/catalogs', data),
+  assignContracts: (data: { userId?: string; userIds?: string[]; contractIds: string[] }) =>
+    api.post('/assignments/contracts', data),
+};
+
+// ============================================================================
+// Price Contracts API
+// ============================================================================
+
+export const priceContractApi = {
+  list: () => api.get('/price-contracts'),
+  getById: (id: string) => api.get(`/price-contracts/${id}`),
+  create: (data: { name: string; description?: string; validFrom?: string; validTo?: string }) =>
+    api.post('/price-contracts', data),
+  update: (id: string, data: { name?: string; description?: string; validFrom?: string; validTo?: string }) =>
+    api.patch(`/price-contracts/${id}`, data),
+  delete: (id: string) => api.delete(`/price-contracts/${id}`),
+  addItems: (contractId: string, items: Array<{ partId?: string; seriesOrGroup?: string; costPrice: number; suggestedSellPrice?: number; discountPercent?: number; minQuantity?: number }>) =>
+    api.post(`/price-contracts/${contractId}/items`, { items }),
+  updateMyContractItems: (contractId: string, items: Array<{ id: string; suggestedSellPrice: number | null }>) =>
+    api.patch(`/my/contracts/${contractId}/items`, { items }),
+};
+
+// ============================================================================
 // Customer API
 // ============================================================================
 

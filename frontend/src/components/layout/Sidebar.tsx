@@ -18,6 +18,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     { path: '/videos', icon: PlayCircle, label: 'Video Academy', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
     { path: '/projects', icon: FolderKanban, label: 'Projects', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
     { path: '/quotes', icon: DollarSign, label: 'Quotes', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
+    { path: '/my-price-contracts', icon: Calculator, label: 'My Price Contracts', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
   ];
 
   const teamItems = [
@@ -27,6 +28,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
 
   const managementItems = [
     { path: '/managed-users', icon: Building2, label: 'Managed Users', roles: ['DISTRIBUTOR', 'RSM', 'ADMIN'] },
+    { path: '/assignments', icon: Users, label: 'Assignments', roles: ['DISTRIBUTOR', 'RSM', 'ADMIN'] },
     { path: '/activity', icon: BarChart3, label: 'Activity Dashboard', roles: ['DISTRIBUTOR', 'RSM', 'ADMIN'] },
   ];
 

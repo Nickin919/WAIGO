@@ -24,6 +24,8 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import ProductImport from './pages/admin/ProductImport';
 import CatalogList from './pages/catalog/CatalogList';
 import CatalogCreator from './pages/catalog/CatalogCreator';
+import AssignmentsPage from './pages/assignments/AssignmentsPage';
+import MyPriceContractsPage from './pages/assignments/MyPriceContractsPage';
 import NotFound from './pages/NotFound';
 
 // Protected route wrapper
@@ -74,6 +76,8 @@ function App() {
         <Route path="/catalog-list" element={<CatalogList />} />
         <Route path="/catalog-creator/new" element={<CatalogCreator />} />
         <Route path="/catalog-creator/:id" element={<CatalogCreator />} />
+        <Route path="/assignments" element={<AssignmentsPage />} />
+        <Route path="/my-price-contracts" element={<MyPriceContractsPage />} />
         <Route path="/profile" element={<Profile />} />
       </Route>
 

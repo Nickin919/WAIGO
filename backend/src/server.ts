@@ -37,6 +37,9 @@ import costTableRoutes from './routes/costTable.routes';
 import customerRoutes from './routes/customer.routes';
 import productImportRoutes from './routes/productImport.routes';
 import catalogCreatorRoutes from './routes/catalogCreator.routes';
+import assignmentsRoutes from './routes/assignments.routes';
+import priceContractRoutes from './routes/priceContract.routes';
+import myRoutes from './routes/my.routes';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler';
@@ -107,6 +110,9 @@ app.use('/api/teams', teamRoutes);
 app.use('/api/cost-tables', costTableRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/catalog-creator', catalogCreatorRoutes);
+app.use('/api/assignments', assignmentsRoutes);
+app.use('/api/price-contracts', priceContractRoutes);
+app.use('/api/my', myRoutes);
 
 // ============================================================================
 // Error Handling

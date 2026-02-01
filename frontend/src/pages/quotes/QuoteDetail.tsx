@@ -78,6 +78,12 @@ const QuoteDetail = () => {
           <h3 className="text-sm font-medium text-gray-500">Customer</h3>
           <p className="font-medium">{quote.customerName || '—'}</p>
         </div>
+        {quote.priceContract && (
+          <div>
+            <h3 className="text-sm font-medium text-gray-500">Price contract</h3>
+            <p className="font-medium">{quote.priceContract.name}</p>
+          </div>
+        )}
         {quote.notes && (
           <div>
             <h3 className="text-sm font-medium text-gray-500">Notes</h3>

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, Search, UserPlus, Upload, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
-import { quoteApi, catalogApi, customerApi, partApi } from '@/lib/api';
+import { quoteApi, catalogApi, customerApi, partApi, assignmentsApi, priceContractApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { ROLE_MAX_DISCOUNT } from '@/lib/quoteConstants';
 
@@ -45,6 +45,17 @@ interface Part {
   distributorDiscount?: number;
 }
 
+/** Price contract item for applying special pricing when adding products */
+interface PriceContractItemRow {
+  id: string;
+  partId: string | null;
+  seriesOrGroup: string | null;
+  costPrice: number;
+  suggestedSellPrice: number | null;
+  discountPercent: number | null;
+  minQuantity: number;
+}
+
 const QuoteForm = () => {
   const { quoteId } = useParams();
   const navigate = useNavigate();
@@ -53,6 +64,9 @@ const QuoteForm = () => {
 
   const [catalogId, setCatalogId] = useState('');
   const [catalogs, setCatalogs] = useState<{ id: string; name: string }[]>([]);
+  const [priceContractId, setPriceContractId] = useState('');
+  const [priceContracts, setPriceContracts] = useState<{ id: string; name: string }[]>([]);
+  const [contractDetails, setContractDetails] = useState<{ items: PriceContractItemRow[] } | null>(null);
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState('');
   const [notes, setNotes] = useState('');
@@ -98,23 +112,70 @@ const QuoteForm = () => {
   const someDiscountSelected = items.some((i) => i.discountSelected);
   const isDistributorOrHigher = ['ADMIN', 'RSM', 'DISTRIBUTOR'].includes(user?.role || '');
 
+  // Load assigned catalogs and price contracts (for proposal wizard); fallback to all catalogs if no assignments
   useEffect(() => {
-    catalogApi.getAll().then((res) => {
-      const list = Array.isArray(res.data) ? res.data : [];
-      setCatalogs(list.map((c: any) => ({ id: c.id, name: c.name || 'Unnamed' })));
-      if (list.length > 0 && !catalogId) {
-        const userCat = user?.catalogId;
-        const match = userCat && list.some((c: any) => c.id === userCat);
-        setCatalogId(match ? userCat! : list[0].id);
-      }
-    }).catch(() => {});
+    assignmentsApi.getMyAssignments()
+      .then((res) => {
+        const data = res.data as { catalogs?: { id: string; name: string; isPrimary?: boolean }[]; primaryCatalogId?: string | null; priceContracts?: { id: string; name: string }[] };
+        const assignedCatalogs = data.catalogs || [];
+        const assignedContracts = data.priceContracts || [];
+        setPriceContracts(assignedContracts);
+        if (assignedCatalogs.length > 0) {
+          setCatalogs(assignedCatalogs.map((c) => ({ id: c.id, name: c.name || 'Unnamed' })));
+          const primary = data.primaryCatalogId ?? assignedCatalogs.find((c) => c.isPrimary)?.id ?? assignedCatalogs[0]?.id;
+          if (primary && !catalogId) setCatalogId(primary);
+        } else {
+          catalogApi.getAll().then((r) => {
+            const list = Array.isArray(r.data) ? r.data : [];
+            setCatalogs(list.map((c: any) => ({ id: c.id, name: c.name || 'Unnamed' })));
+            if (list.length > 0 && !catalogId) {
+              const userCat = user?.catalogId;
+              const match = userCat && list.some((c: any) => c.id === userCat);
+              setCatalogId(match ? userCat! : list[0].id);
+            }
+          }).catch(() => {});
+        }
+      })
+      .catch(() => {
+        catalogApi.getAll().then((res) => {
+          const list = Array.isArray(res.data) ? res.data : [];
+          setCatalogs(list.map((c: any) => ({ id: c.id, name: c.name || 'Unnamed' })));
+          if (list.length > 0 && !catalogId) {
+            const userCat = user?.catalogId;
+            const match = userCat && list.some((c: any) => c.id === userCat);
+            setCatalogId(match ? userCat! : list[0].id);
+          }
+        }).catch(() => {});
+      });
   }, [user?.catalogId]);
+
+  // When a price contract is selected, load its items for applying pricing
+  useEffect(() => {
+    if (!priceContractId) {
+      setContractDetails(null);
+      return;
+    }
+    priceContractApi.getById(priceContractId).then((res) => {
+      const contract = res.data as { items?: { id: string; partId: string | null; seriesOrGroup: string | null; costPrice: number; suggestedSellPrice: number | null; discountPercent: number | null; minQuantity: number }[] };
+      const items = (contract.items || []).map((i) => ({
+        id: i.id,
+        partId: i.partId ?? null,
+        seriesOrGroup: i.seriesOrGroup ?? null,
+        costPrice: i.costPrice,
+        suggestedSellPrice: i.suggestedSellPrice ?? null,
+        discountPercent: i.discountPercent ?? null,
+        minQuantity: i.minQuantity ?? 1,
+      }));
+      setContractDetails({ items });
+    }).catch(() => setContractDetails(null));
+  }, [priceContractId]);
 
   useEffect(() => {
     if (isEdit && quoteId) {
       quoteApi.getById(quoteId).then((res) => {
         const q = res.data as any;
         setCatalogId(q.catalogId || '');
+        setPriceContractId(q.priceContractId || '');
         setCustomerId(q.customerId || null);
         setCustomerName(q.customerName || '');
         setNotes(q.notes || q.note || '');
@@ -175,16 +236,43 @@ const QuoteForm = () => {
   const calculateLineTotal = (item: LineItem) => item.quantity * calculateSellPrice(item);
   const calculateTotal = () => items.reduce((sum, i) => sum + calculateLineTotal(i), 0);
 
+  /** Find contract item for a part: by partId or by seriesOrGroup matching part.series/partNumber */
+  const findContractItem = (part: Part): PriceContractItemRow | null => {
+    if (!contractDetails?.items?.length) return null;
+    const byPart = contractDetails.items.find((i) => i.partId === part.id);
+    if (byPart) return byPart;
+    const series = (part.series || part.partNumber || '').toUpperCase();
+    const bySeries = contractDetails.items.find(
+      (i) => i.seriesOrGroup && series.includes((i.seriesOrGroup as string).toUpperCase())
+    );
+    if (bySeries) return bySeries;
+    const byPartNumber = contractDetails.items.find(
+      (i) => i.seriesOrGroup && (part.partNumber || '').toUpperCase() === (i.seriesOrGroup as string).toUpperCase()
+    );
+    return byPartNumber ?? null;
+  };
+
   const addProduct = (part: Part) => {
-    const listPrice = part.basePrice ?? 0;
-    const defaultDisc = part.distributorDiscount ?? 0;
+    const contractItem = findContractItem(part);
+    const quantity = 1;
+    let listPrice = part.basePrice ?? 0;
+    let defaultDisc = part.distributorDiscount ?? 0;
+    let marginPct = 0;
+    if (contractItem && quantity >= contractItem.minQuantity) {
+      listPrice = contractItem.costPrice;
+      defaultDisc = contractItem.discountPercent ?? part.distributorDiscount ?? 0;
+      const costAfterDisc = listPrice * (1 - defaultDisc / 100);
+      if (contractItem.suggestedSellPrice != null && costAfterDisc > 0) {
+        marginPct = (contractItem.suggestedSellPrice / costAfterDisc - 1) * 100;
+      }
+    }
     const existing = items.find((i) => i.partId === part.id);
     if (existing) {
       setItems(items.map((i) =>
         i.partId === part.id ? { ...i, quantity: i.quantity + 1 } : i
       ));
     } else {
-        setItems([
+      setItems([
         ...items,
         {
           partId: part.id,
@@ -196,7 +284,7 @@ const QuoteForm = () => {
           distributorDiscount: defaultDisc,
           quantity: 1,
           discountPct: defaultDisc,
-          marginPct: 0,
+          marginPct,
           marginSelected: false,
           discountSelected: false,
         },
@@ -226,8 +314,18 @@ const QuoteForm = () => {
         for (const part of data.found) {
           const key = part.partNumber.toUpperCase();
           const count = partCounts.get(key) || 1;
-          const listPrice = part.basePrice ?? 0;
-          const defaultDisc = part.distributorDiscount ?? 0;
+          const contractItem = findContractItem(part);
+          let listPrice = part.basePrice ?? 0;
+          let defaultDisc = part.distributorDiscount ?? 0;
+          let marginPct = 0;
+          if (contractItem && count >= contractItem.minQuantity) {
+            listPrice = contractItem.costPrice;
+            defaultDisc = contractItem.discountPercent ?? part.distributorDiscount ?? 0;
+            const costAfterDisc = listPrice * (1 - defaultDisc / 100);
+            if (contractItem.suggestedSellPrice != null && costAfterDisc > 0) {
+              marginPct = (contractItem.suggestedSellPrice / costAfterDisc - 1) * 100;
+            }
+          }
           const idx = next.findIndex((i) => i.partId === part.id);
           if (idx >= 0) {
             next[idx].quantity += count;
@@ -242,7 +340,7 @@ const QuoteForm = () => {
               distributorDiscount: defaultDisc,
               quantity: count,
               discountPct: defaultDisc,
-              marginPct: 0,
+              marginPct,
               marginSelected: false,
               discountSelected: false,
             });
@@ -360,6 +458,7 @@ const QuoteForm = () => {
     setSaving(true);
     const payload = {
       catalogId,
+      priceContractId: priceContractId || undefined,
       customerId: customerId || undefined,
       customerName: customerName || '',
       notes,
@@ -423,6 +522,24 @@ const QuoteForm = () => {
             </select>
           </div>
         )}
+
+        {/* Price contract (optional special pricing) */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Price contract</label>
+          <select
+            value={priceContractId}
+            onChange={(e) => setPriceContractId(e.target.value)}
+            className="input max-w-md"
+          >
+            <option value="">Standard pricing</option>
+            {priceContracts.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          {priceContractId && (
+            <p className="text-xs text-gray-500 mt-1">Products added will use contract cost and suggested sell when eligible.</p>
+          )}
+        </div>
 
         {/* Customer */}
         <div>

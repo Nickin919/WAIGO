@@ -53,6 +53,15 @@ async function canAccessQuote(userId: string, userRole: string, quoteUserId: str
   return subordinateIds.includes(quoteUserId);
 }
 
+/** Check if user may use a price contract (ADMIN/RSM or assigned) */
+async function canUsePriceContract(userId: string, userRole: string, contractId: string): Promise<boolean> {
+  if (['ADMIN', 'RSM'].includes(userRole)) return true;
+  const assignment = await prisma.userPriceContractAssignment.findUnique({
+    where: { userId_contractId: { userId, contractId } },
+  });
+  return !!assignment;
+}
+
 /**
  * Get quotes (hierarchical visibility)
  */
@@ -103,6 +112,7 @@ export const getQuoteById = async (req: AuthRequest, res: Response): Promise<voi
           select: { id: true, email: true, firstName: true, lastName: true },
         },
         customer: true,
+        priceContract: { select: { id: true, name: true } },
         items: {
           include: {
             part: {
@@ -142,7 +152,7 @@ export const createQuote = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const { catalogId, customerId, customerName, customerEmail, customerCompany, notes, items } = req.body;
+    const { catalogId, priceContractId, customerId, customerName, customerEmail, customerCompany, notes, items } = req.body;
 
     if (!catalogId) {
       res.status(400).json({ error: 'catalogId is required' });
@@ -161,6 +171,19 @@ export const createQuote = async (req: AuthRequest, res: Response): Promise<void
         res.status(400).json({
           error: `Discount exceeds your maximum allowed (${maxDiscount}%)`,
         });
+        return;
+      }
+    }
+
+    if (priceContractId) {
+      const contract = await prisma.priceContract.findUnique({ where: { id: priceContractId } });
+      if (!contract) {
+        res.status(400).json({ error: 'Price contract not found' });
+        return;
+      }
+      const allowed = await canUsePriceContract(req.user.id, req.user.role, priceContractId);
+      if (!allowed) {
+        res.status(403).json({ error: 'You do not have access to this price contract' });
         return;
       }
     }
@@ -226,6 +249,7 @@ export const createQuote = async (req: AuthRequest, res: Response): Promise<void
       data: {
         quoteNumber,
         catalogId,
+        priceContractId: priceContractId || null,
         userId: req.user.id,
         customerId: customerId || null,
         customerName: displayName || null,
@@ -270,7 +294,7 @@ export const updateQuote = async (req: AuthRequest, res: Response): Promise<void
     }
 
     const { id } = req.params;
-    const { customerId, customerName, customerEmail, customerCompany, notes, items } = req.body;
+    const { customerId, customerName, customerEmail, customerCompany, notes, priceContractId, items } = req.body;
 
     const existing = await prisma.quote.findUnique({
       where: { id },
@@ -301,6 +325,21 @@ export const updateQuote = async (req: AuthRequest, res: Response): Promise<void
           error: `Discount exceeds your maximum allowed (${maxDiscount}%)`,
         });
         return;
+      }
+    }
+
+    if (priceContractId !== undefined) {
+      if (priceContractId) {
+        const contract = await prisma.priceContract.findUnique({ where: { id: priceContractId } });
+        if (!contract) {
+          res.status(400).json({ error: 'Price contract not found' });
+          return;
+        }
+        const allowed = await canUsePriceContract(req.user.id, req.user.role, priceContractId);
+        if (!allowed) {
+          res.status(403).json({ error: 'You do not have access to this price contract' });
+          return;
+        }
       }
     }
 
@@ -358,18 +397,22 @@ export const updateQuote = async (req: AuthRequest, res: Response): Promise<void
       });
     }
 
+    const updateData: { customerId?: string | null; customerName?: string | null; customerEmail?: string; customerCompany?: string; notes?: string | null; total: number; priceContractId?: string | null } = {
+      customerId: customerId || null,
+      customerName: displayName || null,
+      customerEmail: customerEmail || undefined,
+      customerCompany: customerCompany || undefined,
+      notes: notes || null,
+      total,
+    };
+    if (priceContractId !== undefined) {
+      updateData.priceContractId = priceContractId || null;
+    }
     await prisma.$transaction([
       prisma.quoteItem.deleteMany({ where: { quoteId: id } }),
       prisma.quote.update({
         where: { id },
-        data: {
-          customerId: customerId || null,
-          customerName: displayName || null,
-          customerEmail: customerEmail || undefined,
-          customerCompany: customerCompany || undefined,
-          notes: notes || null,
-          total,
-        },
+        data: updateData,
       }),
       prisma.quoteItem.createMany({
         data: itemsToCreate,
