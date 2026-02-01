@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import * as costTableController from '../controllers/costTable.controller';
 import { authenticate, authorize } from '../middleware/auth';
-import { uploadCSV } from '../middleware/upload';
+import { uploadCSV, uploadPDF } from '../middleware/upload';
 
 const router = Router();
 
@@ -19,6 +19,9 @@ router.post('/', authorize('TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'), costTableC
 
 // Upload cost table from CSV
 router.post('/upload', authorize('TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'), uploadCSV, costTableController.uploadCostTableCSV);
+
+// Upload cost table from PDF (WAGO quote)
+router.post('/:id/upload-pdf', authorize('TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'), uploadPDF, costTableController.uploadPdf);
 
 // Download cost table as CSV
 router.get('/:id/download', costTableController.downloadCostTableCSV);

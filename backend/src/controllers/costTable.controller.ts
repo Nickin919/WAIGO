@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import Papa from 'papaparse';
 import fs from 'fs';
+import { parseWagoPDF } from '../lib/pdfParser';
 
 /**
  * Get cost tables accessible to user
@@ -388,5 +389,121 @@ export const getPartCustomCost = async (req: AuthRequest, res: Response): Promis
   } catch (error) {
     console.error('Get custom cost error:', error);
     res.status(500).json({ error: 'Failed to fetch custom cost' });
+  }
+};
+
+/**
+ * Upload PDF and parse into cost table items
+ * POST /api/cost-tables/:id/upload-pdf
+ */
+export const uploadPdf = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user || !['TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'].includes(req.user.role)) {
+      res.status(403).json({ error: 'Insufficient permissions' });
+      return;
+    }
+
+    const { id: costTableId } = req.params;
+    const costTable = await prisma.costTable.findUnique({ where: { id: costTableId } });
+    if (!costTable) {
+      res.status(404).json({ error: 'Pricing contract not found' });
+      return;
+    }
+
+    if (!req.file) {
+      res.status(400).json({ error: 'PDF file required' });
+      return;
+    }
+
+    const pdfPath = req.file.path;
+
+    // Parse PDF using Python tool
+    const parseResult = await parseWagoPDF(pdfPath);
+
+    // Clean up uploaded PDF
+    try {
+      fs.unlinkSync(pdfPath);
+    } catch {
+      // Ignore cleanup errors
+    }
+
+    if (!parseResult.success || parseResult.rows.length === 0) {
+      res.status(400).json({
+        error: 'Failed to parse PDF or no valid rows found',
+        details: parseResult.errors,
+        unparsedRows: parseResult.unparsedRows,
+      });
+      return;
+    }
+
+    // Import parsed rows as cost table items
+    const imported: Array<{ partNumber: string; description: string; customCost: number }> = [];
+    const skipped: Array<{ partNumber: string; reason: string }> = [];
+
+    for (const row of parseResult.rows) {
+      try {
+        // Extract price (remove $ and commas)
+        const priceStr = row.price.replace(/[$,]/g, '').trim();
+        const customCost = parseFloat(priceStr);
+
+        if (isNaN(customCost) || customCost <= 0) {
+          skipped.push({ partNumber: row.partNumber || row.series, reason: 'Invalid or zero price' });
+          continue;
+        }
+
+        // Skip series discount rows (no part number, just discount %)
+        if (!row.partNumber && row.discount) {
+          skipped.push({ partNumber: row.series || 'Series discount', reason: 'Series discounts not imported to cost table' });
+          continue;
+        }
+
+        const partNumber = row.partNumber || row.series;
+        if (!partNumber) {
+          skipped.push({ partNumber: '(empty)', reason: 'No part number' });
+          continue;
+        }
+
+        // Upsert item (update if exists, create if not)
+        await prisma.costTableItem.upsert({
+          where: {
+            costTableId_partNumber: { costTableId, partNumber }
+          },
+          create: {
+            costTableId,
+            partNumber,
+            description: row.description || '',
+            customCost,
+            notes: `Imported from PDF${row.discount ? ` (discount: ${row.discount})` : ''}`,
+          },
+          update: {
+            description: row.description || undefined,
+            customCost,
+            notes: `Imported from PDF${row.discount ? ` (discount: ${row.discount})` : ''}`,
+          },
+        });
+
+        imported.push({ partNumber, description: row.description, customCost });
+      } catch (err: any) {
+        skipped.push({ partNumber: row.partNumber || '?', reason: err.message || 'Database error' });
+      }
+    }
+
+    // Update item count
+    const itemCount = await prisma.costTableItem.count({ where: { costTableId } });
+
+    res.status(201).json({
+      success: true,
+      itemsImported: imported.length,
+      itemsSkipped: skipped.length,
+      unparsedRows: parseResult.unparsedRows.length,
+      totalItems: itemCount,
+      imported,
+      skipped,
+      unparsedRowDetails: parseResult.unparsedRows,
+      metadata: parseResult.metadata,
+    });
+  } catch (error) {
+    console.error('Upload PDF error:', error);
+    res.status(500).json({ error: 'Failed to process PDF' });
   }
 };

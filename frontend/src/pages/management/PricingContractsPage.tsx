@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, FolderOpen, Download, Trash2, Upload, FileSpreadsheet } from 'lucide-react';
+import { Plus, FolderOpen, Download, Trash2, Upload, FileSpreadsheet, FileText, AlertTriangle, CheckCircle, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { costTableApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
@@ -33,6 +33,12 @@ const PricingContractsPage = () => {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [createDropFile, setCreateDropFile] = useState<File | null>(null);
+  const [uploadResult, setUploadResult] = useState<{
+    contractId: string;
+    imported: number;
+    skipped: Array<{ partNumber: string; reason: string }>;
+    unparsed: string[];
+  } | null>(null);
 
   const canManage = user?.role && ['TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'].includes(user.role);
 
@@ -114,25 +120,71 @@ const PricingContractsPage = () => {
       .finally(() => setCreating(false));
   };
 
-  const handleUploadCsv = (id: string, file: File) => {
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      toast.error('Please select a CSV file');
+  const handleUploadFile = (id: string, file: File) => {
+    const isPdf = file.name.toLowerCase().endsWith('.pdf');
+    const isCsv = file.name.toLowerCase().endsWith('.csv');
+    
+    if (!isPdf && !isCsv) {
+      toast.error('Please select a CSV or PDF file');
       return;
     }
+    
     setUploadingId(id);
     const formData = new FormData();
-    formData.append('csv', file);
-    formData.append('costTableId', id);
-    costTableApi
-      .uploadCsv(formData)
-      .then((res) => {
-        toast.success(`CSV uploaded: ${res.data?.itemsImported ?? 'items'} imported`);
-        loadContracts();
-      })
-      .catch((err: unknown) =>
-        toast.error((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to upload CSV')
-      )
-      .finally(() => setUploadingId(null));
+    
+    if (isPdf) {
+      formData.append('pdf', file);
+      costTableApi
+        .uploadPdf(id, formData)
+        .then((res) => {
+          const data = res.data;
+          const imported = data?.itemsImported ?? 0;
+          const skipped = data?.skipped ?? [];
+          const unparsed = data?.unparsedRowDetails ?? [];
+          
+          if (imported > 0) {
+            toast.success(`PDF imported: ${imported} items added`);
+          }
+          
+          // Show results modal if there are skipped/unparsed items
+          if (skipped.length > 0 || unparsed.length > 0) {
+            setUploadResult({
+              contractId: id,
+              imported,
+              skipped,
+              unparsed,
+            });
+          }
+          
+          loadContracts();
+        })
+        .catch((err: unknown) => {
+          const errData = (err as { response?: { data?: { error?: string; unparsedRows?: string[] } } })?.response?.data;
+          toast.error(errData?.error || 'Failed to upload PDF');
+          if (errData?.unparsedRows?.length) {
+            setUploadResult({
+              contractId: id,
+              imported: 0,
+              skipped: [],
+              unparsed: errData.unparsedRows,
+            });
+          }
+        })
+        .finally(() => setUploadingId(null));
+    } else {
+      formData.append('csv', file);
+      formData.append('costTableId', id);
+      costTableApi
+        .uploadCsv(formData)
+        .then((res) => {
+          toast.success(`CSV uploaded: ${res.data?.itemsImported ?? 'items'} imported`);
+          loadContracts();
+        })
+        .catch((err: unknown) =>
+          toast.error((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to upload CSV')
+        )
+        .finally(() => setUploadingId(null));
+    }
   };
 
   const handleDelete = async (id: string, name: string) => {
@@ -169,7 +221,7 @@ const PricingContractsPage = () => {
       const file = e.dataTransfer?.files?.[0];
       if (!file) return;
       if (targetId) {
-        handleUploadCsv(targetId, file);
+        handleUploadFile(targetId, file);
       } else if (showCreate) {
         setCreateDropFile(file);
       }
@@ -193,7 +245,7 @@ const PricingContractsPage = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (targetId) {
-      handleUploadCsv(targetId, file);
+      handleUploadFile(targetId, file);
     } else if (showCreate) {
       setCreateDropFile(file);
     }
@@ -202,7 +254,7 @@ const PricingContractsPage = () => {
 
   const DropZone = ({
     id,
-    label = 'Drop CSV here or click to browse',
+    label = 'Drop CSV or PDF here',
   }: {
     id?: string;
     label?: string;
@@ -217,7 +269,7 @@ const PricingContractsPage = () => {
     >
       <input
         type="file"
-        accept=".csv"
+        accept=".csv,.pdf"
         className="hidden"
         id={id ? `upload-${id}` : 'create-upload'}
         onChange={(e) => onFileSelect(e, id)}
@@ -226,12 +278,107 @@ const PricingContractsPage = () => {
         htmlFor={id ? `upload-${id}` : 'create-upload'}
         className="cursor-pointer flex flex-col items-center gap-2"
       >
-        <Upload className="w-10 h-10 text-gray-400" />
+        <div className="flex gap-2">
+          <FileSpreadsheet className="w-8 h-8 text-gray-400" />
+          <FileText className="w-8 h-8 text-gray-400" />
+        </div>
         <span className="text-sm text-gray-600">{label}</span>
-        <span className="text-xs text-gray-500">CSV with: Part Number, Description, Custom Cost, Notes</span>
+        <span className="text-xs text-gray-500">CSV (Part Number, Description, Cost) or WAGO Quote PDF</span>
       </label>
     </div>
   );
+
+  // Results modal for showing skipped/unparsed rows
+  const UploadResultsModal = () => {
+    if (!uploadResult) return null;
+    const { imported, skipped, unparsed } = uploadResult;
+    const hasIssues = skipped.length > 0 || unparsed.length > 0;
+
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+          <div className="p-4 border-b flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {hasIssues ? (
+                <AlertTriangle className="w-5 h-5 text-yellow-500" />
+              ) : (
+                <CheckCircle className="w-5 h-5 text-green-500" />
+              )}
+              <h3 className="font-semibold">PDF Import Results</h3>
+            </div>
+            <button onClick={() => setUploadResult(null)} className="text-gray-400 hover:text-gray-600">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="p-4 overflow-y-auto max-h-[60vh]">
+            <div className="mb-4 p-3 bg-green-50 rounded-lg">
+              <span className="text-green-700 font-medium">{imported} items imported successfully</span>
+            </div>
+
+            {skipped.length > 0 && (
+              <div className="mb-4">
+                <h4 className="font-medium text-yellow-700 mb-2 flex items-center gap-1">
+                  <AlertTriangle className="w-4 h-4" />
+                  {skipped.length} items skipped
+                </h4>
+                <div className="bg-yellow-50 rounded-lg p-3 text-sm max-h-40 overflow-y-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="text-left text-yellow-800">
+                        <th className="pb-1">Part Number</th>
+                        <th className="pb-1">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-yellow-700">
+                      {skipped.slice(0, 20).map((s, i) => (
+                        <tr key={i}>
+                          <td className="py-0.5 font-mono text-xs">{s.partNumber}</td>
+                          <td className="py-0.5">{s.reason}</td>
+                        </tr>
+                      ))}
+                      {skipped.length > 20 && (
+                        <tr>
+                          <td colSpan={2} className="py-1 text-yellow-600">
+                            ...and {skipped.length - 20} more
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {unparsed.length > 0 && (
+              <div>
+                <h4 className="font-medium text-red-700 mb-2 flex items-center gap-1">
+                  <AlertTriangle className="w-4 h-4" />
+                  {unparsed.length} rows could not be parsed
+                </h4>
+                <div className="bg-red-50 rounded-lg p-3 text-sm max-h-40 overflow-y-auto">
+                  <ul className="text-red-700 space-y-1">
+                    {unparsed.slice(0, 10).map((row, i) => (
+                      <li key={i} className="font-mono text-xs truncate">{row}</li>
+                    ))}
+                    {unparsed.length > 10 && (
+                      <li className="text-red-600">...and {unparsed.length - 10} more</li>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="p-4 border-t bg-gray-50">
+            <button onClick={() => setUploadResult(null)} className="btn btn-primary w-full">
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   if (!canManage) {
     return (
@@ -243,11 +390,12 @@ const PricingContractsPage = () => {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      <UploadResultsModal />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Pricing Contracts</h1>
           <p className="text-gray-600 mt-1">
-            Custom pricing contracts for quotes and projects. Upload CSV with part numbers and costs.
+            Custom pricing contracts for quotes and projects. Upload CSV or WAGO Quote PDF.
           </p>
         </div>
         <button
@@ -291,8 +439,8 @@ const PricingContractsPage = () => {
             />
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Upload CSV (optional)</label>
-              <DropZone label="Drop CSV here or click to browse" />
+              <label className="block text-sm font-medium text-gray-700 mb-2">Upload File (optional)</label>
+              <DropZone label="Drop CSV or WAGO Quote PDF here" />
               {createDropFile && (
                 <p className="text-sm text-green-600 mt-2">Selected: {createDropFile.name}</p>
               )}
@@ -356,12 +504,12 @@ const PricingContractsPage = () => {
                         <label className="cursor-pointer">
                           <input
                             type="file"
-                            accept=".csv"
+                            accept=".csv,.pdf"
                             className="hidden"
                             disabled={uploadingId === c.id}
                             onChange={(e) => {
                               const f = e.target.files?.[0];
-                              if (f) handleUploadCsv(c.id, f);
+                              if (f) handleUploadFile(c.id, f);
                               e.target.value = '';
                             }}
                           />

@@ -344,6 +344,8 @@ export const costTableApi = {
   delete: (id: string) => api.delete(`/cost-tables/${id}`),
   uploadCsv: (formData: FormData) =>
     api.post('/cost-tables/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  uploadPdf: (id: string, formData: FormData) =>
+    api.post(`/cost-tables/${id}/upload-pdf`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   downloadCsv: (id: string) =>
     api.get(`/cost-tables/${id}/download`, { responseType: 'blob' }),
 };
