@@ -21,7 +21,8 @@
     "jspdf": "^2.5.1",
     "react-hot-toast": "^2.4.1",
     "lucide-react": "^0.309.0",
-    "clsx": "^2.1.0"
+    "clsx": "^2.1.0",
+    "serve": "^14.2.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.48",
