@@ -54,30 +54,56 @@ function parseDirectFile(worksheet: ExcelJS.Worksheet): { code: string; name: st
   return rows;
 }
 
-/**
- * Parse POS sales file: ZANALYSIS_PATTERN (7), row 6+, Col C=end customer code, E=name, F=amount.
- * Skip "Result" rows. Returns list of { code, name, amount } (one amount per line; caller aggregates by customer).
- */
-function parsePosFile(worksheet: ExcelJS.Worksheet): { code: string; name: string; amount: number }[] {
-  const dataStartRow = 6;
-  const colCode = 3;   // C – End Customer (code)
-  const colName = 5;   // E – Name End Customer
-  const colAmount = 6; // F – $ amount
+const ROUNDING_TOLERANCE = 5; // Allow a few dollars rounding when validating POS total
 
-  const rows: { code: string; name: string; amount: number }[] = [];
+/**
+ * Parse POS sales file: ZANALYSIS_PATTERN (7), row 6+.
+ * Col A=rep, B=Name CP (distributor), C=End Customer code, E=Name End Customer, F=amount.
+ * - Skip "Result" rows (subtotals). Skip rows where Name End Customer (E) is empty (distributor total row).
+ * - Last row "Overall Result" is not a sale: use its F value as expectedTotal for validation.
+ * Returns { rows, expectedTotal }. Rows have distributorName (Name CP) for charting by distributor.
+ */
+function parsePosFile(worksheet: ExcelJS.Worksheet): {
+  rows: { code: string; name: string; amount: number; distributorName: string }[];
+  expectedTotal: number | null;
+} {
+  const dataStartRow = 6;
+  const colDistributor = 2;  // B – Name CP (channel partner / distributor)
+  const colCode = 3;          // C – End Customer (code)
+  const colName = 5;          // E – Name End Customer
+  const colAmount = 6;        // F – $ amount
+
+  const rows: { code: string; name: string; amount: number; distributorName: string }[] = [];
+  let expectedTotal: number | null = null;
+  const rowCount = worksheet.rowCount ?? 0;
+
   worksheet.eachRow((row, rowNumber) => {
     if (rowNumber < dataStartRow) return;
     const code = String(row.getCell(colCode)?.value ?? '').trim();
     const name = String(row.getCell(colName)?.value ?? '').trim();
+    const distributorName = String(row.getCell(colDistributor)?.value ?? '').trim();
+
+    // "Overall Result" row: capture F as expected total for validation; do not add as a sale
+    if (code === 'Overall Result' || name === 'Overall Result' || distributorName === 'Overall Result') {
+      const val = row.getCell(colAmount)?.value;
+      if (val != null && val !== '') {
+        const n = typeof val === 'number' ? val : parseFloat(String(val));
+        if (!isNaN(n)) expectedTotal = n;
+      }
+      return;
+    }
+    // Skip subtotal rows (Result) and rows with no end customer (distributor total, not a unique sale)
     if (!code || !name || code === 'Result' || name === 'Result') return;
+
     const val = row.getCell(colAmount)?.value;
     if (val === null || val === undefined || val === '') return;
     const num = typeof val === 'number' ? val : parseFloat(String(val));
     const amount = isNaN(num) ? 0 : Math.max(0, num);
     if (amount === 0) return;
-    rows.push({ code, name, amount });
+    rows.push({ code, name, amount, distributorName: distributorName || 'Unknown' });
   });
-  return rows;
+
+  return { rows, expectedTotal };
 }
 
 /**
@@ -154,8 +180,20 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
         res.status(400).json({ error: 'No worksheet found in file' });
         return;
       }
-      const posRows = parsePosFile(worksheet);
+      const { rows: posRows, expectedTotal } = parsePosFile(worksheet);
       fs.unlinkSync(req.file.path);
+
+      const sumAmount = posRows.reduce((s, r) => s + r.amount, 0);
+      if (expectedTotal != null && Math.abs(sumAmount - expectedTotal) > ROUNDING_TOLERANCE) {
+        res.status(400).json({
+          error: 'POS total does not match file. The sum of line items should equal the "Overall Result" total (within a few dollars).',
+          sumOfLines: Math.round(sumAmount * 100) / 100,
+          expectedTotal,
+          tolerance: ROUNDING_TOLERANCE,
+        });
+        return;
+      }
+
       // Replace only POS data for this RSM + year + month (DIRECT stays intact)
       await prisma.monthlySale.deleteMany({
         where: {
@@ -165,15 +203,15 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
           source: 'POS',
         },
       });
-      const byCustomer = new Map<string, { code: string; name: string; total: number }>();
+      const byCustomerDist = new Map<string, { code: string; name: string; distributorName: string; total: number }>();
       for (const r of posRows) {
-        const key = `${r.code}\t${r.name}`;
-        const existing = byCustomer.get(key);
+        const key = `${r.code}\t${r.name}\t${r.distributorName}`;
+        const existing = byCustomerDist.get(key);
         if (existing) existing.total += r.amount;
-        else byCustomer.set(key, { code: r.code, name: r.name, total: r.amount });
+        else byCustomerDist.set(key, { code: r.code, name: r.name, distributorName: r.distributorName, total: r.amount });
       }
       let processed = 0;
-      for (const { code, name, total } of byCustomer.values()) {
+      for (const { code, name, distributorName, total } of byCustomerDist.values()) {
         const salesCustomer = await prisma.salesCustomer.upsert({
           where: { rsmId_code: { rsmId: effectiveRsmId, code } },
           create: { rsmId: effectiveRsmId, code, name },
@@ -182,11 +220,12 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
         const posYear = year!;
         await prisma.monthlySale.upsert({
           where: {
-            salesCustomerId_year_month_source: {
+            salesCustomerId_year_month_source_distributorName: {
               salesCustomerId: salesCustomer.id,
               year: posYear,
               month: month!,
               source: 'POS',
+              distributorName,
             },
           },
           create: {
@@ -196,12 +235,19 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
             month: month!,
             amount: total,
             source: 'POS',
+            distributorName,
           },
           update: { amount: total },
         });
         processed++;
       }
-      res.json({ success: true, type: 'pos', rowsProcessed: processed, lineItems: posRows.length });
+      res.json({
+        success: true,
+        type: 'pos',
+        rowsProcessed: processed,
+        lineItems: posRows.length,
+        ...(expectedTotal != null ? { expectedTotal, sumOfLines: sumAmount } : {}),
+      });
       return;
     }
 
@@ -245,25 +291,27 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
       for (let m = 1; m <= 12; m++) {
         const amount = row.amounts[m - 1];
         if (amount > 0) {
-          await prisma.monthlySale.upsert({
-            where: {
-              salesCustomerId_year_month_source: {
-                salesCustomerId: salesCustomer.id,
-                year: effectiveYear,
-                month: m,
-                source: 'DIRECT',
-              },
-            },
-            create: {
+        await prisma.monthlySale.upsert({
+          where: {
+            salesCustomerId_year_month_source_distributorName: {
               salesCustomerId: salesCustomer.id,
-              customerCode: row.code,
               year: effectiveYear,
               month: m,
-              amount,
               source: 'DIRECT',
+              distributorName: '',
             },
-            update: { amount },
-          });
+          },
+          create: {
+            salesCustomerId: salesCustomer.id,
+            customerCode: row.code,
+            year: effectiveYear,
+            month: m,
+            amount,
+            source: 'DIRECT',
+            distributorName: '',
+          },
+          update: { amount },
+        });
         } else {
           await prisma.monthlySale.deleteMany({
             where: {
@@ -271,6 +319,7 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
               year: effectiveYear,
               month: m,
               source: 'DIRECT',
+              distributorName: '',
             },
           });
         }
@@ -415,7 +464,7 @@ export const getSalesSummary = async (req: AuthRequest, res: Response): Promise<
       ? await prisma.salesCustomer.count({ where: { rsmId: rsmFilter.rsmId } })
       : await prisma.salesCustomer.count();
 
-    const [yearsRows, summaryAll, summaryDirect, summaryPos, trending] = await Promise.all([
+    const [yearsRows, summaryAll, summaryDirect, summaryPos, trending, posByDistributorRows] = await Promise.all([
       prisma.monthlySale.findMany({
         where: baseWhere,
         select: { year: true },
@@ -426,13 +475,23 @@ export const getSalesSummary = async (req: AuthRequest, res: Response): Promise<
       buildSummary({ ...whereWithYear, source: 'DIRECT' }, customerCount),
       buildSummary({ ...whereWithYear, source: 'POS' }, customerCount),
       getTrending(baseWhere, filterYear),
+      prisma.monthlySale.groupBy({
+        by: ['distributorName'],
+        where: { ...whereWithYear, source: 'POS' },
+        _sum: { amount: true },
+      }),
     ]);
     const years = yearsRows.map((r) => r.year).filter((y) => y != null).sort((a, b) => b - a);
+    const posByDistributor = posByDistributorRows
+      .filter((r) => r.distributorName != null && r.distributorName !== '')
+      .map((r) => ({ name: r.distributorName!, total: Number(r._sum.amount ?? 0) }))
+      .sort((a, b) => b.total - a.total);
 
     res.json({
       all: summaryAll,
       direct: summaryDirect,
       pos: summaryPos,
+      posByDistributor,
       trending,
       years,
     });

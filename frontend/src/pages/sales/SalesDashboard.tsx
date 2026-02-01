@@ -56,10 +56,16 @@ interface TrendingCustomer {
   growthPercent: number;
 }
 
+interface PosByDistributor {
+  name: string;
+  total: number;
+}
+
 interface SalesSummaryResponse {
   all: SummaryData;
   direct: SummaryData;
   pos: SummaryData;
+  posByDistributor?: PosByDistributor[];
   trending: { top10Growing: TrendingCustomer[]; top10Declining: TrendingCustomer[] };
   years?: number[];
 }
@@ -208,10 +214,14 @@ const SalesDashboard = () => {
     }
   };
 
-  const pieData = (summary?.topCustomers ?? []).map((c) => ({
-    name: c.code ? `${c.code} - ${c.name}` : c.name || 'Unknown',
-    value: c.total,
-  }));
+  // POS view: pie by distributor (Name CP). All/Direct: pie by top customers.
+  const pieData =
+    view === 'pos' && (data?.posByDistributor?.length ?? 0) > 0
+      ? (data.posByDistributor ?? []).map((d) => ({ name: d.name, value: d.total }))
+      : (summary?.topCustomers ?? []).map((c) => ({
+          name: c.code ? `${c.code} - ${c.name}` : c.name || 'Unknown',
+          value: c.total,
+        }));
 
   if (!user || (user.role !== 'RSM' && user.role !== 'ADMIN')) {
     return (
@@ -356,7 +366,7 @@ const SalesDashboard = () => {
             </span>
           </label>
           <p className="text-xs text-gray-500 mt-2">
-            Sheet &quot;ZANALYSIS_PATTERN (7)&quot;, row 6+. C=code, E=name, F=amount. &quot;Result&quot; rows skipped.
+            Sheet &quot;ZANALYSIS_PATTERN (7)&quot;, row 6+. B=Name CP (distributor), C=code, E=Name End Customer, F=amount. &quot;Result&quot; and empty End Customer rows skipped. Sum of line items must match &quot;Overall Result&quot; total (within a few dollars).
           </p>
         </div>
 
@@ -539,7 +549,9 @@ const SalesDashboard = () => {
               </div>
             </div>
             <div className="card p-4">
-              <h3 className="font-semibold text-gray-900 mb-4">Top Customers {view !== 'all' && `(${view === 'direct' ? 'Direct' : 'POS'})`}</h3>
+              <h3 className="font-semibold text-gray-900 mb-4">
+                {view === 'pos' ? 'Sales by Distributor (POS)' : `Top Customers${view !== 'all' ? ` (${view === 'direct' ? 'Direct' : 'POS'})` : ''}`}
+              </h3>
               <div className="h-[350px]">
                 {pieData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
@@ -573,7 +585,7 @@ const SalesDashboard = () => {
                   </ResponsiveContainer>
                 ) : (
                   <div className="flex items-center justify-center h-full text-gray-400">
-                    No customer data
+                    {view === 'pos' ? 'No distributor data' : 'No customer data'}
                   </div>
                 )}
               </div>

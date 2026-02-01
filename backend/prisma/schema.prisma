@@ -697,18 +697,20 @@ model SalesCustomer {
 }
 
 model MonthlySale {
-  id              String       @id @default(cuid())
-  salesCustomerId String       @map("sales_customer_id")
-  salesCustomer   SalesCustomer @relation(fields: [salesCustomerId], references: [id], onDelete: Cascade)
-  customerCode    String       @map("customer_code")
-  year            Int
-  month           Int
-  amount          Decimal      @db.Decimal(12, 2)
-  source          String       @default("DIRECT") // DIRECT | POS – POS is additive, does not overwrite DIRECT
+  id                String       @id @default(cuid())
+  salesCustomerId   String       @map("sales_customer_id")
+  salesCustomer     SalesCustomer @relation(fields: [salesCustomerId], references: [id], onDelete: Cascade)
+  customerCode      String       @map("customer_code")
+  year              Int
+  month             Int
+  amount            Decimal      @db.Decimal(12, 2)
+  source            String       @default("DIRECT") // DIRECT | POS – POS is additive, does not overwrite DIRECT
+  distributorName   String       @default("") @map("distributor_name") // Name CP (channel partner) for POS; "" for DIRECT
 
-  @@unique([salesCustomerId, year, month, source])
+  @@unique([salesCustomerId, year, month, source, distributorName])
   @@index([salesCustomerId])
   @@index([year, month])
   @@index([source])
+  @@index([distributorName])
   @@map("monthly_sales")
 }

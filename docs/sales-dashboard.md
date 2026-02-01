@@ -26,13 +26,14 @@ Sales analytics dashboard for RSM and Admin users. Data is imported from Excel (
 - **Data starts at row 6**
 - **Columns**:
   - A (1): Sales rep (ignored for import)
-  - B (2): Name CP / distributor (informational)
+  - B (2): **Name CP** (channel partner / distributor) — captured for charts (sales by distributor)
   - C (3): End customer code
   - D (4): End customer (duplicate/code)
-  - E (5): Name End Customer
+  - E (5): **Name End Customer** — required; rows with empty E are distributor totals, not unique sales, and are skipped
   - F (6): Amount ($)
   - G (7): Result / total (ignored)
-- Rows where C or E is `"Result"` are skipped (subtotal rows).
+- **Skipped rows**: Rows where C or E is `"Result"` (subtotals). Rows where E (Name End Customer) is empty (distributor total row).
+- **Overall Result**: The last row with "Overall Result" in A–E is not imported; its F value is used to **validate** the upload: the sum of all imported line amounts must equal this total (within a few dollars rounding). If not, the upload is rejected.
 - **Month is not in the file** — the user selects the month (and year) when uploading in the dashboard.
 
 ## Database
