@@ -92,8 +92,6 @@ const QuoteForm = () => {
   const [bulkDiscountValue, setBulkDiscountValue] = useState('');
 
   const maxDiscount = ROLE_MAX_DISCOUNT[user?.role || 'BASIC'] ?? 10;
-  const marginSelectedCount = items.filter((i) => i.marginSelected).length;
-  const discountSelectedCount = items.filter((i) => i.discountSelected).length;
   const allMarginSelected = items.length > 0 && items.every((i) => i.marginSelected);
   const allDiscountSelected = items.length > 0 && items.every((i) => i.discountSelected);
   const someMarginSelected = items.some((i) => i.marginSelected);
@@ -548,7 +546,6 @@ const QuoteForm = () => {
                       <div className="flex items-center gap-2 justify-end">
                         <input type="checkbox" checked={allDiscountSelected} ref={discountSelectAllRef} onChange={toggleDiscountSelectAll} className="rounded border-gray-300" title="Select all" />
                         <input type="number" min={0} max={maxDiscount} step={0.5} value={bulkDiscountValue} onChange={(e) => { const v = e.target.value; setBulkDiscountValue(v); const n = parseFloat(v); if (!isNaN(n)) applyBulkDiscount(n); }} placeholder="Apply %" className="input py-1 w-16 text-right" title="Apply to selected" />
-                        <span className="text-xs text-gray-500 w-14">{discountSelectedCount ? `${discountSelectedCount} sel` : ''}</span>
                       </div>
                       <div className="text-xs font-normal text-gray-500 mt-0.5">Disc %</div>
                     </th>
@@ -558,7 +555,6 @@ const QuoteForm = () => {
                       <div className="flex items-center gap-2 justify-end">
                         <input type="checkbox" checked={allMarginSelected} ref={marginSelectAllRef} onChange={toggleMarginSelectAll} className="rounded border-gray-300" title="Select all" />
                         <input type="number" min={0} step={0.5} value={bulkMarginValue} onChange={(e) => { const v = e.target.value; setBulkMarginValue(v); const n = parseFloat(v); if (!isNaN(n)) applyBulkMargin(n); }} placeholder="Apply %" className="input py-1 w-16 text-right" title="Apply to selected" />
-                        <span className="text-xs text-gray-500 w-14">{marginSelectedCount ? `${marginSelectedCount} sel` : ''}</span>
                       </div>
                       <div className="text-xs font-normal text-gray-500 mt-0.5">Margin %</div>
                     </th>
