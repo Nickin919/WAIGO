@@ -148,15 +148,15 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
       }
       const posRows = parsePosFile(worksheet);
       fs.unlinkSync(req.file.path);
-      // Replace existing data for this RSM + year + month: delete then insert
+      // Replace only POS data for this RSM + year + month (DIRECT stays intact)
       await prisma.monthlySale.deleteMany({
         where: {
           salesCustomer: { rsmId: effectiveRsmId },
           year,
           month: month!,
+          source: 'POS',
         },
       });
-      // Aggregate by (code, name)
       const byCustomer = new Map<string, { code: string; name: string; total: number }>();
       for (const r of posRows) {
         const key = `${r.code}\t${r.name}`;
@@ -173,7 +173,12 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
         });
         await prisma.monthlySale.upsert({
           where: {
-            salesCustomerId_year_month: { salesCustomerId: salesCustomer.id, year, month: month! },
+            salesCustomerId_year_month_source: {
+              salesCustomerId: salesCustomer.id,
+              year,
+              month: month!,
+              source: 'POS',
+            },
           },
           create: {
             salesCustomerId: salesCustomer.id,
@@ -181,6 +186,7 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
             year,
             month: month!,
             amount: total,
+            source: 'POS',
           },
           update: { amount: total },
         });
@@ -207,11 +213,12 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
     }
 
     const effectiveYear = year;
-    // Replace existing data for this RSM + year: delete all monthly sales for that year then insert
+    // Replace only DIRECT data for this RSM + year (POS data stays intact)
     await prisma.monthlySale.deleteMany({
       where: {
         salesCustomer: { rsmId: effectiveRsmId },
         year: effectiveYear,
+        source: 'DIRECT',
       },
     });
     for (const row of rows) {
@@ -231,10 +238,11 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
         if (amount > 0) {
           await prisma.monthlySale.upsert({
             where: {
-              salesCustomerId_year_month: {
+              salesCustomerId_year_month_source: {
                 salesCustomerId: salesCustomer.id,
                 year: effectiveYear,
                 month: m,
+                source: 'DIRECT',
               },
             },
             create: {
@@ -243,6 +251,7 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
               year: effectiveYear,
               month: m,
               amount,
+              source: 'DIRECT',
             },
             update: { amount },
           });
@@ -252,6 +261,7 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
               salesCustomerId: salesCustomer.id,
               year: effectiveYear,
               month: m,
+              source: 'DIRECT',
             },
           });
         }
@@ -267,9 +277,103 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
   }
 };
 
+type SummaryWhere = { salesCustomer?: { rsmId: string }; source?: string };
+
+/** Build summary (monthly, topCustomers, kpis) for a given where filter */
+async function buildSummary(where: SummaryWhere, customerCount: number) {
+  const [sales, topCustomersRaw] = await Promise.all([
+    prisma.monthlySale.findMany({
+      where,
+      select: { amount: true, month: true, year: true, salesCustomerId: true },
+    }),
+    prisma.monthlySale.groupBy({
+      by: ['salesCustomerId'],
+      where,
+      _sum: { amount: true },
+    }),
+  ]);
+
+  const totalSales = sales.reduce((sum, s) => sum + Number(s.amount), 0);
+  const monthlyMap: Record<number, number> = {};
+  for (let m = 1; m <= 12; m++) monthlyMap[m] = 0;
+  sales.forEach((s) => {
+    monthlyMap[s.month] = (monthlyMap[s.month] ?? 0) + Number(s.amount);
+  });
+  const monthly = Object.entries(monthlyMap).map(([m, amount]) => ({
+    month: parseInt(m, 10),
+    monthName: MONTH_NAMES[parseInt(m, 10) - 1],
+    amount,
+  }));
+
+  const topIds = topCustomersRaw
+    .sort((a, b) => (Number(b._sum.amount) ?? 0) - (Number(a._sum.amount) ?? 0))
+    .slice(0, 10)
+    .map((t) => t.salesCustomerId);
+  const customers = await prisma.salesCustomer.findMany({
+    where: { id: { in: topIds } },
+    select: { id: true, code: true, name: true },
+  });
+  const totalByCustomer = topCustomersRaw
+    .filter((t) => topIds.includes(t.salesCustomerId))
+    .reduce((acc, t) => {
+      acc[t.salesCustomerId] = Number(t._sum.amount) ?? 0;
+      return acc;
+    }, {} as Record<string, number>);
+  const topCustomers = customers
+    .map((c) => ({ code: c.code, name: c.name, total: totalByCustomer[c.id] ?? 0 }))
+    .sort((a, b) => b.total - a.total);
+
+  const peakMonth = monthly.reduce((best, m) => (m.amount > best.amount ? m : best), { month: 1, monthName: 'January', amount: 0 });
+  return {
+    totalSales,
+    monthly,
+    topCustomers,
+    kpis: {
+      averageMonthly: sales.length > 0 ? totalSales / 12 : 0,
+      peakMonth: peakMonth.monthName,
+      peakMonthAmount: peakMonth.amount,
+      activeCustomers: customerCount,
+    },
+  };
+}
+
+/** Compute top 10 growing and top 10 declining by comparing last 3 months vs prior 3 months (same year) */
+async function getTrending(where: SummaryWhere): Promise<{ top10Growing: Array<{ code: string; name: string; total: number; priorTotal: number; growthPercent: number }>; top10Declining: Array<{ code: string; name: string; total: number; priorTotal: number; growthPercent: number }> }> {
+  const sales = await prisma.monthlySale.findMany({
+    where: { ...where, year: DEFAULT_YEAR },
+    select: { salesCustomerId: true, month: true, amount: true },
+  });
+  const recentMonths = [10, 11, 12];
+  const priorMonths = [7, 8, 9];
+  const byCustomer: Record<string, { recent: number; prior: number }> = {};
+  sales.forEach((s) => {
+    const id = s.salesCustomerId;
+    if (!byCustomer[id]) byCustomer[id] = { recent: 0, prior: 0 };
+    const amt = Number(s.amount);
+    if (recentMonths.includes(s.month)) byCustomer[id].recent += amt;
+    if (priorMonths.includes(s.month)) byCustomer[id].prior += amt;
+  });
+  const customerIds = Object.keys(byCustomer).filter((id) => byCustomer[id].prior > 0 || byCustomer[id].recent > 0);
+  if (customerIds.length === 0) return { top10Growing: [], top10Declining: [] };
+  const customers = await prisma.salesCustomer.findMany({
+    where: { id: { in: customerIds } },
+    select: { id: true, code: true, name: true },
+  });
+  const list = customers.map((c) => {
+    const { recent, prior } = byCustomer[c.id] ?? { recent: 0, prior: 0 };
+    const growthPercent = prior > 0 ? ((recent - prior) / prior) * 100 : (recent > 0 ? 100 : 0);
+    return { code: c.code, name: c.name, total: recent, priorTotal: prior, growthPercent };
+  });
+  const sorted = [...list].sort((a, b) => b.growthPercent - a.growthPercent);
+  return {
+    top10Growing: sorted.filter((x) => x.growthPercent > 0).slice(0, 10),
+    top10Declining: sorted.filter((x) => x.growthPercent < 0).slice(-10).reverse(),
+  };
+}
+
 /**
  * GET /api/sales/summary - Sales summary for dashboard (RSM/Admin)
- * RSM sees own; Admin sees all or ?rsmId= for specific RSM
+ * Returns all, direct, and pos summaries plus trending. POS does not overwrite DIRECT.
  */
 export const getSalesSummary = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -277,82 +381,29 @@ export const getSalesSummary = async (req: AuthRequest, res: Response): Promise<
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
-
     if (req.user.role !== 'RSM' && req.user.role !== 'ADMIN') {
       res.status(403).json({ error: 'Only RSM or Admin can view sales dashboard' });
       return;
     }
 
     const rsmFilter = getRsmFilter(req);
+    const baseWhere: SummaryWhere = rsmFilter ? { salesCustomer: { rsmId: rsmFilter.rsmId } } : {};
+    const customerCount = rsmFilter
+      ? await prisma.salesCustomer.count({ where: { rsmId: rsmFilter.rsmId } })
+      : await prisma.salesCustomer.count();
 
-    const where = rsmFilter ? { salesCustomer: { rsmId: rsmFilter.rsmId } } : {};
-
-    const [sales, topCustomersRaw, customerCount] = await Promise.all([
-      prisma.monthlySale.findMany({
-        where,
-        select: { amount: true, month: true, year: true },
-      }),
-      prisma.monthlySale.groupBy({
-        by: ['salesCustomerId'],
-        where,
-        _sum: { amount: true },
-      }),
-      rsmFilter
-        ? prisma.salesCustomer.count({ where: { rsmId: rsmFilter.rsmId } })
-        : prisma.salesCustomer.count(),
+    const [summaryAll, summaryDirect, summaryPos, trending] = await Promise.all([
+      buildSummary(baseWhere, customerCount),
+      buildSummary({ ...baseWhere, source: 'DIRECT' }, customerCount),
+      buildSummary({ ...baseWhere, source: 'POS' }, customerCount),
+      getTrending(baseWhere),
     ]);
 
-    const totalSales = sales.reduce((sum, s) => sum + Number(s.amount), 0);
-
-    const monthlyMap: Record<number, number> = {};
-    for (let m = 1; m <= 12; m++) monthlyMap[m] = 0;
-    sales.forEach((s) => {
-      monthlyMap[s.month] = (monthlyMap[s.month] ?? 0) + Number(s.amount);
-    });
-
-    const monthly = Object.entries(monthlyMap).map(([m, amount]) => ({
-      month: parseInt(m, 10),
-      monthName: MONTH_NAMES[parseInt(m, 10) - 1],
-      amount,
-    }));
-
-    const topIds = topCustomersRaw
-      .sort((a, b) => (Number(b._sum.amount) ?? 0) - (Number(a._sum.amount) ?? 0))
-      .slice(0, 10)
-      .map((t) => t.salesCustomerId);
-
-    const customers = await prisma.salesCustomer.findMany({
-      where: { id: { in: topIds } },
-      select: { id: true, code: true, name: true },
-    });
-
-    const totalByCustomer = topCustomersRaw
-      .filter((t) => topIds.includes(t.salesCustomerId))
-      .reduce((acc, t) => {
-        acc[t.salesCustomerId] = Number(t._sum.amount) ?? 0;
-        return acc;
-      }, {} as Record<string, number>);
-
-    const topCustomers = customers
-      .map((c) => ({
-        code: c.code,
-        name: c.name,
-        total: totalByCustomer[c.id] ?? 0,
-      }))
-      .sort((a, b) => b.total - a.total);
-
-    const peakMonth = monthly.reduce((best, m) => (m.amount > best.amount ? m : best), { month: 1, monthName: 'January', amount: 0 });
-
     res.json({
-      totalSales,
-      monthly,
-      topCustomers,
-      kpis: {
-        averageMonthly: sales.length > 0 ? totalSales / 12 : 0,
-        peakMonth: peakMonth.monthName,
-        peakMonthAmount: peakMonth.amount,
-        activeCustomers: customerCount,
-      },
+      all: summaryAll,
+      direct: summaryDirect,
+      pos: summaryPos,
+      trending,
     });
   } catch (error) {
     console.error('Sales summary error:', error);

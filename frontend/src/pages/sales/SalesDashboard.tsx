@@ -12,7 +12,7 @@ import {
   Cell,
   Legend,
 } from 'recharts';
-import { Upload, TrendingUp, Users, Calendar, Trash2 } from 'lucide-react';
+import { Upload, TrendingUp, TrendingDown, Users, Calendar, Trash2, BarChart3 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { salesApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
@@ -48,6 +48,21 @@ interface RsmOption {
   salesCustomersCount: number;
 }
 
+interface TrendingCustomer {
+  code: string;
+  name: string;
+  total: number;
+  priorTotal: number;
+  growthPercent: number;
+}
+
+interface SalesSummaryResponse {
+  all: SummaryData;
+  direct: SummaryData;
+  pos: SummaryData;
+  trending: { top10Growing: TrendingCustomer[]; top10Declining: TrendingCustomer[] };
+}
+
 const COLORS = ['#16a34a', '#2563eb', '#7c3aed', '#dc2626', '#ea580c', '#ca8a04', '#0891b2', '#db2777', '#65a30d', '#4f46e5'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -56,7 +71,8 @@ const formatCurrency = (n: number) =>
 
 const SalesDashboard = () => {
   const { user } = useAuthStore();
-  const [data, setData] = useState<SummaryData | null>(null);
+  const [data, setData] = useState<SalesSummaryResponse | null>(null);
+  const [view, setView] = useState<'all' | 'direct' | 'pos'>('all');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [rsms, setRsms] = useState<RsmOption[]>([]);
@@ -76,13 +92,28 @@ const SalesDashboard = () => {
     setLoading(true);
     salesApi
       .getSummary(rsmId)
-      .then((res) => setData(res.data as SummaryData))
+      .then((res) => {
+        const raw = res.data as SalesSummaryResponse | SummaryData;
+        if (raw && 'all' in raw && 'direct' in raw && 'pos' in raw) {
+          setData(raw as SalesSummaryResponse);
+        } else {
+          const flat = raw as SummaryData;
+          setData(flat ? {
+            all: flat,
+            direct: flat,
+            pos: flat,
+            trending: { top10Growing: [], top10Declining: [] },
+          } : null);
+        }
+      })
       .catch(() => {
         toast.error('Failed to load sales data');
         setData(null);
       })
       .finally(() => setLoading(false));
   };
+
+  const summary = data ? (view === 'direct' ? data.direct : view === 'pos' ? data.pos : data.all) : null;
 
   useEffect(() => {
     fetchSummary(isAdmin && selectedRsmId ? selectedRsmId : undefined);
@@ -169,7 +200,7 @@ const SalesDashboard = () => {
     }
   };
 
-  const pieData = (data?.topCustomers ?? []).map((c) => ({
+  const pieData = (summary?.topCustomers ?? []).map((c) => ({
     name: c.code ? `${c.code} - ${c.name}` : c.name || 'Unknown',
     value: c.total,
   }));
@@ -343,7 +374,7 @@ const SalesDashboard = () => {
         </div>
       </div>
       <p className="text-sm text-gray-500 mb-4">
-        Uploads replace existing data for that period: direct = full year, POS = selected month only. If POS results look wrong, check the month/year above and use &quot;Delete / clear data&quot; to remove that month, then re-upload.
+        <strong>Direct</strong> replaces direct sales for the full year. <strong>POS</strong> replaces only POS data for the selected month (it does not overwrite direct sales). Use &quot;View&quot; above to see All, Direct only, or POS only. To fix a wrong POS month, use &quot;Delete / clear data&quot; then re-upload.
       </p>
 
       {isAdmin && !selectedRsmId && (
@@ -363,6 +394,32 @@ const SalesDashboard = () => {
         </div>
       ) : (
         <>
+          {/* View toggle: All | Direct | POS */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <span className="text-sm font-medium text-gray-700">View:</span>
+            <div className="flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
+              {(['all', 'direct', 'pos'] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setView(v)}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    view === v
+                      ? 'bg-white text-green-700 shadow border border-gray-200'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {v === 'all' ? 'All sales' : v === 'direct' ? 'Direct only' : 'POS only'}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs text-gray-500 ml-1">
+              {view === 'all' && 'Combined direct + POS'}
+              {view === 'direct' && 'Direct account sales only'}
+              {view === 'pos' && 'POS (distributor) sales only'}
+            </span>
+          </div>
+
           {/* KPI cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <div className="card p-4">
@@ -372,7 +429,7 @@ const SalesDashboard = () => {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Total Sales</p>
-                  <p className="text-xl font-bold text-gray-900">{formatCurrency(data.totalSales)}</p>
+                  <p className="text-xl font-bold text-gray-900">{formatCurrency(summary?.totalSales ?? 0)}</p>
                 </div>
               </div>
             </div>
@@ -384,7 +441,7 @@ const SalesDashboard = () => {
                 <div>
                   <p className="text-sm text-gray-500">Average Monthly</p>
                   <p className="text-xl font-bold text-gray-900">
-                    {formatCurrency(data.kpis?.averageMonthly ?? 0)}
+                    {formatCurrency(summary?.kpis?.averageMonthly ?? 0)}
                   </p>
                 </div>
               </div>
@@ -392,12 +449,12 @@ const SalesDashboard = () => {
             <div className="card p-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                  <TrendingUp className="w-5 h-5 text-purple-600" />
+                  <BarChart3 className="w-5 h-5 text-purple-600" />
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Peak Month</p>
                   <p className="text-xl font-bold text-gray-900">
-                    {data.kpis?.peakMonth ?? '—'} ({formatCurrency(data.kpis?.peakMonthAmount ?? 0)})
+                    {summary?.kpis?.peakMonth ?? '—'} ({formatCurrency(summary?.kpis?.peakMonthAmount ?? 0)})
                   </p>
                 </div>
               </div>
@@ -409,7 +466,7 @@ const SalesDashboard = () => {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Active Customers</p>
-                  <p className="text-xl font-bold text-gray-900">{data.kpis?.activeCustomers ?? 0}</p>
+                  <p className="text-xl font-bold text-gray-900">{summary?.kpis?.activeCustomers ?? 0}</p>
                 </div>
               </div>
             </div>
@@ -418,10 +475,10 @@ const SalesDashboard = () => {
           {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <div className="card p-4">
-              <h3 className="font-semibold text-gray-900 mb-4">Monthly Sales</h3>
+              <h3 className="font-semibold text-gray-900 mb-4">Monthly Sales {view !== 'all' && `(${view === 'direct' ? 'Direct' : 'POS'})`}</h3>
               <div className="h-[350px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.monthly}>
+                  <BarChart data={summary?.monthly ?? []}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis dataKey="monthName" tick={{ fontSize: 12 }} />
                     <YAxis tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
@@ -435,7 +492,7 @@ const SalesDashboard = () => {
               </div>
             </div>
             <div className="card p-4">
-              <h3 className="font-semibold text-gray-900 mb-4">Top Customers</h3>
+              <h3 className="font-semibold text-gray-900 mb-4">Top Customers {view !== 'all' && `(${view === 'direct' ? 'Direct' : 'POS'})`}</h3>
               <div className="h-[350px]">
                 {pieData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
@@ -475,6 +532,54 @@ const SalesDashboard = () => {
               </div>
             </div>
           </div>
+
+          {/* Trending: Top 10 growing & Top 10 declining (Oct–Dec vs Jul–Sep) */}
+          {((data.trending?.top10Growing?.length ?? 0) > 0 || (data.trending?.top10Declining?.length ?? 0) > 0) && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <div className="card p-4">
+                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-green-600" />
+                  Top 10 trending up (sales growth)
+                </h3>
+                <p className="text-xs text-gray-500 mb-3">Comparing last 3 months vs prior 3 months (same year)</p>
+                <ul className="space-y-2">
+                  {(data.trending?.top10Growing ?? []).map((c, i) => (
+                    <li key={`grow-${c.code}-${i}`} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                      <div className="min-w-0 flex-1">
+                        <span className="font-medium text-gray-900 truncate block">{c.name || c.code}</span>
+                        <span className="text-xs text-gray-500">{c.code}</span>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-2">
+                        <span className="text-green-600 font-medium">+{c.growthPercent.toFixed(1)}%</span>
+                        <span className="text-xs text-gray-500 block">{formatCurrency(c.priorTotal)} → {formatCurrency(c.total)}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="card p-4">
+                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <TrendingDown className="w-5 h-5 text-red-600" />
+                  Top 10 trending down (declining sales)
+                </h3>
+                <p className="text-xs text-gray-500 mb-3">Comparing last 3 months vs prior 3 months (same year)</p>
+                <ul className="space-y-2">
+                  {(data.trending?.top10Declining ?? []).map((c, i) => (
+                    <li key={`decl-${c.code}-${i}`} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                      <div className="min-w-0 flex-1">
+                        <span className="font-medium text-gray-900 truncate block">{c.name || c.code}</span>
+                        <span className="text-xs text-gray-500">{c.code}</span>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-2">
+                        <span className="text-red-600 font-medium">{c.growthPercent.toFixed(1)}%</span>
+                        <span className="text-xs text-gray-500 block">{formatCurrency(c.priorTotal)} → {formatCurrency(c.total)}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
