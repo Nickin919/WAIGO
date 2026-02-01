@@ -26,6 +26,10 @@ import CatalogList from './pages/catalog/CatalogList';
 import CatalogCreator from './pages/catalog/CatalogCreator';
 import AssignmentsPage from './pages/assignments/AssignmentsPage';
 import MyPriceContractsPage from './pages/assignments/MyPriceContractsPage';
+import ManagedUsersPage from './pages/management/ManagedUsersPage';
+import CostTablesPage from './pages/management/CostTablesPage';
+import TeamPage from './pages/management/TeamPage';
+import ActivityPage from './pages/management/ActivityPage';
 import NotFound from './pages/NotFound';
 
 // Protected route wrapper
@@ -77,6 +81,10 @@ function App() {
         <Route path="/catalog-creator/new" element={<CatalogCreator />} />
         <Route path="/catalog-creator/:id" element={<CatalogCreator />} />
         <Route path="/assignments" element={<AssignmentsPage />} />
+        <Route path="/managed-users" element={<ManagedUsersPage />} />
+        <Route path="/cost-tables" element={<CostTablesPage />} />
+        <Route path="/team" element={<TeamPage />} />
+        <Route path="/activity" element={<ActivityPage />} />
         <Route path="/my-price-contracts" element={<MyPriceContractsPage />} />
         <Route path="/profile" element={<Profile />} />
       </Route>

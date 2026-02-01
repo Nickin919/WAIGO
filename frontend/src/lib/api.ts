@@ -30,9 +30,13 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Unauthorized - clear auth and redirect to login
-      useAuthStore.getState().logout();
-      window.location.href = '/login';
+      // Don't redirect when the failing request was to login (wrong credentials)
+      const isLoginRequest = error.config?.url?.includes('/auth/login');
+      if (!isLoginRequest) {
+        // Session expired or token invalid - clear auth and redirect to login
+        useAuthStore.getState().logout();
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
@@ -273,6 +277,59 @@ export const notificationApi = {
   
   delete: (id: string) =>
     api.delete(`/notifications/${id}`),
+};
+
+// ============================================================================
+// User Management API (DISTRIBUTOR, RSM, ADMIN)
+// ============================================================================
+
+export const userManagementApi = {
+  getUsers: (params?: { role?: string; search?: string; assignedOnly?: boolean }) =>
+    api.get('/user-management', { params }),
+  getHierarchy: (userId?: string) =>
+    api.get(userId ? `/user-management/hierarchy/${userId}` : '/user-management/hierarchy'),
+  getActivity: () => api.get('/user-management/activity'),
+  assignToDistributor: (data: { userId: string; distributorId: string }) =>
+    api.post('/user-management/assign-to-distributor', data),
+  assignDistributorToRsm: (data: { distributorId: string; rsmId: string }) =>
+    api.post('/user-management/assign-distributor-to-rsm', data),
+  updateUserRole: (userId: string, role: string) =>
+    api.patch(`/user-management/${userId}/role`, { role }),
+};
+
+// ============================================================================
+// Team API
+// ============================================================================
+
+export const teamApi = {
+  getAll: () => api.get('/teams'),
+  getById: (id: string) => api.get(`/teams/${id}`),
+  create: (data: { name: string; description?: string }) => api.post('/teams', data),
+  update: (id: string, data: { name?: string; description?: string }) =>
+    api.patch(`/teams/${id}`, data),
+  delete: (id: string) => api.delete(`/teams/${id}`),
+  addMember: (data: { teamId: string; userId: string }) =>
+    api.post('/teams/members', data),
+  removeMember: (teamId: string, userId: string) =>
+    api.delete(`/teams/${teamId}/members/${userId}`),
+};
+
+// ============================================================================
+// Cost Table API
+// ============================================================================
+
+export const costTableApi = {
+  getAll: () => api.get('/cost-tables'),
+  getById: (id: string) => api.get(`/cost-tables/${id}`),
+  create: (data: { name: string; description?: string; userId?: string; turnkeyTeamId?: string }) =>
+    api.post('/cost-tables', data),
+  update: (id: string, data: { name?: string; description?: string }) =>
+    api.patch(`/cost-tables/${id}`, data),
+  delete: (id: string) => api.delete(`/cost-tables/${id}`),
+  uploadCsv: (formData: FormData) =>
+    api.post('/cost-tables/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  downloadCsv: (id: string) =>
+    api.get(`/cost-tables/${id}/download`, { responseType: 'blob' }),
 };
 
 // ============================================================================
