@@ -179,11 +179,12 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
           create: { rsmId: effectiveRsmId, code, name },
           update: { name },
         });
+        const posYear = year!;
         await prisma.monthlySale.upsert({
           where: {
             salesCustomerId_year_month_source: {
               salesCustomerId: salesCustomer.id,
-              year,
+              year: posYear,
               month: month!,
               source: 'POS',
             },
@@ -191,7 +192,7 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
           create: {
             salesCustomerId: salesCustomer.id,
             customerCode: code,
-            year,
+            year: posYear,
             month: month!,
             amount: total,
             source: 'POS',
@@ -400,7 +401,8 @@ export const getSalesSummary = async (req: AuthRequest, res: Response): Promise<
     }
 
     const rsmFilter = getRsmFilter(req);
-    const baseWhere: SummaryWhere = rsmFilter ? { salesCustomer: { rsmId: rsmFilter.rsmId } } : {};
+    const baseWhere: SummaryWhere =
+      rsmFilter?.rsmId != null ? { salesCustomer: { rsmId: rsmFilter.rsmId } } : {};
     const yearParam = req.query.year as string | undefined;
     const filterYear = yearParam && yearParam !== 'all' ? parseInt(yearParam, 10) : undefined;
     if (yearParam && yearParam !== 'all' && (isNaN(filterYear!) || filterYear! < 2000 || filterYear! > 2100)) {
