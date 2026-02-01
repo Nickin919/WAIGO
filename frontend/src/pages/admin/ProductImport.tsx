@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, CheckCircle, ArrowRight, ArrowLeft, Download } from 'lucide-react';
+import { Upload, CheckCircle, ArrowRight, ArrowLeft, Download, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { catalogApi } from '@/lib/api';
@@ -165,21 +165,51 @@ const ProductImport = () => {
   const [catalogs, setCatalogs] = useState<{ id: string; name: string }[]>([]);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>('');
   const [dragActive, setDragActive] = useState(false);
+  const [newCatalogName, setNewCatalogName] = useState('');
+  const [creatingCatalog, setCreatingCatalog] = useState(false);
+  const [showNewCatalogInput, setShowNewCatalogInput] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const effectiveCatalogId = selectedCatalogId || user?.catalogId || '';
+  const isAdmin = user?.role === 'ADMIN';
 
-  useEffect(() => {
+  const fetchCatalogs = () => {
     catalogApi.getAll().then((res) => {
       const list = Array.isArray(res.data) ? res.data : [];
       setCatalogs(list.map((c: any) => ({ id: c.id, name: c.name || 'Unnamed' })));
-      if (list.length > 0) {
+      if (list.length > 0 && !selectedCatalogId) {
         const userCat = user?.catalogId;
         const match = userCat && list.some((c: any) => c.id === userCat);
         setSelectedCatalogId(match ? userCat! : list[0].id);
       }
     }).catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchCatalogs();
   }, [user?.catalogId]);
+
+  const handleCreateCatalog = async () => {
+    const name = newCatalogName.trim();
+    if (!name) {
+      toast.error('Catalog name is required');
+      return;
+    }
+    setCreatingCatalog(true);
+    try {
+      const res = await catalogApi.create(name);
+      const created = res.data as { id: string; name: string };
+      setCatalogs((prev) => [...prev, { id: created.id, name: created.name }]);
+      setSelectedCatalogId(created.id);
+      setNewCatalogName('');
+      setShowNewCatalogInput(false);
+      toast.success(`Catalog "${created.name}" created`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to create catalog');
+    } finally {
+      setCreatingCatalog(false);
+    }
+  };
 
   const processFile = (uploadedFile: File) => {
     if (!uploadedFile.name.toLowerCase().endsWith('.csv')) {
@@ -363,20 +393,61 @@ const ProductImport = () => {
           <div className="text-center py-8">
             <h2 className="text-xl font-bold text-gray-900 mb-4">Upload CSV File</h2>
 
-            {catalogs.length > 0 && (
-              <div className="mb-6 text-left max-w-md mx-auto">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Import into catalog</label>
+            <div className="mb-6 text-left max-w-md mx-auto">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Import into catalog</label>
+              <div className="flex gap-2">
                 <select
                   value={effectiveCatalogId}
-                  onChange={(e) => setSelectedCatalogId(e.target.value)}
-                  className="input w-full"
+                  onChange={(e) => { setSelectedCatalogId(e.target.value); setShowNewCatalogInput(false); }}
+                  className="input flex-1"
                 >
+                  <option value="">Select catalog...</option>
                   {catalogs.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCatalogInput(!showNewCatalogInput)}
+                    className="btn bg-gray-200 hover:bg-gray-300 px-3"
+                    title="Create new catalog"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
+                )}
               </div>
-            )}
+              {isAdmin && showNewCatalogInput && (
+                <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Create new catalog</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newCatalogName}
+                      onChange={(e) => setNewCatalogName(e.target.value)}
+                      placeholder="Catalog name"
+                      className="input flex-1 py-2"
+                      onKeyDown={(e) => e.key === 'Enter' && handleCreateCatalog()}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCreateCatalog}
+                      disabled={creatingCatalog || !newCatalogName.trim()}
+                      className="btn btn-primary py-2"
+                    >
+                      {creatingCatalog ? 'Creating...' : 'Create & Select'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowNewCatalogInput(false); setNewCatalogName(''); }}
+                      className="btn bg-gray-200 py-2"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div
               onDrop={handleDrop}

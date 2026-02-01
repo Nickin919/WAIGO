@@ -77,8 +77,9 @@ export const createCatalog = async (req: AuthRequest, res: Response): Promise<vo
 
     const catalog = await prisma.catalog.create({
       data: {
-        name,
-        description
+        name: String(name).trim(),
+        description: description ? String(description).trim() : null,
+        createdById: req.user?.id || null
       }
     });
 

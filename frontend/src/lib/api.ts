@@ -69,6 +69,10 @@ export const catalogApi = {
   getAll: () => api.get('/catalogs'),
   getById: (id: string) => api.get(`/catalogs/${id}`),
   getStats: (id: string) => api.get(`/catalogs/${id}/stats`),
+  create: (name: string, description?: string) =>
+    api.post('/catalogs', { name, description }),
+  update: (id: string, data: { name?: string; description?: string; isActive?: boolean }) =>
+    api.patch(`/catalogs/${id}`, data),
 };
 
 // ============================================================================
