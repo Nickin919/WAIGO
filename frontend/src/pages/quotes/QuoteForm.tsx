@@ -80,6 +80,8 @@ const QuoteForm = () => {
   const [productSearch, setProductSearch] = useState('');
   const [products, setProducts] = useState<Part[]>([]);
   const [showProductPicker, setShowProductPicker] = useState(false);
+  const [quickAddPartNumber, setQuickAddPartNumber] = useState('');
+  const [quickAddLoading, setQuickAddLoading] = useState(false);
 
   const [bulkInput, setBulkInput] = useState('');
   const [showBulkImport, setShowBulkImport] = useState(false);
@@ -298,6 +300,32 @@ const QuoteForm = () => {
 
   const parseBulkInput = (text: string): string[] => {
     return text.split(/[,\n\r\t]+/).map((s) => s.trim()).filter(Boolean);
+  };
+
+  /** Quick-add single part by part number (Enter or Add) */
+  const handleQuickAddPart = async () => {
+    const pn = quickAddPartNumber.trim();
+    if (!pn || !catalogId) {
+      if (!catalogId) toast.error('Select a catalog first');
+      else toast.error('Enter a part number');
+      return;
+    }
+    setQuickAddLoading(true);
+    try {
+      const res = await partApi.lookupBulk(catalogId, [pn]);
+      const data = res.data as { found: Part[]; notFound: string[] };
+      if (data.found?.length > 0) {
+        addProduct(data.found[0]);
+        setQuickAddPartNumber('');
+        toast.success(`Added ${data.found[0].partNumber}`);
+      } else {
+        toast.error(`Part "${pn}" not found`);
+      }
+    } catch {
+      toast.error('Lookup failed');
+    } finally {
+      setQuickAddLoading(false);
+    }
   };
 
   const handleBulkImport = () => {
@@ -610,16 +638,42 @@ const QuoteForm = () => {
 
         {/* Line Items */}
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold">Line Items</h2>
-            <div className="flex gap-2">
-              <button type="button" onClick={() => setShowBulkImport(!showBulkImport)} className="btn bg-gray-200 flex items-center gap-2">
-                <Upload className="w-4 h-4" /> Bulk Import
-              </button>
-              <button type="button" onClick={() => setShowProductPicker(!showProductPicker)} className="btn btn-primary flex items-center gap-2">
-                <Plus className="w-4 h-4" /> Add Product
-              </button>
+          <h2 className="text-lg font-bold mb-4">Line Items</h2>
+
+          {/* Quick-add: type part number, Enter or Add */}
+          <div className="flex gap-2 mb-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                value={quickAddPartNumber}
+                onChange={(e) => setQuickAddPartNumber(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleQuickAddPart())}
+                placeholder="Type part number and press Enter to add"
+                className="input w-full pl-10"
+                disabled={!catalogId || quickAddLoading}
+              />
             </div>
+            <button
+              type="button"
+              onClick={handleQuickAddPart}
+              disabled={!quickAddPartNumber.trim() || !catalogId || quickAddLoading}
+              className="btn btn-primary flex items-center gap-2 shrink-0"
+            >
+              {quickAddLoading ? (
+                <span className="animate-pulse">Adding...</span>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" /> Add
+                </>
+              )}
+            </button>
+            <button type="button" onClick={() => setShowBulkImport(!showBulkImport)} className="btn bg-gray-200 flex items-center gap-2 shrink-0" title="Bulk import">
+              <Upload className="w-4 h-4" /> Bulk
+            </button>
+            <button type="button" onClick={() => setShowProductPicker(!showProductPicker)} className="btn bg-gray-200 flex items-center gap-2 shrink-0" title="Browse & search">
+              <Search className="w-4 h-4" /> Browse
+            </button>
           </div>
 
           {/* Bulk Import */}

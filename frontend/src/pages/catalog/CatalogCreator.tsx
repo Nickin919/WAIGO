@@ -48,6 +48,8 @@ const CatalogCreator = () => {
   
   // Search & bulk import
   const [search, setSearch] = useState('');
+  const [quickAddPartNumber, setQuickAddPartNumber] = useState('');
+  const [quickAddLoading, setQuickAddLoading] = useState(false);
   const [bulkImportText, setBulkImportText] = useState('');
   const [bulkImporting, setBulkImporting] = useState(false);
   const [bulkImportResult, setBulkImportResult] = useState<{
@@ -192,6 +194,39 @@ const CatalogCreator = () => {
       }
       return next;
     });
+  };
+
+  // Quick-add single part by part number
+  const handleQuickAddPart = async () => {
+    const pn = quickAddPartNumber.trim();
+    if (!pn) {
+      toast.error('Enter a part number');
+      return;
+    }
+    setQuickAddLoading(true);
+    setBulkImportResult(null);
+    try {
+      const response = await axios.post('/api/catalog-creator/lookup-parts', {
+        partNumbers: [pn]
+      });
+      const { products: foundProducts, notFound } = response.data;
+      if (foundProducts?.length > 0) {
+        setSelectedProductIds(prev => {
+          const next = new Set(prev);
+          foundProducts.forEach((p: Product) => next.add(p.id));
+          return next;
+        });
+        setQuickAddPartNumber('');
+        toast.success(`Added ${foundProducts[0].partNumber}`);
+      } else {
+        toast.error(`Part "${pn}" not found`);
+      }
+    } catch (error) {
+      console.error('Quick-add error:', error);
+      toast.error('Lookup failed');
+    } finally {
+      setQuickAddLoading(false);
+    }
   };
 
   // Bulk import handler
@@ -448,14 +483,42 @@ const CatalogCreator = () => {
             </div>
           </div>
 
-          {/* Bulk Import */}
+          {/* Add Part / Bulk Import */}
           <div className="card p-6">
             <div className="flex items-center space-x-2 mb-4">
-              <Upload className="w-5 h-5 text-green-600" />
-              <h3 className="text-lg font-semibold text-gray-900">Bulk Import</h3>
+              <Plus className="w-5 h-5 text-green-600" />
+              <h3 className="text-lg font-semibold text-gray-900">Add Products</h3>
             </div>
-            <p className="text-sm text-gray-600 mb-4">
-              Paste part numbers (one per line) to quickly add products
+
+            {/* Quick-add: type part number, Enter or Add */}
+            <div className="flex gap-2 mb-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={quickAddPartNumber}
+                  onChange={(e) => setQuickAddPartNumber(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleQuickAddPart())}
+                  placeholder="Type part number and press Enter to add"
+                  className="input w-full pl-10 text-sm"
+                  disabled={quickAddLoading}
+                  data-testid="input-quick-add-part"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleQuickAddPart}
+                disabled={!quickAddPartNumber.trim() || quickAddLoading}
+                className="btn btn-primary flex items-center gap-2 shrink-0"
+                data-testid="button-quick-add"
+              >
+                {quickAddLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                Add
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-2">
+              Or paste multiple part numbers (one per line):
             </p>
             <textarea
               value={bulkImportText}
