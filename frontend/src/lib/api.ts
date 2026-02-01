@@ -45,6 +45,20 @@ api.interceptors.response.use(
 export default api;
 
 // ============================================================================
+// Public API (no auth required - for guest / FREE users)
+// ============================================================================
+
+export const publicApi = {
+  getCatalogs: () => api.get('/public/catalogs'),
+  searchParts: (q: string, params?: { category?: string; limit?: number }) =>
+    api.get('/public/parts/search', { params: { q, ...params } }),
+  crossReference: (manufacturer: string, partNumber: string) =>
+    api.post('/public/cross-reference', { manufacturer, partNumber }),
+  crossReferenceBulk: (items: Array<{ manufacturer: string; partNumber: string; quantity?: number; description?: string }>) =>
+    api.post('/public/cross-reference/bulk', { items }),
+};
+
+// ============================================================================
 // Auth API
 // ============================================================================
 
@@ -315,7 +329,7 @@ export const teamApi = {
 };
 
 // ============================================================================
-// Cost Table API
+// Pricing Contracts API (backend: /cost-tables)
 // ============================================================================
 
 export const costTableApi = {

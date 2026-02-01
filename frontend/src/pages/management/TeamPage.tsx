@@ -15,7 +15,7 @@ interface Team {
     lastName: string | null;
     role: string;
   }>;
-  _count?: { members: number; costTables: number };
+  _count?: { members: number; costTables: number }; // backend still uses costTables
 }
 
 const TeamPage = () => {
@@ -67,7 +67,7 @@ const TeamPage = () => {
                 )}
                 <p className="text-xs text-gray-500 mt-2">
                   {team._count?.members ?? team.members.length} members
-                  {team._count?.costTables != null && ` • ${team._count.costTables} cost tables`}
+                  {team._count?.costTables != null && ` • ${team._count.costTables} pricing contracts`}
                 </p>
               </div>
               <div className="divide-y">

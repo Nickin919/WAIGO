@@ -3,26 +3,67 @@ import { useNavigate } from 'react-router-dom';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { FreeMode } from 'swiper/modules';
 import { ChevronRight } from 'lucide-react';
-import { useAuthStore } from '@/stores/authStore';
-import { categoryApi } from '@/lib/api';
+import { useAuthStore, isGuestUser } from '@/stores/authStore';
+import { categoryApi, publicApi, catalogApi } from '@/lib/api';
 
 import 'swiper/css';
 import 'swiper/css/free-mode';
 
 const Catalog = () => {
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const guest = useAuthStore(isGuestUser);
   const navigate = useNavigate();
+  const [effectiveCatalogId, setEffectiveCatalogId] = useState<string | null>(null);
   const [topCategories, setTopCategories] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<any>(null);
   const [subCategories, setSubCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Resolve catalog ID: use user's catalog, or for guest use public catalogs, or fallback to all
+  useEffect(() => {
+    const resolveCatalog = async () => {
+      if (user?.catalogId) {
+        setEffectiveCatalogId(user.catalogId);
+        return;
+      }
+      if (guest) {
+        try {
+          const { data } = await publicApi.getCatalogs();
+          const catalogs = Array.isArray(data) ? data : [];
+          if (catalogs.length > 0) {
+            setEffectiveCatalogId(catalogs[0].id);
+          } else {
+            setLoading(false);
+          }
+        } catch (error) {
+          console.error('Failed to load public catalogs:', error);
+          setLoading(false);
+        }
+        return;
+      }
+      // Logged-in user without catalogId: use first available catalog
+      try {
+        const { data } = await catalogApi.getAll();
+        const catalogs = Array.isArray(data) ? data : [];
+        if (catalogs.length > 0) {
+          setEffectiveCatalogId(catalogs[0].id);
+        } else {
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Failed to load catalogs:', error);
+        setLoading(false);
+      }
+    };
+    resolveCatalog();
+  }, [user?.catalogId, user?.role, guest]);
+
   useEffect(() => {
     const loadTopCategories = async () => {
-      if (!user?.catalogId) return;
+      if (!effectiveCatalogId) return;
 
       try {
-        const { data } = await categoryApi.getByCatalog(user.catalogId, {
+        const { data } = await categoryApi.getByCatalog(effectiveCatalogId, {
           parentId: 'null',
         });
         setTopCategories(data);
@@ -37,7 +78,7 @@ const Catalog = () => {
     };
 
     loadTopCategories();
-  }, [user?.catalogId]);
+  }, [effectiveCatalogId]);
 
   useEffect(() => {
     const loadSubCategories = async () => {

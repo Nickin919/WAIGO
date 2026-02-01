@@ -58,7 +58,7 @@ export const getCostTables = async (req: AuthRequest, res: Response): Promise<vo
     res.json(costTables);
   } catch (error) {
     console.error('Get cost tables error:', error);
-    res.status(500).json({ error: 'Failed to fetch cost tables' });
+    res.status(500).json({ error: 'Failed to fetch pricing contracts' });
   }
 };
 
@@ -99,7 +99,7 @@ export const getCostTableById = async (req: AuthRequest, res: Response): Promise
     });
 
     if (!costTable) {
-      res.status(404).json({ error: 'Cost table not found' });
+      res.status(404).json({ error: 'Pricing contract not found' });
       return;
     }
 
@@ -119,7 +119,7 @@ export const getCostTableById = async (req: AuthRequest, res: Response): Promise
     res.json(costTable);
   } catch (error) {
     console.error('Get cost table error:', error);
-    res.status(500).json({ error: 'Failed to fetch cost table' });
+    res.status(500).json({ error: 'Failed to fetch pricing contract' });
   }
 };
 
@@ -162,7 +162,7 @@ export const createCostTable = async (req: AuthRequest, res: Response): Promise<
     res.status(201).json(costTable);
   } catch (error) {
     console.error('Create cost table error:', error);
-    res.status(500).json({ error: 'Failed to create cost table' });
+    res.status(500).json({ error: 'Failed to create pricing contract' });
   }
 };
 
@@ -190,7 +190,7 @@ export const uploadCostTableCSV = async (req: AuthRequest, res: Response): Promi
     });
 
     if (!costTable) {
-      res.status(404).json({ error: 'Cost table not found' });
+      res.status(404).json({ error: 'Pricing contract not found' });
       return;
     }
 
@@ -236,12 +236,12 @@ export const uploadCostTableCSV = async (req: AuthRequest, res: Response): Promi
     fs.unlinkSync(req.file.path);
 
     res.json({ 
-      message: 'Cost table updated successfully',
+      message: 'Pricing contract updated successfully',
       itemsImported: items.length
     });
   } catch (error) {
     console.error('Upload CSV error:', error);
-    res.status(500).json({ error: 'Failed to upload cost table' });
+    res.status(500).json({ error: 'Failed to upload pricing contract' });
   }
 };
 
@@ -267,7 +267,7 @@ export const downloadCostTableCSV = async (req: AuthRequest, res: Response): Pro
     });
 
     if (!costTable) {
-      res.status(404).json({ error: 'Cost table not found' });
+      res.status(404).json({ error: 'Pricing contract not found' });
       return;
     }
 
@@ -282,11 +282,11 @@ export const downloadCostTableCSV = async (req: AuthRequest, res: Response): Pro
     const csv = Papa.unparse(csvData);
 
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="cost-table-${costTable.name}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="pricing-contract-${costTable.name}.csv"`);
     res.send(csv);
   } catch (error) {
     console.error('Download CSV error:', error);
-    res.status(500).json({ error: 'Failed to download cost table' });
+    res.status(500).json({ error: 'Failed to download pricing contract' });
   }
 };
 
@@ -315,7 +315,7 @@ export const updateCostTable = async (req: AuthRequest, res: Response): Promise<
     res.json(costTable);
   } catch (error) {
     console.error('Update cost table error:', error);
-    res.status(500).json({ error: 'Failed to update cost table' });
+    res.status(500).json({ error: 'Failed to update pricing contract' });
   }
 };
 
@@ -335,10 +335,10 @@ export const deleteCostTable = async (req: AuthRequest, res: Response): Promise<
       where: { id }
     });
 
-    res.json({ message: 'Cost table deleted successfully' });
+    res.json({ message: 'Pricing contract deleted successfully' });
   } catch (error) {
     console.error('Delete cost table error:', error);
-    res.status(500).json({ error: 'Failed to delete cost table' });
+    res.status(500).json({ error: 'Failed to delete pricing contract' });
   }
 };
 

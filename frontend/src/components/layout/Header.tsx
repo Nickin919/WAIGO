@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
-import { Bell, User, Search, Menu } from 'lucide-react';
-import { useAuthStore } from '@/stores/authStore';
+import { Bell, User, Search, Menu, LogIn } from 'lucide-react';
+import { useAuthStore, isGuestUser } from '@/stores/authStore';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -8,6 +8,7 @@ interface HeaderProps {
 
 const Header = ({ onMenuClick }: HeaderProps) => {
   const { user } = useAuthStore();
+  const isGuest = useAuthStore(isGuestUser);
 
   return (
     <header className="bg-white border-b border-gray-200 fixed top-0 left-0 right-0 z-50 h-16">
@@ -22,7 +23,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
           </button>
 
           {/* Logo */}
-          <Link to="/dashboard" className="flex items-center space-x-2">
+          <Link to={isGuest ? '/catalog' : '/dashboard'} className="flex items-center space-x-2">
             <div className="w-10 h-10 bg-wago-green rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-xl">W</span>
             </div>
@@ -52,18 +53,28 @@ const Header = ({ onMenuClick }: HeaderProps) => {
             <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
           </button>
 
-          {/* User menu */}
-          <Link
-            to="/profile"
-            className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            <div className="w-8 h-8 bg-wago-blue rounded-full flex items-center justify-center">
-              <User className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-sm font-medium text-gray-900 hidden md:inline">
-              {user?.firstName || user?.email}
-            </span>
-          </Link>
+          {/* User menu or Sign in (for guest) */}
+          {isGuest ? (
+            <Link
+              to="/login"
+              className="flex items-center space-x-2 px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors font-medium"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>Sign in</span>
+            </Link>
+          ) : (
+            <Link
+              to="/profile"
+              className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <div className="w-8 h-8 bg-wago-blue rounded-full flex items-center justify-center">
+                <User className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-sm font-medium text-gray-900 hidden md:inline">
+                {user?.firstName || user?.email}
+              </span>
+            </Link>
+          )}
         </div>
       </div>
     </header>

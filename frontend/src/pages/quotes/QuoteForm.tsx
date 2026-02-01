@@ -256,9 +256,10 @@ const QuoteForm = () => {
     const contractItem = findContractItem(part);
     const quantity = 1;
     let listPrice = part.basePrice ?? 0;
-    let defaultDisc = part.distributorDiscount ?? 0;
+    let defaultDisc = 0;
     let marginPct = 0;
-    if (contractItem && quantity >= contractItem.minQuantity) {
+    // Only use contract/catalog pricing when a price contract is selected
+    if (priceContractId && contractItem && quantity >= contractItem.minQuantity) {
       listPrice = contractItem.costPrice;
       defaultDisc = contractItem.discountPercent ?? part.distributorDiscount ?? 0;
       const costAfterDisc = listPrice * (1 - defaultDisc / 100);
@@ -266,6 +267,7 @@ const QuoteForm = () => {
         marginPct = (contractItem.suggestedSellPrice / costAfterDisc - 1) * 100;
       }
     }
+    // When no price contract: sell price defaults to list price (0% discount, 0% margin)
     const existing = items.find((i) => i.partId === part.id);
     if (existing) {
       setItems(items.map((i) =>
@@ -316,9 +318,10 @@ const QuoteForm = () => {
           const count = partCounts.get(key) || 1;
           const contractItem = findContractItem(part);
           let listPrice = part.basePrice ?? 0;
-          let defaultDisc = part.distributorDiscount ?? 0;
+          let defaultDisc = 0;
           let marginPct = 0;
-          if (contractItem && count >= contractItem.minQuantity) {
+          // Only use contract/catalog pricing when a price contract is selected
+          if (priceContractId && contractItem && count >= contractItem.minQuantity) {
             listPrice = contractItem.costPrice;
             defaultDisc = contractItem.discountPercent ?? part.distributorDiscount ?? 0;
             const costAfterDisc = listPrice * (1 - defaultDisc / 100);
@@ -326,6 +329,7 @@ const QuoteForm = () => {
               marginPct = (contractItem.suggestedSellPrice / costAfterDisc - 1) * 100;
             }
           }
+          // When no price contract: sell price defaults to list price (0% discount, 0% margin)
           const idx = next.findIndex((i) => i.partId === part.id);
           if (idx >= 0) {
             next[idx].quantity += count;

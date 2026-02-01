@@ -1,5 +1,5 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuthStore } from './stores/authStore';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useAuthStore, isGuestUser } from './stores/authStore';
 
 // Layouts
 import MainLayout from './layouts/MainLayout';
@@ -27,15 +27,40 @@ import CatalogCreator from './pages/catalog/CatalogCreator';
 import AssignmentsPage from './pages/assignments/AssignmentsPage';
 import MyPriceContractsPage from './pages/assignments/MyPriceContractsPage';
 import ManagedUsersPage from './pages/management/ManagedUsersPage';
-import CostTablesPage from './pages/management/CostTablesPage';
+import PricingContractsPage from './pages/management/PricingContractsPage';
 import TeamPage from './pages/management/TeamPage';
 import ActivityPage from './pages/management/ActivityPage';
+import ProductFinder from './pages/public/ProductFinder';
+import BomCrossReference from './pages/public/BomCrossReference';
 import NotFound from './pages/NotFound';
+
+// Redirect guest to catalog, others to dashboard
+const GuestOrDashboardRedirect = () => {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const guest = useAuthStore(isGuestUser);
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (guest) return <Navigate to="/catalog" replace />;
+  return <Navigate to="/dashboard" replace />;
+};
+
+// Paths allowed for guest (limited access without login)
+const GUEST_ALLOWED_PATHS = ['/catalog', '/product-finder', '/bom-cross-reference'];
+
+// Protect restricted routes from guest users
+const GuestRouteGuard = ({ children }: { children: React.ReactNode }) => {
+  const guest = useAuthStore(isGuestUser);
+  const { pathname } = useLocation();
+
+  if (!guest) return <>{children}</>;
+  const allowed = GUEST_ALLOWED_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
+  if (allowed) return <>{children}</>;
+  return <Navigate to="/catalog" replace state={{ message: 'Sign in to access this feature' }} />;
+};
 
 // Protected route wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAuthStore();
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+  return isAuthenticated ? <GuestRouteGuard>{children}</GuestRouteGuard> : <Navigate to="/login" replace />;
 };
 
 // Admin route wrapper
@@ -64,7 +89,7 @@ function App() {
 
       {/* Protected routes */}
       <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/" element={<GuestOrDashboardRedirect />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/catalog" element={<Catalog />} />
         <Route path="/catalog/category/:categoryId" element={<CategoryView />} />
@@ -82,9 +107,12 @@ function App() {
         <Route path="/catalog-creator/:id" element={<CatalogCreator />} />
         <Route path="/assignments" element={<AssignmentsPage />} />
         <Route path="/managed-users" element={<ManagedUsersPage />} />
-        <Route path="/cost-tables" element={<CostTablesPage />} />
+        <Route path="/pricing-contracts" element={<PricingContractsPage />} />
+        <Route path="/cost-tables" element={<Navigate to="/pricing-contracts" replace />} />
         <Route path="/team" element={<TeamPage />} />
         <Route path="/activity" element={<ActivityPage />} />
+        <Route path="/product-finder" element={<ProductFinder />} />
+        <Route path="/bom-cross-reference" element={<BomCrossReference />} />
         <Route path="/my-price-contracts" element={<MyPriceContractsPage />} />
         <Route path="/profile" element={<Profile />} />
       </Route>

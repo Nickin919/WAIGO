@@ -1,11 +1,13 @@
 import { Outlet, Navigate } from 'react-router-dom';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuthStore, isGuestUser } from '@/stores/authStore';
 
 const AuthLayout = () => {
-  const { isAuthenticated } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const guest = useAuthStore(isGuestUser);
 
-  // Redirect to dashboard if already authenticated
+  // Redirect if already authenticated
   if (isAuthenticated) {
+    if (guest) return <Navigate to="/catalog" replace />;
     return <Navigate to="/dashboard" replace />;
   }
 

@@ -182,7 +182,7 @@ const Dashboard = () => {
                 <div className="flex-1">
                   <p className="text-sm">
                     <span className="font-medium">Mike</span> created new{' '}
-                    <span className="text-green-600">cost table</span>
+                    <span className="text-green-600">pricing contract</span>
                   </p>
                   <p className="text-xs text-gray-500">1 hour ago</p>
                 </div>
