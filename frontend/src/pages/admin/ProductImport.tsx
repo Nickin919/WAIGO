@@ -95,7 +95,7 @@ const ProductImport = () => {
     const uploadedFile = e.target.files?.[0];
     if (!uploadedFile) return;
 
-    if (!uploadedFile.name.endsWith('.csv')) {
+    if (!uploadedFile.name.toLowerCase().endsWith('.csv')) {
       toast.error('Please upload a CSV file');
       return;
     }
@@ -130,6 +130,9 @@ const ProductImport = () => {
         toast.error(`Failed to parse CSV: ${error.message}`);
       },
     });
+
+    // Reset input so same file can be selected again
+    e.target.value = '';
   };
 
   // Validate mappings
@@ -374,22 +377,20 @@ const UploadStep = ({
     </div>
 
     <div className="max-w-md mx-auto flex flex-col items-center gap-4">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv"
-        onChange={onFileUpload}
-        className="hidden"
-        id="input-file-upload"
-      />
-      <button
-        type="button"
-        onClick={() => fileInputRef.current?.click()}
-        className="btn btn-primary cursor-pointer inline-flex items-center space-x-2"
-      >
-        <FileText className="w-5 h-5" />
-        <span>{file ? file.name : 'Browse CSV File'}</span>
-      </button>
+      <div className="relative">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,text/csv,application/csv"
+          onChange={onFileUpload}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          aria-label="Select CSV file"
+        />
+        <div className="btn btn-primary inline-flex items-center space-x-2 pointer-events-none">
+          <FileText className="w-5 h-5" />
+          <span>{file ? file.name : 'Browse CSV File'}</span>
+        </div>
+      </div>
 
       <button
         type="button"
