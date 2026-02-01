@@ -2,6 +2,41 @@
 
 All notable changes to the WAIGO App will be documented in this file.
 
+## [1.1.0] - 2026-02-01
+
+### Sales Dashboard – Year filtering & trending improvements
+
+#### Changes
+- **Default year filter** – Dashboard now defaults to current year instead of "All years (combined)" for clearer single-year view
+- **Trending minimum threshold** – Only accounts with ≥$5,000 in one 3-month period appear in trending lists (filters out small accounts)
+- **UI clarity** – Year dropdown shows "All years (combined)" label; trending sections note the $5k minimum
+
+#### Restore
+```bash
+git checkout v1.1.0
+```
+
+---
+
+## [1.0.3] - 2026-02-01
+
+### Sales Dashboard – POS improvements
+
+#### Changes
+- **Overall Result validation** – POS upload sum of line items must match file "Overall Result" total (within $5); "Overall Result" row is not imported as a customer
+- **Name CP (distributor)** – Column B captured and stored; sales by distributor shown in POS pie chart
+- **Skip subtotal/total rows** – Rows where C or E is "Result" or Name End Customer is empty are skipped (distributor totals, not unique sales)
+- **Negative amounts** – Credits/adjustments (e.g. negative line items) are included so validation sum matches Overall Result
+- **Schema** – `MonthlySale.distributorName` added; unique key includes distributor for POS (one row per end customer per distributor per month)
+- **Railway** – Start command uses `prisma db push --accept-data-loss` so deploy succeeds with schema changes
+
+#### Restore
+```bash
+git checkout v1.0.3
+```
+
+---
+
 ## [1.0.2] - 2026-02-01
 
 ### Quotes System
