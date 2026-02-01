@@ -4,6 +4,9 @@ import { authenticate, authorize } from '../middleware/auth';
 
 const router = Router();
 
+// Bulk part lookup for quotes
+router.post('/lookup-bulk', authenticate, partController.lookupBulkParts);
+
 // Public/authenticated routes
 router.get('/catalog/:catalogId', partController.getPartsByCatalog);
 router.get('/category/:categoryId', partController.getPartsByCategory);

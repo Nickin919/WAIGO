@@ -61,6 +61,7 @@ model User {
   managedByRsm          User[] @relation("RsmAssignments")
   
   // Content relations
+  customersCreated Customer[] @relation("CustomerCreator")
   videoViews      UserVideoView[]
   comments        Comment[]
   videosUploaded  Video[]   @relation("VideoUploader")
@@ -391,52 +392,93 @@ model Comment {
 }
 
 // ============================================================================
+// CUSTOMERS
+// ============================================================================
+
+model Customer {
+  id        String    @id @default(uuid())
+  name      String
+  company   String?
+  email     String?
+  phone     String?
+  address   String?   @db.Text
+  city      String?
+  state     String?
+  zipCode   String?   @map("zip_code")
+  createdById String  @map("created_by_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  createdBy User    @relation("CustomerCreator", fields: [createdById], references: [id])
+  quotes    Quote[]
+
+  @@index([createdById])
+  @@map("customers")
+}
+
+// ============================================================================
 // PRICING & QUOTES
 // ============================================================================
 
 model Quote {
-  id            String    @id @default(uuid())
-  quoteNumber   String    @unique @map("quote_number") // PP#[ID]
-  catalogId     String    @map("catalog_id")
-  userId        String    @map("user_id")
-  customerName  String?   @map("customer_name")
-  customerEmail String?   @map("customer_email")
-  customerCompany String? @map("customer_company")
-  note          String?   @db.VarChar(150)
-  validUntil    DateTime? @map("valid_until")
-  fob           String?   @db.VarChar(100)
-  terms         String?   @default("Net 30") @db.VarChar(100)
-  isActive      Boolean   @default(true) @map("is_active")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id              String    @id @default(uuid())
+  quoteNumber     String    @unique @map("quote_number")
+  catalogId       String    @map("catalog_id")
+  userId          String    @map("user_id")
+  customerId      String?   @map("customer_id")
+  customerName    String?   @map("customer_name")
+  customerEmail   String?   @map("customer_email")
+  customerCompany String?   @map("customer_company")
+  notes           String?   @db.Text
+  note            String?   @db.VarChar(150) // Legacy - use notes
+  total           Float     @default(0)
+  validUntil      DateTime? @map("valid_until")
+  fob             String?   @db.VarChar(100)
+  terms           String?   @default("Net 30") @db.VarChar(100)
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  user          User      @relation(fields: [userId], references: [id])
-  items         QuoteItem[]
-  discounts     QuoteDiscount[]
+  user     User    @relation(fields: [userId], references: [id])
+  customer Customer? @relation(fields: [customerId], references: [id])
+  items    QuoteItem[]
+  discounts QuoteDiscount[]
 
   @@index([catalogId])
   @@index([userId])
+  @@index([customerId])
   @@map("quotes")
 }
 
 model QuoteItem {
-  id            String    @id @default(uuid())
-  quoteId       String    @map("quote_id")
-  partId        String    @map("part_id")
-  partNumber    String    @map("part_number")
-  description   String
-  packageQty    Int       @map("package_qty")
-  minQty        Int       @map("min_qty")
-  costPrice     Float     @map("cost_price") // Cost to distributor (after discounts)
-  sellPrice     Float?    @map("sell_price") // Price to customer (if specified)
-  isCostAffected Boolean  @default(false) @map("is_cost_affected") // Bold/asterisk indicator
-  isSellAffected Boolean  @default(false) @map("is_sell_affected") // Bold/asterisk indicator
-  createdAt     DateTime  @default(now()) @map("created_at")
+  id                      String    @id @default(uuid())
+  quoteId                 String    @map("quote_id")
+  partId                  String    @map("part_id")
+  partNumber              String    @map("part_number")
+  description             String
+  quantity                Int       @default(1)
+  packageQty              Int       @default(1) @map("package_qty")
+  minQty                  Int       @map("min_qty")
+  discountPct             Float     @default(0) @map("discount_pct")
+  marginPct               Float     @default(0) @map("margin_pct")
+  costPrice               Float     @map("cost_price")
+  sellPrice               Float?    @map("sell_price")
+  lineTotal               Float     @map("line_total")
+  isCostAffected          Boolean   @default(false) @map("is_cost_affected")
+  isSellAffected          Boolean   @default(false) @map("is_sell_affected")
+  // Snapshot fields - frozen at quote creation
+  snapshotSeries          String?   @map("snapshot_series")
+  snapshotPartNumber      String?   @map("snapshot_part_number")
+  snapshotPrice           Float?    @map("snapshot_price")
+  snapshotMinQty          Int?      @map("snapshot_min_qty")
+  snapshotDescription     String?   @map("snapshot_description") @db.Text
+  snapshotDistributorDiscount Float? @map("snapshot_distributor_discount")
+  createdAt               DateTime  @default(now()) @map("created_at")
 
   // Relations
-  quote         Quote     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  part          Part      @relation(fields: [partId], references: [id])
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  part  Part  @relation(fields: [partId], references: [id])
 
   @@index([quoteId])
   @@index([partId])

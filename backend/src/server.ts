@@ -34,6 +34,7 @@ import notificationRoutes from './routes/notification.routes';
 import userManagementRoutes from './routes/userManagement.routes';
 import teamRoutes from './routes/team.routes';
 import costTableRoutes from './routes/costTable.routes';
+import customerRoutes from './routes/customer.routes';
 import productImportRoutes from './routes/productImport.routes';
 import catalogCreatorRoutes from './routes/catalogCreator.routes';
 
@@ -104,6 +105,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/user-management', userManagementRoutes);
 app.use('/api/teams', teamRoutes);
 app.use('/api/cost-tables', costTableRoutes);
+app.use('/api/customers', customerRoutes);
 app.use('/api/catalog-creator', catalogCreatorRoutes);
 
 // ============================================================================

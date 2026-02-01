@@ -96,15 +96,12 @@ export const categoryApi = {
 export const partApi = {
   getByCatalog: (catalogId: string, params?: { search?: string; limit?: number; offset?: number }) =>
     api.get(`/parts/catalog/${catalogId}`, { params }),
-  
-  getByCategory: (categoryId: string) =>
-    api.get(`/parts/category/${categoryId}`),
-  
-  getById: (id: string) =>
-    api.get(`/parts/${id}`),
-  
+  getByCategory: (categoryId: string) => api.get(`/parts/category/${categoryId}`),
+  getById: (id: string) => api.get(`/parts/${id}`),
   getByNumber: (partNumber: string, catalogId: string) =>
     api.get(`/parts/number/${partNumber}`, { params: { catalogId } }),
+  lookupBulk: (catalogId: string, partNumbers: string[]) =>
+    api.post('/parts/lookup-bulk', { catalogId, partNumbers }),
 };
 
 // ============================================================================
@@ -204,28 +201,23 @@ export const projectApi = {
 // ============================================================================
 
 export const quoteApi = {
-  getAll: () =>
-    api.get('/quotes'),
-  
-  getById: (id: string) =>
-    api.get(`/quotes/${id}`),
-  
-  create: (data: any) =>
-    api.post('/quotes', data),
-  
-  uploadCSV: (file: File) => {
-    const formData = new FormData();
-    formData.append('csv', file);
-    return api.post('/quotes/upload-csv', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
-  },
-  
-  downloadCSV: (id: string) =>
-    api.get(`/quotes/${id}/download-csv`, { responseType: 'blob' }),
-  
-  generatePDF: (id: string) =>
-    api.get(`/quotes/${id}/pdf`, { responseType: 'blob' }),
+  getAll: () => api.get('/quotes'),
+  getById: (id: string) => api.get(`/quotes/${id}`),
+  create: (data: any) => api.post('/quotes', data),
+  update: (id: string, data: any) => api.patch(`/quotes/${id}`, data),
+  delete: (id: string) => api.delete(`/quotes/${id}`),
+  downloadCSV: (id: string) => api.get(`/quotes/${id}/download-csv`, { responseType: 'blob' }),
+  generatePDF: (id: string) => api.get(`/quotes/${id}/pdf`, { responseType: 'blob' }),
+};
+
+// ============================================================================
+// Customer API
+// ============================================================================
+
+export const customerApi = {
+  getAll: (params?: { search?: string }) => api.get('/customers', { params }),
+  create: (data: { name: string; company?: string; email?: string; phone?: string; address?: string; city?: string; state?: string; zipCode?: string }) =>
+    api.post('/customers', data),
 };
 
 // ============================================================================

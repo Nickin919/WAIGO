@@ -81,6 +81,58 @@ export const getPartsByCategory = async (req: AuthRequest, res: Response): Promi
 };
 
 /**
+ * Bulk lookup parts by part numbers (for quote bulk import)
+ * POST /api/parts/lookup-bulk
+ * Body: { partNumbers: string[], catalogId: string }
+ */
+export const lookupBulkParts = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const { partNumbers, catalogId } = req.body;
+
+    if (!Array.isArray(partNumbers) || !catalogId) {
+      res.status(400).json({ error: 'partNumbers (array) and catalogId are required' });
+      return;
+    }
+
+    const trimmed = partNumbers
+      .map((p: unknown) => (typeof p === 'string' ? p.trim() : ''))
+      .filter((p: string) => p.length > 0);
+
+    const unique = [...new Set(trimmed)];
+
+    if (unique.length === 0) {
+      res.json({ found: [], notFound: [] });
+      return;
+    }
+
+    const parts = await prisma.part.findMany({
+      where: {
+        catalogId,
+        OR: unique.map((pn: string) => ({ partNumber: { equals: pn, mode: 'insensitive' as const } }))
+      },
+      include: {
+        category: {
+          select: { id: true, name: true }
+        }
+      }
+    });
+
+    const foundPartNumbers = new Set(parts.map((p) => p.partNumber.toLowerCase()));
+    const notFound = unique.filter((pn) => !foundPartNumbers.has(pn.toLowerCase()));
+
+    res.json({ found: parts, notFound });
+  } catch (error) {
+    console.error('Lookup bulk parts error:', error);
+    res.status(500).json({ error: 'Failed to lookup parts' });
+  }
+};
+
+/**
  * Get part by ID
  */
 export const getPartById = async (req: AuthRequest, res: Response): Promise<void> => {
