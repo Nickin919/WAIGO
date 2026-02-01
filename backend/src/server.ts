@@ -8,6 +8,16 @@ import path from 'path';
 // Load environment variables
 dotenv.config();
 
+// Validate required environment variables
+const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET'];
+for (const envVar of requiredEnvVars) {
+  if (!process.env[envVar]) {
+    console.error(`❌ Missing required environment variable: ${envVar}`);
+    console.error('   Please set it in backend/.env or your deployment environment');
+    process.exit(1);
+  }
+}
+
 // Import routes
 import publicRoutes from './routes/public.routes';
 import authRoutes from './routes/auth.routes';
@@ -30,6 +40,7 @@ import catalogCreatorRoutes from './routes/catalogCreator.routes';
 // Import middleware
 import { errorHandler } from './middleware/errorHandler';
 import { notFound } from './middleware/notFound';
+import { prisma } from './lib/prisma';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -42,7 +53,9 @@ const PORT = process.env.PORT || 3001;
 app.use(helmet());
 
 // CORS
-const corsOrigins = process.env.CORS_ORIGINS?.split(',') || ['http://localhost:5173'];
+const corsOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
+  : ['http://localhost:5173'];
 app.use(cors({
   origin: corsOrigins,
   credentials: true
@@ -104,9 +117,40 @@ app.use(errorHandler);
 // Start Server
 // ============================================================================
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+const startServer = async () => {
+  try {
+    // Verify database connection
+    console.log('🔌 Connecting to database...');
+    await prisma.$connect();
+    await prisma.$queryRaw`SELECT 1`;
+    console.log('✅ Database connected');
+
+    const server = app.listen(PORT, () => {
+      const host = process.env.RAILWAY_PUBLIC_DOMAIN || `localhost:${PORT}`;
+      console.log(`🚀 Server running on http://${host}`);
+      console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`📧 Email: ${process.env.SMTP_HOST ? 'Configured' : 'Not configured (optional)'}`);
+    });
+
+    // Graceful shutdown
+    const shutdown = async () => {
+      console.log('\n⏹️  Shutting down gracefully...');
+      server.close(async () => {
+        await prisma.$disconnect();
+        console.log('👋 Server closed');
+        process.exit(0);
+      });
+    };
+
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    await prisma.$disconnect();
+    process.exit(1);
+  }
+};
+
+startServer();
 
 export default app;

@@ -1,15 +1,24 @@
 import nodemailer from 'nodemailer';
 
-// Create transporter
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: process.env.SMTP_PORT === '465',
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS
-  }
-});
+// Check if email is configured
+const hasEmailConfig = !!(
+  process.env.SMTP_HOST &&
+  process.env.SMTP_USER &&
+  process.env.SMTP_PASS
+);
+
+// Create transporter only if configured
+const transporter = hasEmailConfig
+  ? nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT || '587'),
+      secure: process.env.SMTP_PORT === '465',
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    })
+  : null;
 
 interface EmailOptions {
   to: string;
@@ -22,18 +31,24 @@ interface EmailOptions {
  * Send email using configured SMTP
  */
 export const sendEmail = async (options: EmailOptions): Promise<void> => {
+  // Skip if email not configured
+  if (!transporter) {
+    console.log('⚠️ Email not configured, skipping email to', options.to);
+    return;
+  }
+
   try {
     await transporter.sendMail({
-      from: `"${process.env.FROM_NAME}" <${process.env.FROM_EMAIL}>`,
+      from: `"${process.env.FROM_NAME || 'WAGO Hub'}" <${process.env.FROM_EMAIL || 'noreply@wagohub.com'}>`,
       to: options.to,
       subject: options.subject,
       html: options.html,
       text: options.text || options.html.replace(/<[^>]*>/g, '') // Strip HTML for text version
     });
-    console.log(`Email sent to ${options.to}`);
+    console.log(`✅ Email sent to ${options.to}`);
   } catch (error) {
-    console.error('Email send error:', error);
-    throw new Error('Failed to send email');
+    console.error('❌ Email send error:', error);
+    // Don't throw - email failures shouldn't break the app
   }
 };
 

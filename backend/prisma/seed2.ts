@@ -6,6 +6,12 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Starting database seed...');
 
+  // Validate DATABASE_URL
+  if (!process.env.DATABASE_URL) {
+    console.error('❌ DATABASE_URL not set');
+    process.exit(1);
+  }
+
   // Create a demo catalog
   const catalog = await prisma.catalog.upsert({
     where: { id: 'demo-catalog' },
@@ -48,7 +54,7 @@ async function main() {
       passwordHash: userPassword,
       firstName: 'Demo',
       lastName: 'User',
-      role: 'USER',
+      role: 'BASIC',
       catalogId: catalog.id,
       isActive: true,
     },
@@ -104,13 +110,22 @@ async function main() {
   ];
 
   for (const cat of categories) {
-    const category = await prisma.category.create({
-      data: {
-        catalogId: catalog.id,
-        ...cat,
-      },
+    // Check if category already exists
+    let category = await prisma.category.findFirst({
+      where: { catalogId: catalog.id, name: cat.name }
     });
-    console.log('✅ Created category:', category.name);
+    
+    if (!category) {
+      category = await prisma.category.create({
+        data: {
+          catalogId: catalog.id,
+          ...cat,
+        },
+      });
+      console.log('✅ Created category:', category.name);
+    } else {
+      console.log('⏭️  Category already exists:', category.name);
+    }
 
     // Add sample parts to first category
     if (cat.name === 'Terminal Blocks') {
@@ -139,14 +154,23 @@ async function main() {
       ];
 
       for (const part of parts) {
-        const createdPart = await prisma.part.create({
-          data: {
-            catalogId: catalog.id,
-            categoryId: category.id,
-            ...part,
-          },
+        // Check if part already exists
+        const existingPart = await prisma.part.findFirst({
+          where: { catalogId: catalog.id, partNumber: part.partNumber }
         });
-        console.log('  ✅ Created part:', createdPart.partNumber);
+        
+        if (!existingPart) {
+          const createdPart = await prisma.part.create({
+            data: {
+              catalogId: catalog.id,
+              categoryId: category.id,
+              ...part,
+            },
+          });
+          console.log('  ✅ Created part:', createdPart.partNumber);
+        } else {
+          console.log('  ⏭️  Part already exists:', part.partNumber);
+        }
       }
     }
   }

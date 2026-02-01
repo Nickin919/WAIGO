@@ -6,6 +6,12 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Starting database seed...');
 
+  // Validate DATABASE_URL
+  if (!process.env.DATABASE_URL) {
+    console.error('❌ DATABASE_URL not set');
+    process.exit(1);
+  }
+
   try {
     // Create demo catalog (idempotent: use upsert or skip if exists)
     let catalog = await prisma.catalog.findFirst({

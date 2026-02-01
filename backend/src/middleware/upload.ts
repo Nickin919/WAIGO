@@ -1,12 +1,21 @@
 import multer from 'multer';
 import path from 'path';
+import fs from 'fs';
 import { Request } from 'express';
+
+// Ensure upload directories exist
+const uploadDir = process.env.UPLOAD_DIR || './uploads';
+const subdirs = ['videos', 'images', 'csv', 'documents', 'misc'];
+for (const subdir of subdirs) {
+  const dirPath = path.join(uploadDir, subdir);
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+}
 
 // Configure storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = process.env.UPLOAD_DIR || './uploads';
-    
     // Determine subdirectory based on file type
     let subDir = 'misc';
     if (file.fieldname === 'video') subDir = 'videos';
