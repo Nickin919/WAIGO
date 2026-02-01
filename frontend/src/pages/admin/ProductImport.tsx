@@ -1,10 +1,13 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, FileText, CheckCircle, AlertCircle, ArrowRight, ArrowLeft } from 'lucide-react';
-import Papa from 'papaparse';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
+
+// ============================================================================
+// Types
+// ============================================================================
 
 type ProductField =
   | 'partNumber'
@@ -25,6 +28,15 @@ interface FieldDefinition {
   required: boolean;
 }
 
+interface ParsedData {
+  headers: string[];
+  rows: string[][];
+}
+
+// ============================================================================
+// Field Definitions
+// ============================================================================
+
 const PRODUCT_FIELDS: FieldDefinition[] = [
   { value: 'partNumber', label: 'Part Number', required: true },
   { value: 'series', label: 'Series', required: false },
@@ -35,26 +47,144 @@ const PRODUCT_FIELDS: FieldDefinition[] = [
   { value: 'englishDescription', label: 'English Description', required: false },
   { value: 'wagoIdent', label: 'WAGO Ident #', required: false },
   { value: 'distributorDiscount', label: 'Discount (%)', required: false },
-  { value: 'minQty', label: 'Min Qty', required: false },
+  { value: 'minQty', label: 'Min Qty (Order in Multiples of)', required: false },
   { value: 'skip', label: '-- Skip this column --', required: false },
 ];
+
+// ============================================================================
+// CSV Parser - Handles multi-line quoted fields, escaped quotes
+// ============================================================================
+
+const MAX_ROWS = 25_000; // Match backend limit, prevent freeze on huge files
+
+function parseCSV(text: string): ParsedData {
+  if (!text.trim()) return { headers: [], rows: [] };
+  // Strip BOM (Excel and some editors add it)
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentField = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const nextChar = text[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        currentField += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      currentRow.push(currentField.replace(/[\r\n]+/g, ' ').trim());
+      currentField = '';
+    } else if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && nextChar === '\n') i++;
+      currentRow.push(currentField.replace(/[\r\n]+/g, ' ').trim());
+      if (currentRow.some((cell) => cell.length > 0)) rows.push(currentRow);
+      currentRow = [];
+      currentField = '';
+    } else {
+      currentField += char;
+    }
+  }
+
+  if (currentField || currentRow.length > 0) {
+    currentRow.push(currentField.replace(/[\r\n]+/g, ' ').trim());
+    if (currentRow.some((cell) => cell.length > 0)) rows.push(currentRow);
+  }
+
+  if (rows.length === 0) return { headers: [], rows: [] };
+  const headers = rows[0];
+  const dataRows = rows.slice(1);
+  if (dataRows.length > MAX_ROWS) {
+    console.warn(`CSV has ${dataRows.length} rows; limiting to ${MAX_ROWS}`);
+  }
+  return { headers, rows: dataRows.slice(0, MAX_ROWS) };
+}
+
+// ============================================================================
+// Auto-detect field mapping from header name
+// ============================================================================
+
+function guessFieldMapping(header: string): ProductField {
+  const h = header.toLowerCase().replace(/[\s_-]+/g, '');
+
+  if (h.includes('partnumber') || h.includes('partno') || h.includes('itemno') || h.includes('productcode') || h.includes('sku'))
+    return 'partNumber';
+  if (h.includes('wagoident') || h.includes('internalident') || h.includes('wagointernal')) return 'wagoIdent';
+  if (h === 'series' || h.includes('category') || h.includes('type') || h.includes('group') || h.includes('productline'))
+    return 'category';
+  if (h.includes('per100') || h.includes('priceper100') || (h.includes('listprice') && h.includes('100')))
+    return 'listPricePer100';
+  if (h.includes('priceeach') || h.includes('listpriceeach') || (h.includes('listprice') && h.includes('each')))
+    return 'price';
+  if ((h.includes('price') || h.includes('cost')) && !h.includes('100') && !h.includes('net')) return 'price';
+  if (h.includes('englishdesc') || h.includes('engdesc') || h.includes('altdesc') || h.includes('americandesc'))
+    return 'englishDescription';
+  if (h.includes('desc') || h.includes('description')) return 'description';
+  if ((h.includes('discount') || (h.includes('acp') && !h.includes('net') && !h.includes('price'))))
+    return 'distributorDiscount';
+  if (h.includes('orderinmultiples') || h.includes('multiples') || h.includes('minqty') || h.includes('box') || h.includes('pack'))
+    return 'minQty';
+
+  return 'skip';
+}
+
+// ============================================================================
+// Validation
+// ============================================================================
+
+function validateMappings(
+  columnMapping: Record<number, ProductField>,
+  updateOnly: boolean
+): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  const mappedFields = Object.values(columnMapping);
+
+  const requiredFields = updateOnly
+    ? ['partNumber']
+    : PRODUCT_FIELDS.filter((f) => f.required).map((f) => f.value);
+
+  requiredFields.forEach((field) => {
+    if (!mappedFields.includes(field as ProductField)) {
+      const fieldDef = PRODUCT_FIELDS.find((f) => f.value === field);
+      errors.push(`Required field "${fieldDef?.label}" is not mapped`);
+    }
+  });
+
+  const nonSkippedFields = mappedFields.filter((f) => f !== 'skip');
+  const uniqueFields = new Set(nonSkippedFields);
+  if (uniqueFields.size !== nonSkippedFields.length) {
+    errors.push('Each field can only be mapped once');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+// ============================================================================
+// Main Component
+// ============================================================================
 
 type Step = 'upload' | 'mapping' | 'preview' | 'importing' | 'complete';
 
 const ProductImport = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  
-  // State
+
   const [step, setStep] = useState<Step>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
-  const [rawData, setRawData] = useState<any[]>([]);
+  const [rawData, setRawData] = useState<string[][]>([]);
   const [columnMapping, setColumnMapping] = useState<Record<number, ProductField>>({});
   const [updateOnly, setUpdateOnly] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
   const [clearing, setClearing] = useState(false);
+  const [parsing, setParsing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Clear all products
@@ -71,123 +201,106 @@ const ProductImport = () => {
     }
   };
 
-  // Auto-detect field from header name
-  const guessFieldMapping = (header: string): ProductField => {
-    const h = header.toLowerCase().replace(/[\s_-]+/g, '');
-
-    if (h.includes('partnumber') || h.includes('partno') || h.includes('sku') || h === 'part') return 'partNumber';
-    if (h.includes('wagoident') || h.includes('internalident') || h.includes('ident')) return 'wagoIdent';
-    if (h === 'series' || h.includes('productseries')) return 'series';
-    if (h.includes('per100') || (h.includes('listprice') && h.includes('100'))) return 'listPricePer100';
-    if (h.includes('priceeach') || (h.includes('listprice') && h.includes('each')) || (h.includes('price') && h.includes('ea'))) return 'price';
-    if (h.includes('price') && !h.includes('100') && !h.includes('discount')) return 'price';
-    if (h.includes('category') || h.includes('type') || h.includes('group')) return 'category';
-    if (h.includes('englishdesc') || h.includes('engdesc')) return 'englishDescription';
-    if (h.includes('desc') && !h.includes('english')) return 'description';
-    if (h.includes('discount') || h.includes('acp') || h.includes('margin')) return 'distributorDiscount';
-    if (h.includes('multiples') || h.includes('minqty') || h.includes('boxqty') || h.includes('packageqty')) return 'minQty';
-
-    return 'skip';
-  };
-
-  // Handle file upload
+  // Handle file upload - FileReader + custom parseCSV (async, non-blocking)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = e.target.files?.[0];
     if (!uploadedFile) return;
 
     if (!uploadedFile.name.toLowerCase().endsWith('.csv')) {
       toast.error('Please upload a CSV file');
+      e.target.value = '';
       return;
     }
 
+    setParsing(true);
     setFile(uploadedFile);
 
-    // Parse CSV
-    Papa.parse(uploadedFile, {
-      complete: (results) => {
-        if (results.data.length === 0) {
-          toast.error('CSV file is empty');
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      // Defer parsing to next tick so "Parsing..." can render and avoid blocking
+      setTimeout(() => {
+        try {
+          const text = (event.target?.result as string) || '';
+          if (!text.trim()) {
+            toast.error('File is empty');
+            setParsing(false);
+            return;
+          }
+
+          const data = parseCSV(text);
+        if (data.headers.length === 0) {
+          toast.error('No valid data found in file');
+          setParsing(false);
           return;
         }
 
-        const csvHeaders = results.data[0] as string[];
-        const dataRows = results.data.slice(1).filter((row: any) => row.some((cell: any) => cell));
+        setHeaders(data.headers);
+        setRawData(data.rows);
 
-        setHeaders(csvHeaders);
-        setRawData(dataRows);
-
-        // Auto-detect mappings
         const autoMapping: Record<number, ProductField> = {};
-        csvHeaders.forEach((header, index) => {
+        data.headers.forEach((header, index) => {
           autoMapping[index] = guessFieldMapping(header);
         });
         setColumnMapping(autoMapping);
 
-        setStep('mapping');
-        toast.success(`Loaded ${dataRows.length} rows`);
-      },
-      error: (error) => {
-        toast.error(`Failed to parse CSV: ${error.message}`);
-      },
-    });
+          setStep('mapping');
+          const truncated = data.rows.length >= MAX_ROWS ? ` (max ${MAX_ROWS} rows)` : '';
+          toast.success(`Loaded ${data.rows.length} rows${truncated}`);
+        } catch (err) {
+          toast.error(`Failed to parse CSV: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        } finally {
+          setParsing(false);
+        }
+      }, 0);
+    };
+    reader.onerror = () => {
+      toast.error('Failed to read file');
+      setParsing(false);
+    };
+    reader.readAsText(uploadedFile, 'UTF-8');
 
-    // Reset input so same file can be selected again
     e.target.value = '';
   };
 
-  // Validate mappings
-  const validateMappings = (): { valid: boolean; errors: string[] } => {
-    const errors: string[] = [];
-    const mappedFields = Object.values(columnMapping);
-
-    // Check required fields
-    const requiredFields = updateOnly
-      ? ['partNumber']
-      : PRODUCT_FIELDS.filter((f) => f.required).map((f) => f.value);
-
-    requiredFields.forEach((field) => {
-      if (!mappedFields.includes(field as ProductField)) {
-        const fieldDef = PRODUCT_FIELDS.find((f) => f.value === field);
-        errors.push(`Required field "${fieldDef?.label}" is not mapped`);
-      }
-    });
-
-    // Check for duplicates
-    const nonSkippedFields = mappedFields.filter((f) => f !== 'skip');
-    const uniqueFields = new Set(nonSkippedFields);
-    if (uniqueFields.size !== nonSkippedFields.length) {
-      errors.push('Each field can only be mapped once');
-    }
-
-    return { valid: errors.length === 0, errors };
-  };
-
-  // Transform data based on mapping
-  const transformData = () => {
+  // Transform data for import - proper numeric parsing
+  const transformDataForImport = () => {
     return rawData.map((row) => {
-      const transformed: any = {};
-      headers.forEach((header, index) => {
-        const field = columnMapping[index];
-        if (field && field !== 'skip') {
-          transformed[field] = row[index];
+      const product: Record<string, string | number | null> = {};
+
+      Object.entries(columnMapping).forEach(([indexStr, targetField]) => {
+        if (targetField === 'skip') return;
+        const index = parseInt(indexStr, 10);
+        const value = row[index];
+
+        if (value === undefined) return;
+
+        if (
+          targetField === 'price' ||
+          targetField === 'distributorDiscount' ||
+          targetField === 'listPricePer100'
+        ) {
+          product[targetField] = parseFloat(String(value).replace(/[^0-9.-]/g, '')) || 0;
+        } else if (targetField === 'minQty') {
+          const parsed = parseInt(String(value).replace(/[^0-9]/g, ''), 10);
+          product[targetField] = isNaN(parsed) ? null : parsed;
+        } else {
+          product[targetField] = value?.trim() || null;
         }
       });
-      return transformed;
+
+      return product;
     });
   };
 
-  // Handle proceed to preview
   const handleProceedToPreview = () => {
-    const validation = validateMappings();
+    const validation = validateMappings(columnMapping, updateOnly);
     if (!validation.valid) {
       toast.error(validation.errors[0]);
       return;
     }
-
     setStep('preview');
   };
 
-  // Handle import
   const handleImport = async () => {
     if (!user?.catalogId) {
       toast.error('No catalog selected');
@@ -198,10 +311,10 @@ const ProductImport = () => {
     setStep('importing');
 
     try {
-      const transformedData = transformData();
+      const products = transformDataForImport();
 
       const response = await api.post('/admin/products/import', {
-        products: transformedData,
+        products,
         updateOnly,
         catalogId: user.catalogId,
       });
@@ -217,10 +330,19 @@ const ProductImport = () => {
     }
   };
 
-  // Render based on step
+  const handleNewImport = () => {
+    setStep('upload');
+    setFile(null);
+    setHeaders([]);
+    setRawData([]);
+    setColumnMapping({});
+    setImportResult(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Render
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Header */}
       <div className="mb-8">
         <button
           onClick={() => navigate('/admin')}
@@ -233,7 +355,6 @@ const ProductImport = () => {
         <p className="text-gray-600">Import products from CSV with intelligent column mapping</p>
       </div>
 
-      {/* Progress Steps */}
       <div className="mb-8">
         <div className="flex items-center justify-between max-w-3xl">
           <StepIndicator
@@ -266,12 +387,12 @@ const ProductImport = () => {
         </div>
       </div>
 
-      {/* Step Content */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
         {step === 'upload' && (
           <UploadStep
             onFileUpload={handleFileUpload}
             file={file}
+            parsing={parsing}
             onClearProducts={handleClearProducts}
             clearing={clearing}
             fileInputRef={fileInputRef}
@@ -281,6 +402,7 @@ const ProductImport = () => {
         {step === 'mapping' && (
           <MappingStep
             headers={headers}
+            rawData={rawData}
             columnMapping={columnMapping}
             setColumnMapping={setColumnMapping}
             updateOnly={updateOnly}
@@ -295,29 +417,20 @@ const ProductImport = () => {
             headers={headers}
             rawData={rawData}
             columnMapping={columnMapping}
-            transformData={transformData}
+            transformDataForImport={transformDataForImport}
             updateOnly={updateOnly}
             onImport={handleImport}
             onBack={() => setStep('mapping')}
           />
         )}
 
-        {step === 'importing' && (
-          <ImportingStep />
-        )}
+        {step === 'importing' && <ImportingStep />}
 
         {step === 'complete' && importResult && (
           <CompleteStep
             result={importResult}
             onViewProducts={() => navigate('/catalog')}
-            onNewImport={() => {
-              setStep('upload');
-              setFile(null);
-              setHeaders([]);
-              setRawData([]);
-              setColumnMapping({});
-              setImportResult(null);
-            }}
+            onNewImport={handleNewImport}
           />
         )}
       </div>
@@ -325,7 +438,10 @@ const ProductImport = () => {
   );
 };
 
-// Step Indicator Component
+// ============================================================================
+// Step Components
+// ============================================================================
+
 const StepIndicator = ({
   number,
   label,
@@ -340,11 +456,7 @@ const StepIndicator = ({
   <div className="flex flex-col items-center">
     <div
       className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold mb-2 ${
-        completed
-          ? 'bg-green-600 text-white'
-          : active
-          ? 'bg-blue-600 text-white'
-          : 'bg-gray-200 text-gray-600'
+        completed ? 'bg-green-600 text-white' : active ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
       }`}
     >
       {completed ? <CheckCircle className="w-6 h-6" /> : number}
@@ -353,16 +465,17 @@ const StepIndicator = ({
   </div>
 );
 
-// Upload Step
 const UploadStep = ({
   onFileUpload,
   file,
+  parsing,
   onClearProducts,
   clearing,
   fileInputRef,
 }: {
   onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   file: File | null;
+  parsing: boolean;
   onClearProducts: () => void;
   clearing: boolean;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
@@ -377,18 +490,19 @@ const UploadStep = ({
     </div>
 
     <div className="max-w-md mx-auto flex flex-col items-center gap-4">
-      <div className="relative">
+      <div className="relative inline-block">
         <input
           ref={fileInputRef}
           type="file"
           accept=".csv,text/csv,application/csv"
           onChange={onFileUpload}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+          disabled={parsing}
           aria-label="Select CSV file"
         />
         <div className="btn btn-primary inline-flex items-center space-x-2 pointer-events-none">
           <FileText className="w-5 h-5" />
-          <span>{file ? file.name : 'Browse CSV File'}</span>
+          <span>{parsing ? 'Parsing...' : file ? file.name : 'Browse CSV File'}</span>
         </div>
       </div>
 
@@ -414,7 +528,6 @@ const UploadStep = ({
   </div>
 );
 
-// Mapping Step
 const MappingStep = ({
   headers,
   rawData,
@@ -422,15 +535,22 @@ const MappingStep = ({
   setColumnMapping,
   updateOnly,
   setUpdateOnly,
-  validateMappings,
   onProceed,
   onBack,
-}: any) => {
+}: {
+  headers: string[];
+  rawData: string[][];
+  columnMapping: Record<number, ProductField>;
+  setColumnMapping: (m: Record<number, ProductField>) => void;
+  updateOnly: boolean;
+  setUpdateOnly: (v: boolean) => void;
+  onProceed: () => void;
+  onBack: () => void;
+}) => {
   const handleMappingChange = (index: number, value: ProductField) => {
     setColumnMapping({ ...columnMapping, [index]: value });
   };
 
-  // Get validation errors
   const validation = validateMappings(columnMapping, updateOnly);
 
   return (
@@ -442,7 +562,6 @@ const MappingStep = ({
         </p>
       </div>
 
-      {/* Update Only Toggle */}
       <div className="mb-6 p-4 bg-gray-50 rounded-lg flex items-center justify-between">
         <div>
           <label htmlFor="switch-update-only" className="font-medium text-gray-900 block mb-1">
@@ -464,12 +583,11 @@ const MappingStep = ({
         </label>
       </div>
 
-      {/* Column Mapping Table */}
       <div className="mb-6 overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">CSV Column</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Your Column Header</th>
               <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Sample Data</th>
               <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Maps To</th>
             </tr>
@@ -478,15 +596,15 @@ const MappingStep = ({
             {headers.map((header, index) => (
               <tr key={index}>
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">{header}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">
-                  {rawData?.[0]?.[index] || <span className="text-gray-400">—</span>}
+                <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">
+                  {rawData[0]?.[index] ?? '—'}
                 </td>
                 <td className="px-4 py-3">
                   <select
-                    value={columnMapping[index] || 'skip'}
+                    value={columnMapping[index] ?? 'skip'}
                     onChange={(e) => handleMappingChange(index, e.target.value as ProductField)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    id={`select-mapping-${index}`}
+                    className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    data-testid={`select-mapping-${index}`}
                   >
                     {PRODUCT_FIELDS.map((field) => (
                       <option key={field.value} value={field.value}>
@@ -501,7 +619,6 @@ const MappingStep = ({
         </table>
       </div>
 
-      {/* Validation Errors */}
       {validation.errors.length > 0 && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-start space-x-2">
@@ -518,7 +635,6 @@ const MappingStep = ({
         </div>
       )}
 
-      {/* Actions */}
       <div className="flex items-center justify-between">
         <button onClick={onBack} className="btn bg-gray-200 hover:bg-gray-300 text-gray-800">
           <ArrowLeft className="w-5 h-5 mr-2" />
@@ -538,47 +654,29 @@ const MappingStep = ({
   );
 };
 
-// Helper function for validation
-function validateMappings(
-  columnMapping: Record<number, ProductField>,
-  updateOnly: boolean
-): { valid: boolean; errors: string[] } {
-  const errors: string[] = [];
-  const mappedFields = Object.values(columnMapping);
-
-  const requiredFields = updateOnly
-    ? ['partNumber']
-    : PRODUCT_FIELDS.filter((f) => f.required).map((f) => f.value);
-
-  requiredFields.forEach((field) => {
-    if (!mappedFields.includes(field as ProductField)) {
-      const fieldDef = PRODUCT_FIELDS.find((f) => f.value === field);
-      errors.push(`Required field "${fieldDef?.label}" is not mapped`);
-    }
-  });
-
-  const nonSkippedFields = mappedFields.filter((f) => f !== 'skip');
-  const uniqueFields = new Set(nonSkippedFields);
-  if (uniqueFields.size !== nonSkippedFields.length) {
-    errors.push('Each field can only be mapped once');
-  }
-
-  return { valid: errors.length === 0, errors };
-}
-
-// Preview Step
-const PreviewStep = ({ headers, rawData, columnMapping, transformData, updateOnly, onImport, onBack }: any) => {
-  const transformedData = transformData();
+const PreviewStep = ({
+  headers,
+  rawData,
+  columnMapping,
+  transformDataForImport,
+  updateOnly,
+  onImport,
+  onBack,
+}: {
+  headers: string[];
+  rawData: string[][];
+  columnMapping: Record<number, ProductField>;
+  transformDataForImport: () => Record<string, string | number | null>[];
+  updateOnly: boolean;
+  onImport: () => void;
+  onBack: () => void;
+}) => {
+  const transformedData = transformDataForImport();
   const preview = transformedData.slice(0, 10);
 
-  // Get only mapped columns (not skipped)
   const mappedColumns = headers
-    .map((header: string, index: number) => ({
-      header,
-      field: columnMapping[index],
-      index,
-    }))
-    .filter((col: any) => col.field && col.field !== 'skip');
+    .map((header, index) => ({ header, field: columnMapping[index], index }))
+    .filter((col) => col.field && col.field !== 'skip');
 
   return (
     <div>
@@ -589,7 +687,6 @@ const PreviewStep = ({ headers, rawData, columnMapping, transformData, updateOnl
         </p>
       </div>
 
-      {/* Summary */}
       <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-blue-50 p-4 rounded-lg">
           <div className="text-2xl font-bold text-blue-900">{transformedData.length}</div>
@@ -609,13 +706,12 @@ const PreviewStep = ({ headers, rawData, columnMapping, transformData, updateOnl
         </div>
       </div>
 
-      {/* Preview Table */}
       <div className="mb-6 overflow-x-auto">
         <table className="w-full border border-gray-200 rounded-lg">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">#</th>
-              {mappedColumns.map((col: any) => (
+              {mappedColumns.map((col) => (
                 <th key={col.index} className="px-3 py-2 text-left text-xs font-semibold text-gray-700">
                   {PRODUCT_FIELDS.find((f) => f.value === col.field)?.label}
                 </th>
@@ -623,12 +719,12 @@ const PreviewStep = ({ headers, rawData, columnMapping, transformData, updateOnl
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {preview.map((row: any, rowIndex: number) => (
+            {preview.map((row, rowIndex) => (
               <tr key={rowIndex}>
                 <td className="px-3 py-2 text-xs text-gray-500">{rowIndex + 1}</td>
-                {mappedColumns.map((col: any) => (
+                {mappedColumns.map((col) => (
                   <td key={col.index} className="px-3 py-2 text-sm text-gray-900">
-                    {row[col.field] || <span className="text-gray-400">—</span>}
+                    {row[col.field!] ?? <span className="text-gray-400">—</span>}
                   </td>
                 ))}
               </tr>
@@ -637,7 +733,6 @@ const PreviewStep = ({ headers, rawData, columnMapping, transformData, updateOnl
         </table>
       </div>
 
-      {/* Actions */}
       <div className="flex items-center justify-between">
         <button onClick={onBack} className="btn bg-gray-200 hover:bg-gray-300 text-gray-800">
           <ArrowLeft className="w-5 h-5 mr-2" />
@@ -652,7 +747,6 @@ const PreviewStep = ({ headers, rawData, columnMapping, transformData, updateOnl
   );
 };
 
-// Importing Step
 const ImportingStep = () => (
   <div className="text-center py-12">
     <div className="w-16 h-16 border-4 border-green-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
@@ -661,8 +755,15 @@ const ImportingStep = () => (
   </div>
 );
 
-// Complete Step
-const CompleteStep = ({ result, onViewProducts, onNewImport }: any) => (
+const CompleteStep = ({
+  result,
+  onViewProducts,
+  onNewImport,
+}: {
+  result: any;
+  onViewProducts: () => void;
+  onNewImport: () => void;
+}) => (
   <div>
     <div className="text-center mb-8">
       <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -672,7 +773,6 @@ const CompleteStep = ({ result, onViewProducts, onNewImport }: any) => (
       <p className="text-gray-600">Your products have been successfully imported</p>
     </div>
 
-    {/* Results Summary */}
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
       <div className="bg-green-50 p-4 rounded-lg text-center">
         <div className="text-3xl font-bold text-green-900">{result.created}</div>
@@ -687,20 +787,15 @@ const CompleteStep = ({ result, onViewProducts, onNewImport }: any) => (
         <div className="text-sm text-purple-700">Price Changes</div>
       </div>
       <div className="bg-orange-50 p-4 rounded-lg text-center">
-        <div className="text-3xl font-bold text-orange-900">{result.errors?.length || 0}</div>
+        <div className="text-3xl font-bold text-orange-900">{result.errors?.length ?? 0}</div>
         <div className="text-sm text-orange-700">Errors</div>
       </div>
     </div>
 
-    {/* Not Found Items */}
-    {result.notFound && result.notFound.length > 0 && (
+    {result.notFound?.length > 0 && (
       <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-        <h4 className="font-semibold text-yellow-900 mb-2">
-          Not Found ({result.notFound.length} items)
-        </h4>
-        <p className="text-sm text-yellow-800 mb-2">
-          These part numbers don't exist in the catalog (update-only mode):
-        </p>
+        <h4 className="font-semibold text-yellow-900 mb-2">Not Found ({result.notFound.length} items)</h4>
+        <p className="text-sm text-yellow-800 mb-2">These part numbers don't exist in the catalog (update-only mode):</p>
         <div className="max-h-40 overflow-y-auto">
           <div className="text-sm text-yellow-800 space-y-1">
             {result.notFound.map((pn: string, i: number) => (
@@ -711,8 +806,7 @@ const CompleteStep = ({ result, onViewProducts, onNewImport }: any) => (
       </div>
     )}
 
-    {/* Errors */}
-    {result.errors && result.errors.length > 0 && (
+    {result.errors?.length > 0 && (
       <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
         <h4 className="font-semibold text-red-900 mb-2">Errors ({result.errors.length})</h4>
         <div className="max-h-40 overflow-y-auto">
@@ -725,13 +819,8 @@ const CompleteStep = ({ result, onViewProducts, onNewImport }: any) => (
       </div>
     )}
 
-    {/* Actions */}
     <div className="flex items-center justify-center space-x-4">
-      <button
-        onClick={onViewProducts}
-        className="btn btn-primary"
-        id="button-view-products"
-      >
+      <button onClick={onViewProducts} className="btn btn-primary" id="button-view-products">
         View Products
       </button>
       <button onClick={onNewImport} className="btn bg-gray-200 hover:bg-gray-300 text-gray-800">
