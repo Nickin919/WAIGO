@@ -5,9 +5,9 @@ const AuthLayout = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const guest = useAuthStore(isGuestUser);
 
-  // Redirect if already authenticated
-  if (isAuthenticated) {
-    if (guest) return <Navigate to="/catalog" replace />;
+  // Redirect only non-guest authenticated users (they're already logged in)
+  // Allow guests to stay on /login so they can sign in
+  if (isAuthenticated && !guest) {
     return <Navigate to="/dashboard" replace />;
   }
 
