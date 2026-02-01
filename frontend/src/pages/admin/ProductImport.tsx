@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, FileText, CheckCircle, AlertCircle, ArrowRight, ArrowLeft } from 'lucide-react';
 import Papa from 'papaparse';
@@ -55,6 +55,7 @@ const ProductImport = () => {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
   const [clearing, setClearing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Clear all products
   const handleClearProducts = async () => {
@@ -270,6 +271,7 @@ const ProductImport = () => {
             file={file}
             onClearProducts={handleClearProducts}
             clearing={clearing}
+            fileInputRef={fileInputRef}
           />
         )}
 
@@ -354,11 +356,13 @@ const UploadStep = ({
   file,
   onClearProducts,
   clearing,
+  fileInputRef,
 }: {
-  onFileUpload: any;
+  onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   file: File | null;
   onClearProducts: () => void;
   clearing: boolean;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
 }) => (
   <div className="text-center py-12">
     <div className="mb-6">
@@ -371,20 +375,21 @@ const UploadStep = ({
 
     <div className="max-w-md mx-auto flex flex-col items-center gap-4">
       <input
+        ref={fileInputRef}
         type="file"
         accept=".csv"
         onChange={onFileUpload}
-        className="absolute w-0 h-0 opacity-0 overflow-hidden"
+        className="hidden"
         id="input-file-upload"
       />
-      <label
-        htmlFor="input-file-upload"
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
         className="btn btn-primary cursor-pointer inline-flex items-center space-x-2"
-        id="button-browse-file"
       >
         <FileText className="w-5 h-5" />
         <span>{file ? file.name : 'Browse CSV File'}</span>
-      </label>
+      </button>
 
       <button
         type="button"

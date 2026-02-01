@@ -96,6 +96,7 @@ app.use('/api/comments', commentRoutes);
 app.use('/api/quotes', quoteRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/cross-references', crossReferenceRoutes);
+app.use('/api/admin/products', productImportRoutes); // Must be before /api/admin (more specific)
 app.use('/api/admin', adminRoutes);
 app.use('/api/notifications', notificationRoutes);
 
@@ -103,7 +104,6 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/user-management', userManagementRoutes);
 app.use('/api/teams', teamRoutes);
 app.use('/api/cost-tables', costTableRoutes);
-app.use('/api/admin/products', productImportRoutes);
 app.use('/api/catalog-creator', catalogCreatorRoutes);
 
 // ============================================================================
