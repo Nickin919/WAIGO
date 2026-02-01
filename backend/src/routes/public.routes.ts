@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 const router = Router();
 
@@ -233,7 +233,7 @@ router.get('/catalogs', async (req: Request, res: Response): Promise<void> => {
  */
 router.post('/session/create', async (req: Request, res: Response): Promise<void> => {
   try {
-    const sessionId = uuidv4();
+    const sessionId = randomUUID();
 
     // Create temporary FREE user with session ID
     const user = await prisma.user.create({
