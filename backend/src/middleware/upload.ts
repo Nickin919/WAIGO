@@ -23,6 +23,7 @@ const storage = multer.diskStorage({
     else if (file.fieldname === 'csv') subDir = 'csv';
     else if (file.fieldname === 'excel' || file.fieldname === 'xlsx') subDir = 'documents';
     else if (file.fieldname === 'document') subDir = 'documents';
+    else if (file.fieldname === 'pdf') subDir = 'pdf';
     
     cb(null, path.join(uploadDir, subDir));
   },
@@ -45,7 +46,8 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
     csv: ['text/csv', 'application/vnd.ms-excel'],
     excel: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'],
     xlsx: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'],
-    document: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+    document: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+    pdf: ['application/pdf']
   };
 
   const fieldAllowedTypes = allowedTypes[file.fieldname] || [];
@@ -73,6 +75,7 @@ export const uploadThumbnail = upload.single('thumbnail');
 export const uploadCSV = upload.single('csv');
 export const uploadExcel = upload.single('excel');
 export const uploadDocument = upload.single('document');
+export const uploadPDF = upload.single('pdf');
 export const uploadMultiple = upload.array('files', 10);
 
 export default upload;
