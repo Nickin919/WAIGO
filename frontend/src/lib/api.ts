@@ -353,8 +353,13 @@ export const costTableApi = {
 // ============================================================================
 
 export const salesApi = {
-  getSummary: (rsmId?: string) =>
-    api.get('/sales/summary', rsmId ? { params: { rsmId } } : {}),
+  /** year: optional – number to filter one year, or omit for "All years" (combined) */
+  getSummary: (rsmId?: string, year?: number | 'all') => {
+    const params: { rsmId?: string; year?: string } = {};
+    if (rsmId) params.rsmId = rsmId;
+    if (year != null && year !== 'all') params.year = String(year);
+    return api.get('/sales/summary', { params });
+  },
   getRsms: () => api.get('/sales/rsms'),
   upload: (formData: FormData) =>
     api.post('/sales/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),

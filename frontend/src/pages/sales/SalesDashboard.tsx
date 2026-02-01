@@ -61,6 +61,7 @@ interface SalesSummaryResponse {
   direct: SummaryData;
   pos: SummaryData;
   trending: { top10Growing: TrendingCustomer[]; top10Declining: TrendingCustomer[] };
+  years?: number[];
 }
 
 const COLORS = ['#16a34a', '#2563eb', '#7c3aed', '#dc2626', '#ea580c', '#ca8a04', '#0891b2', '#db2777', '#65a30d', '#4f46e5'];
@@ -79,8 +80,10 @@ const SalesDashboard = () => {
   const [selectedRsmId, setSelectedRsmId] = useState<string>('');
   const [fileInputKeyDirect, setFileInputKeyDirect] = useState(0);
   const [fileInputKeyPos, setFileInputKeyPos] = useState(0);
+  const [directYear, setDirectYear] = useState<number>(new Date().getFullYear());
   const [posMonth, setPosMonth] = useState<number>(new Date().getMonth() + 1);
   const [posYear, setPosYear] = useState<number>(new Date().getFullYear());
+  const [viewYear, setViewYear] = useState<number | 'all'>('all');
   const [clearYear, setClearYear] = useState<number>(new Date().getFullYear());
   const [clearMonth, setClearMonth] = useState<number>(new Date().getMonth() + 1);
   const [clearEntireYear, setClearEntireYear] = useState(false);
@@ -88,10 +91,10 @@ const SalesDashboard = () => {
 
   const isAdmin = user?.role === 'ADMIN';
 
-  const fetchSummary = (rsmId?: string) => {
+  const fetchSummary = (rsmId?: string, year?: number | 'all') => {
     setLoading(true);
     salesApi
-      .getSummary(rsmId)
+      .getSummary(rsmId, year)
       .then((res) => {
         const raw = res.data as SalesSummaryResponse | SummaryData;
         if (raw && 'all' in raw && 'direct' in raw && 'pos' in raw) {
@@ -103,6 +106,7 @@ const SalesDashboard = () => {
             direct: flat,
             pos: flat,
             trending: { top10Growing: [], top10Declining: [] },
+            years: [],
           } : null);
         }
       })
@@ -116,8 +120,11 @@ const SalesDashboard = () => {
   const summary = data ? (view === 'direct' ? data.direct : view === 'pos' ? data.pos : data.all) : null;
 
   useEffect(() => {
-    fetchSummary(isAdmin && selectedRsmId ? selectedRsmId : undefined);
-  }, [isAdmin, selectedRsmId]);
+    fetchSummary(
+      isAdmin && selectedRsmId ? selectedRsmId : undefined,
+      viewYear === 'all' ? undefined : viewYear
+    );
+  }, [isAdmin, selectedRsmId, viewYear]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -133,6 +140,7 @@ const SalesDashboard = () => {
     formData.append('excel', file);
     formData.append('type', type);
     if (isAdmin && selectedRsmId) formData.append('rsmId', selectedRsmId);
+    if (type === 'direct' && year != null) formData.append('year', String(year));
     if (type === 'pos' && month != null) formData.append('month', String(month));
     if (type === 'pos' && year != null) formData.append('year', String(year));
     return formData;
@@ -147,10 +155,10 @@ const SalesDashboard = () => {
     }
     setUploading(true);
     try {
-      await salesApi.upload(buildFormData(file, 'direct'));
-      toast.success('Direct sales data uploaded');
+      await salesApi.upload(buildFormData(file, 'direct', undefined, directYear));
+      toast.success(`Direct sales for ${directYear} uploaded`);
       setFileInputKeyDirect((k) => k + 1);
-      fetchSummary(isAdmin && selectedRsmId ? selectedRsmId : undefined);
+      fetchSummary(isAdmin && selectedRsmId ? selectedRsmId : undefined, viewYear === 'all' ? undefined : viewYear);
     } catch (err: unknown) {
       toast.error((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Upload failed');
     } finally {
@@ -175,7 +183,7 @@ const SalesDashboard = () => {
         : `POS sales for ${MONTH_NAMES[posMonth - 1]} ${posYear} uploaded`;
       toast.success(msg);
       setFileInputKeyPos((k) => k + 1);
-      fetchSummary(isAdmin && selectedRsmId ? selectedRsmId : undefined);
+      fetchSummary(isAdmin && selectedRsmId ? selectedRsmId : undefined, viewYear === 'all' ? undefined : viewYear);
     } catch (err: unknown) {
       toast.error((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Upload failed');
     } finally {
@@ -192,7 +200,7 @@ const SalesDashboard = () => {
       if (isAdmin && selectedRsmId) params.rsmId = selectedRsmId;
       await salesApi.clearByPeriod(params);
       toast.success(clearEntireYear ? `Cleared all data for ${clearYear}` : `Cleared ${MONTH_NAMES[clearMonth - 1]} ${clearYear}`);
-      fetchSummary(isAdmin && selectedRsmId ? selectedRsmId : undefined);
+      fetchSummary(isAdmin && selectedRsmId ? selectedRsmId : undefined, viewYear === 'all' ? undefined : viewYear);
     } catch (err: unknown) {
       toast.error((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to clear data');
     } finally {
@@ -220,23 +228,45 @@ const SalesDashboard = () => {
           <h1 className="text-2xl font-bold text-gray-900">Sales Dashboard</h1>
           <p className="text-gray-600 mt-1">Sales analytics from uploaded Excel data</p>
         </div>
-        {isAdmin && rsms.length > 0 && (
+        <div className="flex flex-wrap items-center gap-4">
+          {/* View year: All years or single year */}
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">View RSM:</label>
+            <label className="text-sm font-medium text-gray-700">Year:</label>
             <select
-              value={selectedRsmId}
-              onChange={(e) => setSelectedRsmId(e.target.value)}
-              className="input max-w-[200px]"
+              value={viewYear === 'all' ? 'all' : viewYear}
+              onChange={(e) => {
+                const v = e.target.value;
+                setViewYear(v === 'all' ? 'all' : parseInt(v, 10));
+              }}
+              className="input max-w-[120px]"
             >
-              <option value="">All RSMs</option>
-              {rsms.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name} ({r.salesCustomersCount})
-                </option>
+              <option value="all">All years</option>
+              {(data?.years?.length
+                ? data.years
+                : Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i)
+              ).map((y) => (
+                <option key={y} value={y}>{y}</option>
               ))}
             </select>
           </div>
-        )}
+          {isAdmin && rsms.length > 0 && (
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">View RSM:</label>
+              <select
+                value={selectedRsmId}
+                onChange={(e) => setSelectedRsmId(e.target.value)}
+                className="input max-w-[200px]"
+              >
+                <option value="">All RSMs</option>
+                {rsms.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name} ({r.salesCustomersCount})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Upload + Clear: three cards in one row so delete is visible */}
@@ -245,8 +275,22 @@ const SalesDashboard = () => {
         <div className="card p-4">
           <h3 className="font-semibold text-gray-900 mb-2">Direct sales (12 months)</h3>
           <p className="text-sm text-gray-600 mb-3">
-            Excel with 12 months of direct account sales. Column R (Total) is ignored.
+            Excel with 12 months of direct account sales. <strong>Select the calendar year</strong> this file is for. Column R (Total) is ignored.
           </p>
+          <div className="flex flex-wrap items-center gap-3 mb-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Year for this file</label>
+              <select
+                value={directYear}
+                onChange={(e) => setDirectYear(Number(e.target.value))}
+                className="input w-[100px]"
+              >
+                {Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+          </div>
           <label className="flex items-center gap-2 cursor-pointer w-fit">
             <input
               key={fileInputKeyDirect}
@@ -394,9 +438,12 @@ const SalesDashboard = () => {
         </div>
       ) : (
         <>
-          {/* View toggle: All | Direct | POS */}
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <span className="text-sm font-medium text-gray-700">View:</span>
+          {/* View toggle: All | Direct | POS | Year context */}
+          <div className="flex flex-wrap items-center gap-4 mb-4">
+            <span className="text-sm text-gray-500">
+              Showing: {viewYear === 'all' ? 'All years (combined)' : `Calendar year ${viewYear}`}
+            </span>
+            <span className="text-sm font-medium text-gray-700">Source:</span>
             <div className="flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
               {(['all', 'direct', 'pos'] as const).map((v) => (
                 <button

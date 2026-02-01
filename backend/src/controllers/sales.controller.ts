@@ -119,7 +119,8 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
     }
 
     const uploadType = (req.body?.type as string) || 'direct';
-    const year = req.body?.year != null ? parseInt(String(req.body.year), 10) : DEFAULT_YEAR;
+    const yearRaw = req.body?.year != null ? parseInt(String(req.body.year), 10) : NaN;
+    const year = !isNaN(yearRaw) && yearRaw >= 2000 && yearRaw <= 2100 ? yearRaw : undefined;
     const month = req.body?.month != null ? parseInt(String(req.body.month), 10) : undefined;
 
     if (uploadType === 'pos') {
@@ -128,9 +129,16 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
         res.status(400).json({ error: 'For POS uploads, select the month (1–12) this data is for' });
         return;
       }
-      if (!year || year < 2000 || year > 2100) {
+      if (!year) {
         fs.unlinkSync(req.file.path);
-        res.status(400).json({ error: 'Invalid year for POS upload' });
+        res.status(400).json({ error: 'For POS uploads, select the year this data is for' });
+        return;
+      }
+    }
+    if (uploadType === 'direct') {
+      if (!year) {
+        fs.unlinkSync(req.file.path);
+        res.status(400).json({ error: 'For Direct uploads, select the calendar year this file is for' });
         return;
       }
     }
@@ -212,7 +220,7 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const effectiveYear = year;
+    const effectiveYear = year!;
     // Replace only DIRECT data for this RSM + year (POS data stays intact)
     await prisma.monthlySale.deleteMany({
       where: {
@@ -277,7 +285,7 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
   }
 };
 
-type SummaryWhere = { salesCustomer?: { rsmId: string }; source?: string };
+type SummaryWhere = { salesCustomer?: { rsmId: string }; source?: string; year?: number };
 
 /** Build summary (monthly, topCustomers, kpis) for a given where filter */
 async function buildSummary(where: SummaryWhere, customerCount: number) {
@@ -338,9 +346,13 @@ async function buildSummary(where: SummaryWhere, customerCount: number) {
 }
 
 /** Compute top 10 growing and top 10 declining by comparing last 3 months vs prior 3 months (same year) */
-async function getTrending(where: SummaryWhere): Promise<{ top10Growing: Array<{ code: string; name: string; total: number; priorTotal: number; growthPercent: number }>; top10Declining: Array<{ code: string; name: string; total: number; priorTotal: number; growthPercent: number }> }> {
+async function getTrending(where: SummaryWhere, year?: number): Promise<{ top10Growing: Array<{ code: string; name: string; total: number; priorTotal: number; growthPercent: number }>; top10Declining: Array<{ code: string; name: string; total: number; priorTotal: number; growthPercent: number }> }> {
+  const trendYear = year ?? await prisma.monthlySale.aggregate({
+    where: { ...where },
+    _max: { year: true },
+  }).then((r) => r._max.year ?? DEFAULT_YEAR);
   const sales = await prisma.monthlySale.findMany({
-    where: { ...where, year: DEFAULT_YEAR },
+    where: { ...where, year: trendYear },
     select: { salesCustomerId: true, month: true, amount: true },
   });
   const recentMonths = [10, 11, 12];
@@ -373,7 +385,8 @@ async function getTrending(where: SummaryWhere): Promise<{ top10Growing: Array<{
 
 /**
  * GET /api/sales/summary - Sales summary for dashboard (RSM/Admin)
- * Returns all, direct, and pos summaries plus trending. POS does not overwrite DIRECT.
+ * Query: year (optional) – filter to one year, or omit for "All years" (combined).
+ * Returns all, direct, pos summaries, trending, and years (list of years with data).
  */
 export const getSalesSummary = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -388,22 +401,38 @@ export const getSalesSummary = async (req: AuthRequest, res: Response): Promise<
 
     const rsmFilter = getRsmFilter(req);
     const baseWhere: SummaryWhere = rsmFilter ? { salesCustomer: { rsmId: rsmFilter.rsmId } } : {};
+    const yearParam = req.query.year as string | undefined;
+    const filterYear = yearParam && yearParam !== 'all' ? parseInt(yearParam, 10) : undefined;
+    if (yearParam && yearParam !== 'all' && (isNaN(filterYear!) || filterYear! < 2000 || filterYear! > 2100)) {
+      res.status(400).json({ error: 'Invalid year (2000–2100 or "all")' });
+      return;
+    }
+    const whereWithYear = filterYear != null ? { ...baseWhere, year: filterYear } : baseWhere;
+
     const customerCount = rsmFilter
       ? await prisma.salesCustomer.count({ where: { rsmId: rsmFilter.rsmId } })
       : await prisma.salesCustomer.count();
 
-    const [summaryAll, summaryDirect, summaryPos, trending] = await Promise.all([
-      buildSummary(baseWhere, customerCount),
-      buildSummary({ ...baseWhere, source: 'DIRECT' }, customerCount),
-      buildSummary({ ...baseWhere, source: 'POS' }, customerCount),
-      getTrending(baseWhere),
+    const [yearsRows, summaryAll, summaryDirect, summaryPos, trending] = await Promise.all([
+      prisma.monthlySale.findMany({
+        where: baseWhere,
+        select: { year: true },
+        distinct: ['year'],
+        orderBy: { year: 'desc' },
+      }),
+      buildSummary(whereWithYear, customerCount),
+      buildSummary({ ...whereWithYear, source: 'DIRECT' }, customerCount),
+      buildSummary({ ...whereWithYear, source: 'POS' }, customerCount),
+      getTrending(baseWhere, filterYear),
     ]);
+    const years = yearsRows.map((r) => r.year).filter((y) => y != null).sort((a, b) => b - a);
 
     res.json({
       all: summaryAll,
       direct: summaryDirect,
       pos: summaryPos,
       trending,
+      years,
     });
   } catch (error) {
     console.error('Sales summary error:', error);
