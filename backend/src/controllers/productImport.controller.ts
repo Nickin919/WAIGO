@@ -75,6 +75,58 @@ export const bulkImportProducts = async (req: AuthRequest, res: Response): Promi
 };
 
 /**
+ * Clear all products (Parts) - optionally scoped to a catalog
+ * DELETE /api/admin/products/clear
+ * Body: { catalogId?: string } - if omitted, clears all catalogs
+ */
+export const clearProducts = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user || req.user.role !== 'ADMIN') {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
+    }
+
+    const catalogId = req.body?.catalogId || req.query?.catalogId;
+
+    const whereClause = catalogId ? { catalogId } : {};
+
+    // Get part IDs we're about to delete (for cleaning up references)
+    const parts = await prisma.part.findMany({
+      where: whereClause,
+      select: { id: true }
+    });
+    const partIds = parts.map((p) => p.id);
+
+    if (partIds.length === 0) {
+      res.json({ deleted: 0, message: 'No products to clear' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Remove quote items that reference these parts
+      await tx.quoteItem.deleteMany({ where: { partId: { in: partIds } } });
+      // Unlink project items (partId becomes null)
+      await tx.projectItem.updateMany(
+        { where: { partId: { in: partIds } } },
+        { data: { partId: null } }
+      );
+      // Delete parts (cascades: PriceHistory, PartFile, Video, CatalogItem, CrossReference)
+      await tx.part.deleteMany({ where: whereClause });
+    });
+
+    res.json({
+      deleted: partIds.length,
+      message: catalogId
+        ? `Cleared ${partIds.length} products from catalog`
+        : `Cleared ${partIds.length} products from all catalogs`
+    });
+  } catch (error) {
+    console.error('Clear products error:', error);
+    res.status(500).json({ error: 'Failed to clear products' });
+  }
+};
+
+/**
  * Process product import with upsert logic
  */
 async function processProductImport(

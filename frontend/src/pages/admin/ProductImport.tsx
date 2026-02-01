@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Upload, FileText, CheckCircle, AlertCircle, ArrowRight, ArrowLeft } from 'lucide-react';
 import Papa from 'papaparse';
 import toast from 'react-hot-toast';
-import axios from 'axios';
+import api from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 
 type ProductField =
@@ -54,6 +54,21 @@ const ProductImport = () => {
   const [updateOnly, setUpdateOnly] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
+  const [clearing, setClearing] = useState(false);
+
+  // Clear all products
+  const handleClearProducts = async () => {
+    if (!window.confirm('Clear ALL products from the database? This cannot be undone.')) return;
+    setClearing(true);
+    try {
+      await api.delete('/admin/products/clear');
+      toast.success('All products cleared');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to clear products');
+    } finally {
+      setClearing(false);
+    }
+  };
 
   // Auto-detect field from header name
   const guessFieldMapping = (header: string): ProductField => {
@@ -181,7 +196,7 @@ const ProductImport = () => {
     try {
       const transformedData = transformData();
 
-      const response = await axios.post('/api/admin/products/import', {
+      const response = await api.post('/admin/products/import', {
         products: transformedData,
         updateOnly,
         catalogId: user.catalogId,
@@ -250,7 +265,12 @@ const ProductImport = () => {
       {/* Step Content */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
         {step === 'upload' && (
-          <UploadStep onFileUpload={handleFileUpload} file={file} />
+          <UploadStep
+            onFileUpload={handleFileUpload}
+            file={file}
+            onClearProducts={handleClearProducts}
+            clearing={clearing}
+          />
         )}
 
         {step === 'mapping' && (
@@ -329,7 +349,17 @@ const StepIndicator = ({
 );
 
 // Upload Step
-const UploadStep = ({ onFileUpload, file }: { onFileUpload: any; file: File | null }) => (
+const UploadStep = ({
+  onFileUpload,
+  file,
+  onClearProducts,
+  clearing,
+}: {
+  onFileUpload: any;
+  file: File | null;
+  onClearProducts: () => void;
+  clearing: boolean;
+}) => (
   <div className="text-center py-12">
     <div className="mb-6">
       <Upload className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -339,12 +369,12 @@ const UploadStep = ({ onFileUpload, file }: { onFileUpload: any; file: File | nu
       </p>
     </div>
 
-    <div className="max-w-md mx-auto">
+    <div className="max-w-md mx-auto flex flex-col items-center gap-4">
       <input
         type="file"
         accept=".csv"
         onChange={onFileUpload}
-        className="hidden"
+        className="absolute w-0 h-0 opacity-0 overflow-hidden"
         id="input-file-upload"
       />
       <label
@@ -356,7 +386,16 @@ const UploadStep = ({ onFileUpload, file }: { onFileUpload: any; file: File | nu
         <span>{file ? file.name : 'Browse CSV File'}</span>
       </label>
 
-      <div className="mt-8 text-left bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <button
+        type="button"
+        onClick={onClearProducts}
+        disabled={clearing}
+        className="text-sm text-amber-600 hover:text-amber-800 hover:underline disabled:opacity-50"
+      >
+        {clearing ? 'Clearing...' : 'Clear all products from database'}
+      </button>
+
+      <div className="mt-8 text-left bg-blue-50 border border-blue-200 rounded-lg p-4 w-full">
         <h4 className="font-semibold text-blue-900 mb-2">Expected Columns:</h4>
         <ul className="text-sm text-blue-800 space-y-1">
           <li>• <strong>Part Number</strong> (required)</li>

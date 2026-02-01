@@ -10,6 +10,9 @@ router.use(authenticate, authorize('ADMIN'));
 // Bulk import products
 router.post('/import', productImportController.bulkImportProducts);
 
+// Clear all products (optionally by catalogId)
+router.delete('/clear', productImportController.clearProducts);
+
 // Get price history for a product
 router.get('/:partNumber/price-history', productImportController.getPriceHistory);
 
