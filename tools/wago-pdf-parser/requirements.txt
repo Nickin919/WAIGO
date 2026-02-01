@@ -1,0 +1,11 @@
+# WAGO Quote PDF Parser – dependencies
+# Use: pip install -r requirements.txt
+
+# Primary: reliable table extraction from digital PDFs
+pdfplumber>=0.10.0
+
+# Data handling and export
+pandas>=2.0.0
+
+# Optional fallback for heavily lined tables (requires system: ghostscript, tk; can be heavy)
+# camelot-py[cv]>=0.11.0
