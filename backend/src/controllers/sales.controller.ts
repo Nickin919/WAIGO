@@ -98,8 +98,9 @@ function parsePosFile(worksheet: ExcelJS.Worksheet): {
     const val = row.getCell(colAmount)?.value;
     if (val === null || val === undefined || val === '') return;
     const num = typeof val === 'number' ? val : parseFloat(String(val));
-    const amount = isNaN(num) ? 0 : Math.max(0, num);
-    if (amount === 0) return;
+    if (isNaN(num)) return;
+    // Allow negative amounts (credits/adjustments) so sum of line items matches Overall Result
+    const amount = num;
     rows.push({ code, name, amount, distributorName: distributorName || 'Unknown' });
   });
 
