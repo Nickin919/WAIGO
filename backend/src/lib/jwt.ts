@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 
 interface TokenPayload {
   userId: string;
@@ -16,6 +16,7 @@ export const generateToken = (payload: TokenPayload): string => {
     throw new Error('JWT_SECRET not configured');
   }
 
+  // @ts-ignore - jwt.sign type inference issue with expiresIn
   return jwt.sign(payload, secret, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d'
   });

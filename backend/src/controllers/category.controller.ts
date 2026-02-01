@@ -125,7 +125,7 @@ export const getCategoryBreadcrumb = async (req: AuthRequest, res: Response): Pr
     let currentId: string | null = id;
     
     while (currentId) {
-      const category = await prisma.category.findUnique({
+      const category: { id: string; name: string; parentId: string | null } | null = await prisma.category.findUnique({
         where: { id: currentId },
         select: {
           id: true,

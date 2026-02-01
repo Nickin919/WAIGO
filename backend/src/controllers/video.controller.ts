@@ -241,8 +241,10 @@ export const approveVideo = async (req: AuthRequest, res: Response): Promise<voi
 
     // Send notifications to catalog users
     for (const user of video.part.catalog.users) {
-      sendVideoApprovalEmail(user.email, video.title, video.part.partNumber)
-        .catch(console.error);
+      if (user.email) {
+        sendVideoApprovalEmail(user.email, video.title, video.part.partNumber)
+          .catch(console.error);
+      }
     }
 
     res.json(video);

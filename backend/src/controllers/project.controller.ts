@@ -39,7 +39,7 @@ export const getProjectById = async (req: AuthRequest, res: Response): Promise<v
       where: { id },
       include: {
         items: {
-          where: { revisionNumber: { equals: prisma.raw('(SELECT "current_revision" FROM "projects" WHERE "id" = $1)', id) } },
+          where: { projectId: id },
           include: {
             part: {
               select: {

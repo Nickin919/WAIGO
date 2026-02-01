@@ -38,7 +38,8 @@ export const getCostTables = async (req: AuthRequest, res: Response): Promise<vo
             id: true,
             email: true,
             firstName: true,
-            lastName: true
+            lastName: true,
+            assignedToDistributorId: true
           }
         },
         turnkeyTeam: {
@@ -81,7 +82,8 @@ export const getCostTableById = async (req: AuthRequest, res: Response): Promise
             id: true,
             email: true,
             firstName: true,
-            lastName: true
+            lastName: true,
+            assignedToDistributorId: true
           }
         },
         turnkeyTeam: {
