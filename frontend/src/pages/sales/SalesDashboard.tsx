@@ -137,8 +137,12 @@ const SalesDashboard = () => {
     }
     setUploading(true);
     try {
-      await salesApi.upload(buildFormData(file, 'pos', posMonth, posYear));
-      toast.success(`POS sales for ${MONTH_NAMES[posMonth - 1]} ${posYear} uploaded`);
+      const res = await salesApi.upload(buildFormData(file, 'pos', posMonth, posYear));
+      const payload = res.data as { rowsProcessed?: number; lineItems?: number };
+      const msg = payload?.rowsProcessed != null
+        ? `${payload.rowsProcessed} customers for ${MONTH_NAMES[posMonth - 1]} ${posYear}`
+        : `POS sales for ${MONTH_NAMES[posMonth - 1]} ${posYear} uploaded`;
+      toast.success(msg);
       setFileInputKeyPos((k) => k + 1);
       fetchSummary(isAdmin && selectedRsmId ? selectedRsmId : undefined);
     } catch (err: unknown) {
@@ -204,8 +208,8 @@ const SalesDashboard = () => {
         )}
       </div>
 
-      {/* Upload sections: Direct and POS */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      {/* Upload + Clear: three cards in one row so delete is visible */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         {/* Direct sales – 12 months + total */}
         <div className="card p-4">
           <h3 className="font-semibold text-gray-900 mb-2">Direct sales (12 months)</h3>
@@ -235,7 +239,7 @@ const SalesDashboard = () => {
         <div className="card p-4">
           <h3 className="font-semibold text-gray-900 mb-2">POS sales (distributors)</h3>
           <p className="text-sm text-gray-600 mb-3">
-            One month of POS data from distributors. Select which month this file is for.
+            One month of POS data. <strong>Choose the month/year this file is for</strong> — the file does not contain a date.
           </p>
           <div className="flex flex-wrap items-center gap-3 mb-3">
             <div>
@@ -277,70 +281,70 @@ const SalesDashboard = () => {
             </span>
           </label>
           <p className="text-xs text-gray-500 mt-2">
-            Sheet &quot;ZANALYSIS_PATTERN (7)&quot;, row 6+. C=end customer code, E=name, F=amount. &quot;Result&quot; rows skipped.
+            Sheet &quot;ZANALYSIS_PATTERN (7)&quot;, row 6+. C=code, E=name, F=amount. &quot;Result&quot; rows skipped.
           </p>
         </div>
-      </div>
-      <p className="text-sm text-gray-500 mb-4">
-        Uploads replace existing data for that period: direct = full year, POS = selected month.
-      </p>
 
-      {/* Clear data by month or year */}
-      <div className="card p-4 mb-6">
-        <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-          <Trash2 className="w-4 h-4" />
-          Clear data
-        </h3>
-        <p className="text-sm text-gray-600 mb-3">
-          Remove sales data for a specific month or for an entire year. This cannot be undone.
-        </p>
-        <div className="flex flex-wrap items-end gap-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Year</label>
-            <select
-              value={clearYear}
-              onChange={(e) => setClearYear(Number(e.target.value))}
-              className="input w-[100px]"
-            >
-              {Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map((y) => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={clearEntireYear}
-              onChange={(e) => setClearEntireYear(e.target.checked)}
-              className="rounded border-gray-300"
-            />
-            <span className="text-sm text-gray-700">Entire year</span>
-          </label>
-          {!clearEntireYear && (
+        {/* Clear data – same row so it’s easy to find */}
+        <div className="card p-4 border-red-100 bg-red-50/30">
+          <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+            <Trash2 className="w-4 h-4 text-red-600" />
+            Delete / clear data
+          </h3>
+          <p className="text-sm text-gray-600 mb-3">
+            Remove sales data for a month or entire year. Cannot be undone.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Month</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Year</label>
               <select
-                value={clearMonth}
-                onChange={(e) => setClearMonth(Number(e.target.value))}
-                className="input w-[140px]"
+                value={clearYear}
+                onChange={(e) => setClearYear(Number(e.target.value))}
+                className="input w-[100px]"
               >
-                {MONTH_NAMES.map((name, i) => (
-                  <option key={i} value={i + 1}>{name}</option>
+                {Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map((y) => (
+                  <option key={y} value={y}>{y}</option>
                 ))}
               </select>
             </div>
-          )}
-          <button
-            type="button"
-            onClick={handleClearData}
-            disabled={clearing || (isAdmin && !selectedRsmId)}
-            className="btn border border-red-200 text-red-700 hover:bg-red-50 flex items-center gap-2"
-          >
-            <Trash2 className="w-4 h-4" />
-            {clearing ? 'Clearing...' : clearEntireYear ? `Clear ${clearYear}` : `Clear ${MONTH_NAMES[clearMonth - 1]} ${clearYear}`}
-          </button>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={clearEntireYear}
+                onChange={(e) => setClearEntireYear(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              <span className="text-sm text-gray-700">Entire year</span>
+            </label>
+            {!clearEntireYear && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Month</label>
+                <select
+                  value={clearMonth}
+                  onChange={(e) => setClearMonth(Number(e.target.value))}
+                  className="input w-[140px]"
+                >
+                  {MONTH_NAMES.map((name, i) => (
+                    <option key={i} value={i + 1}>{name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handleClearData}
+              disabled={clearing || (isAdmin && !selectedRsmId)}
+              className="btn border border-red-300 bg-white text-red-700 hover:bg-red-50 flex items-center gap-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              {clearing ? 'Clearing...' : clearEntireYear ? `Clear ${clearYear}` : `Clear ${MONTH_NAMES[clearMonth - 1]} ${clearYear}`}
+            </button>
+          </div>
         </div>
       </div>
+      <p className="text-sm text-gray-500 mb-4">
+        Uploads replace existing data for that period: direct = full year, POS = selected month only. If POS results look wrong, check the month/year above and use &quot;Delete / clear data&quot; to remove that month, then re-upload.
+      </p>
 
       {isAdmin && !selectedRsmId && (
         <p className="text-sm text-amber-600 mb-6">Select an RSM above to upload or clear data on their behalf.</p>
