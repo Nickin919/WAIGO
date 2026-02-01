@@ -2,6 +2,27 @@
 
 All notable changes to the WAIGO App will be documented in this file.
 
+## [1.0.2] - 2026-02-01
+
+### Quotes System
+
+#### Changes
+- **Customer model** – Create and select customers with full address/contact details
+- **Quote form** – New quote creation and editing with customer selection, product search, bulk import
+- **Bulk part lookup** – Add products via paste or CSV (part numbers)
+- **Role-based discounts** – Enforced limits: BASIC 10%, TURNKEY 15%, DISTRIBUTOR 20%, RSM 35%, ADMIN 100%
+- **Margin pricing** – Cost-plus pricing for distributor+ users (cost × (1 + margin%))
+- **Snapshot pricing** – Product data frozen at quote creation for audit trail
+- **Hierarchical visibility** – Managers see quotes from subordinates
+- **Prisma db push on deploy** – Schema sync runs automatically on Railway startup
+
+#### Restore
+```bash
+git checkout v1.0.2
+```
+
+---
+
 ## [1.0.1] - 2026-01-31
 
 ### Product Import Improvements
@@ -83,5 +104,6 @@ git checkout -b hotfix/from-v1.0.0 v1.0.0
 
 | Version | Date | Description |
 |---------|------|-------------|
+| v1.0.2 | 2026-02-01 | Quotes system: customers, bulk import, role-based discounts, snapshot pricing |
 | v1.0.1 | 2026-01-31 | Product import: drag-and-drop, catalog selector, sample download |
 | v1.0.0 | 2026-01-31 | First production release on Railway |
