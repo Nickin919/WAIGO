@@ -32,6 +32,7 @@ import TeamPage from './pages/management/TeamPage';
 import ActivityPage from './pages/management/ActivityPage';
 import ProductFinder from './pages/public/ProductFinder';
 import BomCrossReference from './pages/public/BomCrossReference';
+import SalesDashboard from './pages/sales/SalesDashboard';
 import NotFound from './pages/NotFound';
 
 // Redirect guest to catalog, others to dashboard
@@ -113,6 +114,7 @@ function App() {
         <Route path="/activity" element={<ActivityPage />} />
         <Route path="/product-finder" element={<ProductFinder />} />
         <Route path="/bom-cross-reference" element={<BomCrossReference />} />
+        <Route path="/sales" element={<SalesDashboard />} />
         <Route path="/my-price-contracts" element={<MyPriceContractsPage />} />
         <Route path="/profile" element={<Profile />} />
       </Route>

@@ -21,6 +21,7 @@ const storage = multer.diskStorage({
     if (file.fieldname === 'video') subDir = 'videos';
     else if (file.fieldname === 'image' || file.fieldname === 'thumbnail') subDir = 'images';
     else if (file.fieldname === 'csv') subDir = 'csv';
+    else if (file.fieldname === 'excel' || file.fieldname === 'xlsx') subDir = 'documents';
     else if (file.fieldname === 'document') subDir = 'documents';
     
     cb(null, path.join(uploadDir, subDir));
@@ -42,6 +43,8 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
     image: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
     thumbnail: ['image/jpeg', 'image/png', 'image/webp'],
     csv: ['text/csv', 'application/vnd.ms-excel'],
+    excel: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'],
+    xlsx: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'],
     document: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
   };
 
@@ -68,6 +71,7 @@ export const uploadVideo = upload.single('video');
 export const uploadImage = upload.single('image');
 export const uploadThumbnail = upload.single('thumbnail');
 export const uploadCSV = upload.single('csv');
+export const uploadExcel = upload.single('excel');
 export const uploadDocument = upload.single('document');
 export const uploadMultiple = upload.array('files', 10);
 

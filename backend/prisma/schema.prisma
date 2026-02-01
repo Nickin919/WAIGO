@@ -75,6 +75,7 @@ model User {
   priceContractsCreated    PriceContract[]
   priceContractAssignmentsGiven UserPriceContractAssignment[] @relation("PriceContractAssigner")
   priceChanges    PriceHistory[] @relation("PriceChanges")
+  salesCustomers  SalesCustomer[] @relation("SalesCustomerRsm")
 
   @@map("users")
 }
@@ -676,4 +677,36 @@ model Notification {
   @@index([userId])
   @@index([isRead])
   @@map("notifications")
+}
+
+// ============================================================================
+// SALES DASHBOARD (RSM / Admin - uploaded from Excel)
+// ============================================================================
+
+model SalesCustomer {
+  id     String       @id @default(cuid())
+  code   String       // Customer code from upload
+  name   String
+  rsmId  String       @map("rsm_id") // RSM who owns this data
+  rsm    User         @relation("SalesCustomerRsm", fields: [rsmId], references: [id], onDelete: Cascade)
+  sales  MonthlySale[]
+
+  @@unique([rsmId, code])
+  @@index([rsmId])
+  @@map("sales_customers")
+}
+
+model MonthlySale {
+  id              String       @id @default(cuid())
+  salesCustomerId String       @map("sales_customer_id")
+  salesCustomer   SalesCustomer @relation(fields: [salesCustomerId], references: [id], onDelete: Cascade)
+  customerCode    String       @map("customer_code")
+  year            Int
+  month           Int
+  amount          Decimal      @db.Decimal(12, 2)
+
+  @@unique([salesCustomerId, year, month])
+  @@index([salesCustomerId])
+  @@index([year, month])
+  @@map("monthly_sales")
 }

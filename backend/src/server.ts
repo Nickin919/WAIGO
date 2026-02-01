@@ -40,6 +40,7 @@ import catalogCreatorRoutes from './routes/catalogCreator.routes';
 import assignmentsRoutes from './routes/assignments.routes';
 import priceContractRoutes from './routes/priceContract.routes';
 import myRoutes from './routes/my.routes';
+import salesRoutes from './routes/sales.routes';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler';
@@ -113,6 +114,7 @@ app.use('/api/catalog-creator', catalogCreatorRoutes);
 app.use('/api/assignments', assignmentsRoutes);
 app.use('/api/price-contracts', priceContractRoutes);
 app.use('/api/my', myRoutes);
+app.use('/api/sales', salesRoutes);
 
 // ============================================================================
 // Error Handling

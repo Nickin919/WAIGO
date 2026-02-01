@@ -347,6 +347,18 @@ export const costTableApi = {
 };
 
 // ============================================================================
+// Sales Dashboard API (RSM / Admin)
+// ============================================================================
+
+export const salesApi = {
+  getSummary: (rsmId?: string) =>
+    api.get('/sales/summary', rsmId ? { params: { rsmId } } : {}),
+  getRsms: () => api.get('/sales/rsms'),
+  upload: (formData: FormData) =>
+    api.post('/sales/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+};
+
+// ============================================================================
 // Admin API
 // ============================================================================
 

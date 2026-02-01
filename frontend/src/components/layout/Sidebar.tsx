@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Grid3x3, PlayCircle, FolderKanban, DollarSign, Users, Calculator, Settings, BarChart3, Building2, Search, Link2 } from 'lucide-react';
+import { Home, Grid3x3, PlayCircle, FolderKanban, DollarSign, Users, Calculator, Settings, BarChart3, Building2, Search, Link2, TrendingUp } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import clsx from 'clsx';
 
@@ -30,6 +30,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const managementItems = [
     { path: '/managed-users', icon: Building2, label: 'Managed Users', roles: ['DISTRIBUTOR', 'RSM', 'ADMIN'] },
     { path: '/assignments', icon: Users, label: 'Assignments', roles: ['DISTRIBUTOR', 'RSM', 'ADMIN'] },
+    { path: '/sales', icon: TrendingUp, label: 'Sales Dashboard', roles: ['RSM', 'ADMIN'] },
     { path: '/pricing-contracts', icon: Calculator, label: 'Pricing Contracts', roles: ['TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
     { path: '/activity', icon: BarChart3, label: 'Activity Dashboard', roles: ['DISTRIBUTOR', 'RSM', 'ADMIN'] },
   ];
