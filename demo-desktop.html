@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WAGO Project Hub - Desktop-First Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        * { 
+            font-family: 'Inter', sans-serif;
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            background: #f9fafb;
+            overflow-x: hidden;
+        }
+        
+        /* Desktop Sidebar */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 64px;
+            width: 240px;
+            height: calc(100vh - 64px);
+            background: white;
+            border-right: 1px solid #e5e7eb;
+            overflow-y: auto;
+            z-index: 40;
+            transition: transform 300ms;
+        }
+        
+        .sidebar-hidden {
+            transform: translateX(-100%);
+        }
+        
+        @media (min-width: 1024px) {
+            .sidebar {
+                transform: translateX(0) !important;
+            }
+        }
+        
+        .nav-group {
+            padding: 1rem;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            margin-bottom: 0.25rem;
+            border-radius: 0.5rem;
+            color: #6b7280;
+            cursor: pointer;
+            transition: all 150ms;
+            text-decoration: none;
+        }
+        
+        .nav-item:hover {
+            background: #f3f4f6;
+            color: #111827;
+        }
+        
+        .nav-item.active {
+            background: #00A651;
+            color: white;
+        }
+        
+        .nav-item svg {
+            margin-right: 0.75rem;
+            width: 20px;
+            height: 20px;
+        }
+        
+        /* Main Content */
+        .main-content {
+            margin-left: 240px;
+            margin-top: 64px;
+            min-height: calc(100vh - 64px);
+            transition: margin-left 300ms;
+        }
+        
+        @media (max-width: 1023px) {
+            .main-content {
+                margin-left: 0;
+                padding-bottom: 64px;
+            }
+        }
+        
+        /* Stat Cards */
+        .stat-card {
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+        
+        .stat-label {
+            font-size: 0.875rem;
+            opacity: 0.9;
+        }
+        
+        /* Cards */
+        .card {
+            background: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid #e5e7eb;
+        }
+        
+        .card-hover {
+            transition: all 200ms;
+            cursor: pointer;
+        }
+        
+        .card-hover:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateY(-2px);
+        }
+        
+        /* Buttons */
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: all 200ms;
+            cursor: pointer;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .btn-primary {
+            background: #00A651;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #007A3D;
+        }
+        
+        .input {
+            width: 100%;
+            padding: 0.625rem 1rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        .input:focus {
+            outline: none;
+            border-color: #00A651;
+            box-shadow: 0 0 0 3px rgba(0, 166, 81, 0.1);
+        }
+        
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    
+    <!-- Login Screen -->
+    <div id="login-screen" class="min-h-screen bg-gradient-to-br from-blue-700 to-green-600 flex items-center justify-center p-4">
+        <div class="w-full max-w-md">
+            <div class="text-center mb-8">
+                <h1 class="text-5xl font-bold text-white mb-3">WAGO</h1>
+                <p class="text-white text-xl">Project Hub</p>
+            </div>
+            <div class="bg-white rounded-2xl shadow-2xl p-8">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">Sign In</h2>
+                <form onsubmit="login(event)">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                        <input type="email" class="input" placeholder="your.email@company.com" value="demo@wago.com">
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                        <input type="password" class="input" placeholder="••••••••" value="demo123">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full">Sign In</button>
+                </form>
+                <p class="text-center text-sm text-gray-600 mt-6">
+                    Demo credentials are pre-filled - just click Sign In!
+                </p>
+                <div class="mt-6 pt-6 border-t border-gray-200">
+                    <p class="text-xs text-gray-500 text-center mb-2">Try as different user types to see role-specific features:</p>
+                    <div class="flex flex-wrap gap-2 justify-center">
+                        <button onclick="loginAs('basic')" class="text-xs px-3 py-1 bg-blue-100 text-blue-800 rounded-full hover:bg-blue-200">BASIC</button>
+                        <button onclick="loginAs('turnkey')" class="text-xs px-3 py-1 bg-green-100 text-green-800 rounded-full hover:bg-green-200">TURNKEY (Team)</button>
+                        <button onclick="loginAs('distributor')" class="text-xs px-3 py-1 bg-purple-100 text-purple-800 rounded-full hover:bg-purple-200">DISTRIBUTOR</button>
+                        <button onclick="loginAs('admin')" class="text-xs px-3 py-1 bg-red-100 text-red-800 rounded-full hover:bg-red-200">ADMIN ⭐</button>
+                    </div>
+                    <p class="text-xs text-gray-500 text-center mt-3">
+                        ⭐ ADMIN shows Product Import tool<br/>
+                        All users can access Catalog Creator
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="app" class="hidden">
+        <!-- Header -->
+        <header class="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50">
+            <div class="h-full px-4 flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <button onclick="toggleSidebar()" class="lg:hidden p-2 text-gray-600 hover:text-gray-900">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                        </svg>
+                    </button>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
+                            <span class="text-white font-bold text-xl">W</span>
+                        </div>
+                        <span class="font-bold text-xl text-gray-900 hidden sm:inline">WAGO Hub</span>
+                    </div>
+                </div>
+                
+                <div class="hidden md:flex flex-1 max-w-lg mx-8">
+                    <div class="relative w-full">
+                        <input type="text" placeholder="Search parts, projects..." class="input pl-10" />
+                        <svg class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    <button class="relative p-2 text-gray-600 hover:text-gray-900">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                        </svg>
+                        <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                    </button>
+                    <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 cursor-pointer">
+                        <div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                            <span class="text-white text-sm font-semibold" id="user-initial">D</span>
+                        </div>
+                        <span class="text-sm font-medium text-gray-900 hidden md:inline" id="user-name">Demo User</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Sidebar -->
+        <aside id="sidebar" class="sidebar sidebar-hidden">
+            <!-- Main Nav -->
+            <div class="nav-group">
+                <div class="text-xs font-semibold text-gray-500 uppercase mb-2">MAIN</div>
+                <a class="nav-item active" id="nav-dashboard" onclick="showView('dashboard')">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                    <span>Dashboard</span>
+                </a>
+                <a class="nav-item" id="nav-catalog" onclick="showView('catalog')">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                    <span>Catalog</span>
+                </a>
+                <a class="nav-item" id="nav-videos" onclick="showView('videos')">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span>Video Academy</span>
+                </a>
+                <a class="nav-item" id="nav-projects" onclick="showView('projects')">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+                    <span>Projects</span>
+                </a>
+                <a class="nav-item" id="nav-quotes" onclick="showView('quotes')">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span>Quotes</span>
+                </a>
+            </div>
+            
+            <!-- Team Nav (TurnKey) -->
+            <div class="nav-group" id="team-section" style="display: none;">
+                <div class="text-xs font-semibold text-gray-500 uppercase mb-2">TEAM</div>
+                <a class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                    <span>My Team</span>
+                </a>
+                <a class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                    <span>Cost Tables</span>
+                </a>
+            </div>
+            
+            <!-- Catalog Tools Nav -->
+            <div class="nav-group">
+                <div class="text-xs font-semibold text-gray-500 uppercase mb-2">CATALOGS</div>
+                <a class="nav-item" id="nav-catalog-list" onclick="showView('catalog-list')">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+                    <span>My Catalogs</span>
+                </a>
+            </div>
+            
+            <!-- Admin Nav -->
+            <div class="nav-group" id="admin-section" style="display: none;">
+                <div class="text-xs font-semibold text-gray-500 uppercase mb-2">ADMIN</div>
+                <a class="nav-item" id="nav-product-import" onclick="showView('product-import')">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                    <span>Import Products</span>
+                </a>
+            </div>
+        </aside>
+        
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Dashboard View -->
+            <div id="dashboard-view" class="p-6">
+                <div class="max-w-7xl mx-auto">
+                    <div class="mb-6">
+                        <h1 class="text-3xl font-bold text-gray-900 mb-2">Welcome back, Demo User!</h1>
+                        <p class="text-gray-600">WAGO Demo Catalog • 248 parts available • <span id="user-role-badge" class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-medium">BASIC</span></p>
+                    </div>
+
+                    <!-- Stat Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                        <div class="stat-card" style="background: linear-gradient(135deg, #00A651, #007A3D);">
+                            <div class="stat-value">248</div>
+                            <div class="stat-label">Total Parts</div>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, #0066A1, #004B77);">
+                            <div class="stat-value">12</div>
+                            <div class="stat-label">Projects</div>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, #9333ea, #7e22ce);">
+                            <div class="stat-value">45</div>
+                            <div class="stat-label">Videos</div>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
+                            <div class="stat-value">23</div>
+                            <div class="stat-label">Quotes</div>
+                        </div>
+                    </div>
+
+                    <!-- Main Grid -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- Quick Actions -->
+                        <div>
+                            <div class="card p-6">
+                                <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+                                <div class="space-y-3">
+                                    <button onclick="showView('projects')" class="w-full flex items-center justify-between p-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors group">
+                                        <div class="flex items-center space-x-3">
+                                            <div class="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
+                                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                                </svg>
+                                            </div>
+                                            <span class="font-medium text-gray-900">New Project</span>
+                                        </div>
+                                        <svg class="w-5 h-5 text-gray-400 group-hover:text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </button>
+                                    <button onclick="showView('quotes')" class="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors group">
+                                        <div class="flex items-center space-x-3">
+                                            <div class="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
+                                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                                </svg>
+                                            </div>
+                                            <span class="font-medium text-gray-900">Create Quote</span>
+                                        </div>
+                                        <svg class="w-5 h-5 text-gray-400 group-hover:text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </button>
+                                    <button onclick="showView('catalog-creator')" class="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors group">
+                                        <div class="flex items-center space-x-3">
+                                            <div class="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
+                                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                                                </svg>
+                                            </div>
+                                            <span class="font-medium text-gray-900">New Catalog</span>
+                                        </div>
+                                        <svg class="w-5 h-5 text-gray-400 group-hover:text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </button>
+                                    <button class="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors group">
+                                        <div class="flex items-center space-x-3">
+                                            <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                                                </svg>
+                                            </div>
+                                            <span class="font-medium text-gray-900">Upload BOM</span>
+                                        </div>
+                                        <svg class="w-5 h-5 text-gray-400 group-hover:text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Recent Activity -->
+                        <div class="lg:col-span-2">
+                            <div class="card p-6">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-lg font-semibold text-gray-900">Recent Activity</h3>
+                                    <button class="text-sm text-green-600 font-medium hover:underline">View All</button>
+                                </div>
+                                <div class="space-y-4">
+                                    <div class="flex items-start space-x-3 pb-4 border-b border-gray-100">
+                                        <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <p class="font-medium text-gray-900">Project Updated</p>
+                                            <p class="text-sm text-gray-600">Control Panel Upgrade • 2 hours ago</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-start space-x-3 pb-4 border-b border-gray-100">
+                                        <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                            <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <p class="font-medium text-gray-900">New Video Approved</p>
+                                            <p class="text-sm text-gray-600">Terminal Block Installation • Yesterday</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-start space-x-3">
+                                        <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                            <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <p class="font-medium text-gray-900">Quote Sent</p>
+                                            <p class="text-sm text-gray-600">PP#000123 • 2 days ago</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Team Activity -->
+                    <div class="mt-6" id="team-activity" style="display: none;">
+                        <div class="card p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="text-lg font-semibold text-gray-900">Team Activity</h3>
+                                <span class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">TurnKey Team</span>
+                            </div>
+                            <div class="space-y-3">
+                                <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                                    <div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                                        <span class="text-white text-sm font-semibold">S</span>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm"><span class="font-medium">Sarah</span> updated <span class="text-green-600">Control Panel Project</span></p>
+                                        <p class="text-xs text-gray-500">30 minutes ago</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                                    <div class="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center">
+                                        <span class="text-white text-sm font-semibold">M</span>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm"><span class="font-medium">Mike</span> created new <span class="text-green-600">cost table</span></p>
+                                        <p class="text-xs text-gray-500">1 hour ago</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Catalog View -->
+            <div id="catalog-view" class="hidden p-6">
+                <div class="max-w-7xl mx-auto">
+                    <h1 class="text-3xl font-bold text-gray-900 mb-6">Product Catalog</h1>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        <div class="card card-hover p-6">
+                            <div class="w-20 h-20 bg-gray-100 rounded-lg mx-auto mb-4"></div>
+                            <h3 class="font-semibold text-gray-900 text-center">Terminal Blocks</h3>
+                            <p class="text-sm text-gray-600 text-center">42 parts</p>
+                        </div>
+                        <div class="card card-hover p-6">
+                            <div class="w-20 h-20 bg-gray-100 rounded-lg mx-auto mb-4"></div>
+                            <h3 class="font-semibold text-gray-900 text-center">Electronics</h3>
+                            <p class="text-sm text-gray-600 text-center">65 parts</p>
+                        </div>
+                        <div class="card card-hover p-6">
+                            <div class="w-20 h-20 bg-gray-100 rounded-lg mx-auto mb-4"></div>
+                            <h3 class="font-semibold text-gray-900 text-center">Automation</h3>
+                            <p class="text-sm text-gray-600 text-center">89 parts</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Projects View -->
+            <div id="projects-view" class="hidden p-6">
+                <div class="max-w-7xl mx-auto">
+                    <div class="flex items-center justify-between mb-6">
+                        <h1 class="text-3xl font-bold text-gray-900">My Projects</h1>
+                        <button class="btn btn-primary">+ New Project</button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="card card-hover p-6">
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">Control Panel Upgrade</h3>
+                            <p class="text-gray-600 mb-4">Modernizing legacy panel</p>
+                            <div class="flex justify-between text-sm text-gray-600">
+                                <span>32 items</span>
+                                <span>Rev 3</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quotes View -->
+            <div id="quotes-view" class="hidden p-6">
+                <div class="max-w-7xl mx-auto">
+                    <h1 class="text-3xl font-bold text-gray-900 mb-6">Pricing Proposals</h1>
+                    <div class="card p-6">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900">PP#000123</h3>
+                                <p class="text-gray-600">Industrial Controls Corp</p>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-2xl font-bold text-gray-900">$3,456.78</div>
+                                <div class="text-sm text-green-600">32 items</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Catalog List View -->
+            <div id="catalog-list-view" class="hidden p-6">
+                <div class="max-w-7xl mx-auto">
+                    <div class="flex items-center justify-between mb-6">
+                        <div>
+                            <h1 class="text-3xl font-bold text-gray-900">My Catalogs</h1>
+                            <p class="text-gray-600">Create and manage custom product catalogs</p>
+                        </div>
+                        <button class="btn btn-primary" onclick="showView('catalog-creator')">
+                            + New Catalog
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <!-- Sample Catalog Cards -->
+                        <div class="card p-6">
+                            <div class="flex items-start justify-between mb-4">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3 class="font-semibold text-gray-900">Industrial Controls</h3>
+                                        <p class="text-xs text-gray-500">by Demo User</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="text-sm text-gray-600 mb-4">Terminal blocks and automation components</p>
+                            <div class="flex items-center text-sm text-gray-600 mb-4">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                                </svg>
+                                42 products
+                            </div>
+                            <div class="flex space-x-2">
+                                <button class="btn btn-secondary flex-1 text-sm" onclick="showView('catalog-creator')">Edit</button>
+                                <button class="btn bg-red-50 text-red-600 hover:bg-red-100 text-sm">Delete</button>
+                            </div>
+                        </div>
+
+                        <div class="card p-6">
+                            <div class="flex items-start justify-between mb-4">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3 class="font-semibold text-gray-900">Customer Favorites</h3>
+                                        <p class="text-xs text-gray-500">by Demo User</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="text-sm text-gray-600 mb-4">Most frequently ordered parts</p>
+                            <div class="flex items-center text-sm text-gray-600 mb-4">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                                </svg>
+                                28 products
+                            </div>
+                            <div class="flex space-x-2">
+                                <button class="btn btn-secondary flex-1 text-sm" onclick="showView('catalog-creator')">Edit</button>
+                                <button class="btn bg-red-50 text-red-600 hover:bg-red-100 text-sm">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Catalog Creator View -->
+            <div id="catalog-creator-view" class="hidden p-6">
+                <div class="max-w-7xl mx-auto">
+                    <div class="flex items-center justify-between mb-6">
+                        <div class="flex items-center space-x-4">
+                            <button onclick="showView('catalog-list')" class="p-2 hover:bg-gray-100 rounded-lg">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                </svg>
+                            </button>
+                            <div>
+                                <h1 class="text-3xl font-bold text-gray-900">Create Catalog</h1>
+                                <p class="text-gray-600">Select products to include in your custom catalog</p>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
+                            </svg>
+                            Save Catalog
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                        <!-- Left: Details + Bulk Import -->
+                        <div class="lg:col-span-2 space-y-6">
+                            <!-- Catalog Details -->
+                            <div class="card p-6">
+                                <h3 class="text-lg font-semibold text-gray-900 mb-4">Catalog Details</h3>
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Name *</label>
+                                        <input type="text" placeholder="e.g., Customer Favorites" class="input" value="My Custom Catalog" />
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                                        <textarea placeholder="Optional description" class="input resize-none" rows="3"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Bulk Import -->
+                            <div class="card p-6">
+                                <div class="flex items-center space-x-2 mb-4">
+                                    <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                                    </svg>
+                                    <h3 class="text-lg font-semibold text-gray-900">Bulk Import</h3>
+                                </div>
+                                <p class="text-sm text-gray-600 mb-4">Paste part numbers (one per line)</p>
+                                <textarea class="input resize-none font-mono text-sm" rows="6" placeholder="2002-1201&#10;221-412&#10;750-504"></textarea>
+                                <button class="btn btn-primary w-full mt-3">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                                    </svg>
+                                    Import Part Numbers
+                                </button>
+                                <div class="mt-3 bg-green-50 border border-green-200 rounded-lg p-3">
+                                    <div class="flex items-center space-x-2 text-green-800">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                        <span class="text-sm font-medium">Demo: Added 3 products</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right: Product Tree -->
+                        <div class="lg:col-span-3">
+                            <div class="card p-6">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-lg font-semibold text-gray-900">Product Tree</h3>
+                                    <div class="flex space-x-2">
+                                        <button class="btn btn-secondary text-sm">Expand All</button>
+                                        <button class="btn btn-secondary text-sm">Collapse All</button>
+                                    </div>
+                                </div>
+                                <div class="relative mb-4">
+                                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                    </svg>
+                                    <input type="text" placeholder="Search products..." class="input pl-10" />
+                                </div>
+                                <div class="border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
+                                    <!-- Tree Demo -->
+                                    <div class="space-y-1">
+                                        <!-- Category 1 -->
+                                        <div class="flex items-center space-x-2 py-2 px-3 hover:bg-gray-50 rounded-lg cursor-pointer">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                            </svg>
+                                            <input type="checkbox" class="w-4 h-4" />
+                                            <svg class="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                                            </svg>
+                                            <span class="text-sm font-medium flex-1">Terminal Blocks</span>
+                                            <span class="text-xs bg-gray-100 px-2 py-1 rounded-full">3/10</span>
+                                        </div>
+                                        <!-- Products under category -->
+                                        <div class="ml-8 flex items-center space-x-2 py-2 px-3 bg-green-50 border border-green-200 rounded-lg">
+                                            <input type="checkbox" class="w-4 h-4" checked />
+                                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                                            </svg>
+                                            <span class="text-sm flex-1">2002-1201</span>
+                                            <span class="text-xs text-gray-500">2002</span>
+                                        </div>
+                                        <div class="ml-8 flex items-center space-x-2 py-2 px-3 hover:bg-gray-50 rounded-lg">
+                                            <input type="checkbox" class="w-4 h-4" />
+                                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                                            </svg>
+                                            <span class="text-sm flex-1">2002-1401</span>
+                                            <span class="text-xs text-gray-500">2002</span>
+                                        </div>
+                                        
+                                        <!-- Category 2 -->
+                                        <div class="flex items-center space-x-2 py-2 px-3 hover:bg-gray-50 rounded-lg cursor-pointer">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                            </svg>
+                                            <input type="checkbox" class="w-4 h-4" />
+                                            <svg class="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                                            </svg>
+                                            <span class="text-sm font-medium flex-1">Automation</span>
+                                            <span class="text-xs bg-gray-100 px-2 py-1 rounded-full">0/8</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Selected Products Panel -->
+                    <div class="mt-6 card p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-semibold text-gray-900">Selected Products (3)</h3>
+                            <button class="btn btn-secondary text-sm">Clear All</button>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <div class="inline-flex items-center space-x-2 bg-green-100 text-green-800 rounded-lg py-2 px-3">
+                                <span class="text-sm font-medium">2002-1201</span>
+                                <button class="hover:bg-green-200 rounded p-0.5">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="inline-flex items-center space-x-2 bg-green-100 text-green-800 rounded-lg py-2 px-3">
+                                <span class="text-sm font-medium">221-412</span>
+                                <button class="hover:bg-green-200 rounded p-0.5">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="inline-flex items-center space-x-2 bg-green-100 text-green-800 rounded-lg py-2 px-3">
+                                <span class="text-sm font-medium">750-504</span>
+                                <button class="hover:bg-green-200 rounded p-0.5">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Product Import View (Admin) -->
+            <div id="product-import-view" class="hidden p-6">
+                <div class="max-w-5xl mx-auto">
+                    <button onclick="showView('dashboard')" class="flex items-center text-green-600 hover:underline mb-6">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                        Back to Dashboard
+                    </button>
+                    
+                    <h1 class="text-3xl font-bold text-gray-900 mb-2">Product Import</h1>
+                    <p class="text-gray-600 mb-8">Import products from CSV with intelligent column mapping</p>
+
+                    <!-- Progress Steps -->
+                    <div class="flex items-center justify-between mb-8 max-w-3xl">
+                        <div class="flex flex-col items-center">
+                            <div class="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-semibold mb-2">1</div>
+                            <span class="text-sm font-medium">Upload</span>
+                        </div>
+                        <div class="flex-1 h-px bg-gray-300 mx-4"></div>
+                        <div class="flex flex-col items-center">
+                            <div class="w-10 h-10 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center font-semibold mb-2">2</div>
+                            <span class="text-sm font-medium">Map Columns</span>
+                        </div>
+                        <div class="flex-1 h-px bg-gray-300 mx-4"></div>
+                        <div class="flex flex-col items-center">
+                            <div class="w-10 h-10 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center font-semibold mb-2">3</div>
+                            <span class="text-sm font-medium">Preview</span>
+                        </div>
+                        <div class="flex-1 h-px bg-gray-300 mx-4"></div>
+                        <div class="flex flex-col items-center">
+                            <div class="w-10 h-10 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center font-semibold mb-2">4</div>
+                            <span class="text-sm font-medium">Import</span>
+                        </div>
+                    </div>
+
+                    <!-- Step 1: Upload View -->
+                    <div id="import-step-upload" class="card p-12 text-center">
+                        <div class="mb-6">
+                            <svg class="w-20 h-20 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                            </svg>
+                            <h2 class="text-2xl font-bold text-gray-900 mb-2">Upload CSV File</h2>
+                            <p class="text-gray-600">Upload your product catalog CSV. We'll intelligently map the columns for you.</p>
+                        </div>
+
+                        <div class="max-w-md mx-auto">
+                            <input type="file" accept=".csv" class="hidden" id="csv-file-input" onchange="handleFileSelect(this)" />
+                            <label for="csv-file-input" class="btn btn-primary cursor-pointer inline-flex items-center space-x-2 text-lg px-8 py-3">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                <span>Browse CSV File</span>
+                            </label>
+
+                            <div class="mt-8 text-left bg-blue-50 border border-blue-200 rounded-lg p-6">
+                                <h4 class="font-semibold text-blue-900 mb-3">Expected Columns:</h4>
+                                <ul class="text-sm text-blue-800 space-y-2">
+                                    <li class="flex items-start">
+                                        <span class="mr-2">•</span>
+                                        <div><strong>Part Number</strong> (required)</div>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <span class="mr-2">•</span>
+                                        <div><strong>Category</strong> (required for new products)</div>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <span class="mr-2">•</span>
+                                        <div><strong>Price</strong> (required for new products)</div>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <span class="mr-2">•</span>
+                                        <div>Series, Description, WAGO Ident, Discount, Min Qty (optional)</div>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div class="mt-6">
+                                <a href="../backend/templates/product-import-template.csv" download class="text-sm text-green-600 hover:underline inline-flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                    </svg>
+                                    Download CSV Template
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Column Mapping View -->
+                    <div id="import-step-mapping" class="hidden card p-8">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-4">Map Columns</h2>
+                        <p class="text-gray-600 mb-6">Map your CSV columns to product fields. Auto-detected mappings shown.</p>
+
+                        <!-- Update Only Toggle -->
+                        <div class="mb-6 p-4 bg-gray-50 rounded-lg flex items-center justify-between">
+                            <div>
+                                <label class="font-medium text-gray-900 block mb-1">Update-Only Mode</label>
+                                <p class="text-sm text-gray-600">Only update existing products. Report not-found part numbers.</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" class="sr-only peer" id="update-only-toggle" />
+                                <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-green-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                            </label>
+                        </div>
+
+                        <!-- Mapping Table -->
+                        <div class="overflow-x-auto mb-6">
+                            <table class="w-full border border-gray-200 rounded-lg">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-sm font-semibold">CSV Column</th>
+                                        <th class="px-4 py-3 text-left text-sm font-semibold">Sample Data</th>
+                                        <th class="px-4 py-3 text-left text-sm font-semibold">Maps To</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y">
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm font-medium">Part Number</td>
+                                        <td class="px-4 py-3 text-sm text-gray-600">2002-1201</td>
+                                        <td class="px-4 py-3">
+                                            <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                                                <option selected>Part Number *</option>
+                                                <option>Series</option>
+                                                <option>Description</option>
+                                                <option>-- Skip this column --</option>
+                                            </select>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm font-medium">Series</td>
+                                        <td class="px-4 py-3 text-sm text-gray-600">2002</td>
+                                        <td class="px-4 py-3">
+                                            <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                                                <option>Part Number *</option>
+                                                <option selected>Series</option>
+                                                <option>Description</option>
+                                                <option>-- Skip this column --</option>
+                                            </select>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm font-medium">Description</td>
+                                        <td class="px-4 py-3 text-sm text-gray-600">Push-in Terminal Block</td>
+                                        <td class="px-4 py-3">
+                                            <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                                                <option>Part Number *</option>
+                                                <option>Series</option>
+                                                <option selected>Description</option>
+                                                <option>-- Skip this column --</option>
+                                            </select>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm font-medium">Category</td>
+                                        <td class="px-4 py-3 text-sm text-gray-600">Terminal Blocks</td>
+                                        <td class="px-4 py-3">
+                                            <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                                                <option>Part Number *</option>
+                                                <option>Series</option>
+                                                <option selected>Category *</option>
+                                                <option>-- Skip this column --</option>
+                                            </select>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm font-medium">Price Each</td>
+                                        <td class="px-4 py-3 text-sm text-gray-600">0.85</td>
+                                        <td class="px-4 py-3">
+                                            <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                                                <option>Part Number *</option>
+                                                <option selected>List Price (Each) *</option>
+                                                <option>List Price Per 100</option>
+                                                <option>-- Skip this column --</option>
+                                            </select>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="flex justify-between">
+                            <button onclick="showImportStep('upload')" class="btn bg-gray-200 hover:bg-gray-300 text-gray-800">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                </svg>
+                                Back to Upload
+                            </button>
+                            <button onclick="showImportStep('preview')" class="btn btn-primary">
+                                Continue to Preview
+                                <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Preview View -->
+                    <div id="import-step-preview" class="hidden card p-8">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-4">Preview Import</h2>
+                        <p class="text-gray-600 mb-6">Review the first 10 rows before importing 248 total products</p>
+
+                        <!-- Summary Cards -->
+                        <div class="grid grid-cols-4 gap-4 mb-6">
+                            <div class="bg-blue-50 p-4 rounded-lg text-center">
+                                <div class="text-2xl font-bold text-blue-900">248</div>
+                                <div class="text-sm text-blue-700">Total Rows</div>
+                            </div>
+                            <div class="bg-green-50 p-4 rounded-lg text-center">
+                                <div class="text-2xl font-bold text-green-900">5</div>
+                                <div class="text-sm text-green-700">Mapped Columns</div>
+                            </div>
+                            <div class="bg-purple-50 p-4 rounded-lg text-center">
+                                <div class="text-lg font-bold text-purple-900">UPSERT</div>
+                                <div class="text-sm text-purple-700">Import Mode</div>
+                            </div>
+                            <div class="bg-orange-50 p-4 rounded-lg text-center">
+                                <div class="text-sm font-semibold text-orange-900">Ready</div>
+                                <div class="text-sm text-orange-700">Status</div>
+                            </div>
+                        </div>
+
+                        <!-- Preview Table -->
+                        <div class="overflow-x-auto mb-6">
+                            <table class="w-full border border-gray-200 rounded-lg text-sm">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-3 py-2 text-left text-xs font-semibold">#</th>
+                                        <th class="px-3 py-2 text-left text-xs font-semibold">Part Number</th>
+                                        <th class="px-3 py-2 text-left text-xs font-semibold">Series</th>
+                                        <th class="px-3 py-2 text-left text-xs font-semibold">Description</th>
+                                        <th class="px-3 py-2 text-left text-xs font-semibold">Category</th>
+                                        <th class="px-3 py-2 text-left text-xs font-semibold">Price</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y">
+                                    <tr><td class="px-3 py-2 text-gray-500">1</td><td class="px-3 py-2">2002-1201</td><td class="px-3 py-2">2002</td><td class="px-3 py-2">Push-in Terminal</td><td class="px-3 py-2">Terminal Blocks</td><td class="px-3 py-2">$0.85</td></tr>
+                                    <tr><td class="px-3 py-2 text-gray-500">2</td><td class="px-3 py-2">2002-1401</td><td class="px-3 py-2">2002</td><td class="px-3 py-2">4-pole Terminal</td><td class="px-3 py-2">Terminal Blocks</td><td class="px-3 py-2">$1.45</td></tr>
+                                    <tr><td class="px-3 py-2 text-gray-500">3</td><td class="px-3 py-2">221-412</td><td class="px-3 py-2">221</td><td class="px-3 py-2">LEVER-NUTS 2-Conductor</td><td class="px-3 py-2">Splicing</td><td class="px-3 py-2">$0.35</td></tr>
+                                    <tr><td class="px-3 py-2 text-gray-500">4</td><td class="px-3 py-2">750-504</td><td class="px-3 py-2">750</td><td class="px-3 py-2">Digital Input Module</td><td class="px-3 py-2">Automation</td><td class="px-3 py-2">$45.50</td></tr>
+                                    <tr><td class="px-3 py-2 text-gray-500">5</td><td class="px-3 py-2">787-1668</td><td class="px-3 py-2">787</td><td class="px-3 py-2">DIN Rail Terminal</td><td class="px-3 py-2">DIN Rail</td><td class="px-3 py-2">$3.85</td></tr>
+                                </tbody>
+                            </table>
+                            <p class="text-xs text-gray-500 mt-2 text-center">Showing first 5 of 248 rows</p>
+                        </div>
+
+                        <div class="flex justify-between">
+                            <button onclick="showImportStep('mapping')" class="btn bg-gray-200 hover:bg-gray-300 text-gray-800">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                </svg>
+                                Back to Mapping
+                            </button>
+                            <button onclick="showImportStep('complete')" class="btn btn-primary text-lg px-8">
+                                Import 248 Products
+                                <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Complete View -->
+                    <div id="import-step-complete" class="hidden card p-8">
+                        <div class="text-center mb-8">
+                            <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <svg class="w-12 h-12 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                            </div>
+                            <h2 class="text-2xl font-bold text-gray-900 mb-2">Import Complete!</h2>
+                            <p class="text-gray-600">Your products have been successfully imported</p>
+                        </div>
+
+                        <!-- Results -->
+                        <div class="grid grid-cols-4 gap-4 mb-6">
+                            <div class="bg-green-50 p-6 rounded-lg text-center">
+                                <div class="text-4xl font-bold text-green-900">198</div>
+                                <div class="text-sm text-green-700">Created</div>
+                            </div>
+                            <div class="bg-blue-50 p-6 rounded-lg text-center">
+                                <div class="text-4xl font-bold text-blue-900">50</div>
+                                <div class="text-sm text-blue-700">Updated</div>
+                            </div>
+                            <div class="bg-purple-50 p-6 rounded-lg text-center">
+                                <div class="text-4xl font-bold text-purple-900">47</div>
+                                <div class="text-sm text-purple-700">Price Changes</div>
+                            </div>
+                            <div class="bg-gray-50 p-6 rounded-lg text-center">
+                                <div class="text-4xl font-bold text-gray-900">0</div>
+                                <div class="text-sm text-gray-700">Errors</div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-center space-x-4">
+                            <button onclick="showView('catalog')" class="btn btn-primary">
+                                View Products
+                            </button>
+                            <button onclick="showImportStep('upload')" class="btn bg-gray-200 hover:bg-gray-300 text-gray-800">
+                                Import Another File
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TikTok-Style Video Feed -->
+            <div id="videos-view" class="hidden" style="position: fixed; top: 64px; left: 0; right: 0; bottom: 0; background: #000; z-index: 30;">
+                <div class="relative w-full h-full">
+                    <!-- Video Background -->
+                    <div class="absolute inset-0 flex items-center justify-center" style="background: linear-gradient(45deg, #0066A1, #00A651);">
+                        <div class="text-center text-white">
+                            <svg class="w-32 h-32 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                            </svg>
+                            <p class="text-2xl font-bold mb-2">Video Player Demo</p>
+                            <p class="text-sm opacity-75">Swipe up/down or use arrow keys</p>
+                            <p class="text-xs opacity-50 mt-4">Press ESC or click Dashboard to exit</p>
+                        </div>
+                    </div>
+
+                    <!-- Video Overlay Info -->
+                    <div class="absolute bottom-24 left-4 right-20 text-white z-10" style="text-shadow: 0 2px 8px rgba(0,0,0,0.8);">
+                        <h2 class="text-2xl font-bold mb-3">Terminal Block Installation Guide</h2>
+                        <div class="flex items-center space-x-2 mb-3">
+                            <span class="px-3 py-1 bg-green-600 rounded-full text-sm font-medium">2002-1201</span>
+                            <span class="px-3 py-1 bg-purple-600 rounded-full text-sm font-medium">Level 1</span>
+                        </div>
+                        <p class="text-sm opacity-90 mb-3">Learn the basics of installing CAGE CLAMP® terminal blocks</p>
+                        <div class="flex items-center space-x-6 text-sm">
+                            <span>❤️ 1,234 likes</span>
+                            <span>💬 45 comments</span>
+                            <span>👁️ 3.2K views</span>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons (Right Side) -->
+                    <div class="absolute right-4 bottom-24 flex flex-col space-y-6 z-10">
+                        <button class="flex flex-col items-center text-white hover:scale-110 transition-transform">
+                            <svg class="w-10 h-10 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
+                            </svg>
+                            <span class="text-xs">1.2K</span>
+                        </button>
+                        <button class="flex flex-col items-center text-white hover:scale-110 transition-transform">
+                            <svg class="w-10 h-10 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                            </svg>
+                            <span class="text-xs">45</span>
+                        </button>
+                        <button class="flex flex-col items-center text-white hover:scale-110 transition-transform">
+                            <svg class="w-10 h-10 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
+                            </svg>
+                            <span class="text-xs">Share</span>
+                        </button>
+                        <button class="flex flex-col items-center text-white hover:scale-110 transition-transform">
+                            <svg class="w-10 h-10 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path>
+                            </svg>
+                            <span class="text-xs">Save</span>
+                        </button>
+                    </div>
+
+                    <!-- Swipe Hint (Animated) -->
+                    <div class="absolute bottom-8 left-1/2 transform -translate-x-1/2 text-white text-center animate-bounce">
+                        <svg class="w-8 h-8 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+                        </svg>
+                        <span class="text-xs">Swipe up for next video</span>
+                    </div>
+
+                    <!-- Progress Dots -->
+                    <div class="absolute top-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
+                        <div class="w-8 h-1 bg-white rounded-full"></div>
+                        <div class="w-1 h-1 bg-white/50 rounded-full"></div>
+                        <div class="w-1 h-1 bg-white/50 rounded-full"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let currentUserRole = 'BASIC';
+        
+        function login(event) {
+            event.preventDefault();
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('app').classList.remove('hidden');
+            updateUIForRole(currentUserRole);
+        }
+        
+        function loginAs(role) {
+            currentUserRole = role.toUpperCase();
+            const event = new Event('submit');
+            login(event);
+        }
+        
+        function updateUIForRole(role) {
+            // Update user name and role badge
+            document.getElementById('user-role-badge').textContent = role;
+            document.getElementById('user-role-badge').className = 
+                role === 'ADMIN' ? 'px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full font-medium' :
+                role === 'DISTRIBUTOR' ? 'px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full font-medium' :
+                role === 'TURNKEY' ? 'px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium' :
+                'px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-medium';
+            
+            // Show/hide team section
+            if (role === 'TURNKEY' || role === 'ADMIN') {
+                document.getElementById('team-section').style.display = 'block';
+            } else {
+                document.getElementById('team-section').style.display = 'none';
+            }
+            
+            // Show/hide team activity on dashboard
+            if (role === 'TURNKEY') {
+                document.getElementById('team-activity').style.display = 'block';
+            } else {
+                document.getElementById('team-activity').style.display = 'none';
+            }
+            
+            // Show/hide admin section
+            if (role === 'ADMIN') {
+                document.getElementById('admin-section').style.display = 'block';
+            } else {
+                document.getElementById('admin-section').style.display = 'none';
+            }
+        }
+        
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('sidebar-hidden');
+        }
+        
+        function showView(viewName) {
+            // Hide all views
+            const views = ['dashboard-view', 'catalog-view', 'projects-view', 'quotes-view', 'videos-view', 
+                          'catalog-list-view', 'catalog-creator-view', 'product-import-view'];
+            views.forEach(v => {
+                const element = document.getElementById(v);
+                if (element) element.classList.add('hidden');
+            });
+            
+            // Show selected view
+            const targetView = document.getElementById(viewName + '-view');
+            if (targetView) targetView.classList.remove('hidden');
+            
+            // Update sidebar active state
+            const navItems = ['nav-dashboard', 'nav-catalog', 'nav-videos', 'nav-projects', 'nav-quotes', 
+                             'nav-catalog-list', 'nav-product-import'];
+            navItems.forEach(item => {
+                const element = document.getElementById(item);
+                if (element) {
+                    if (item === 'nav-' + viewName) {
+                        element.classList.add('active');
+                    } else {
+                        element.classList.remove('active');
+                    }
+                }
+            });
+            
+            // Close mobile sidebar
+            if (window.innerWidth < 1024) {
+                toggleSidebar();
+            }
+        }
+        
+        // Keyboard navigation for video feed
+        document.addEventListener('keydown', (e) => {
+            if (!document.getElementById('videos-view').classList.contains('hidden')) {
+                if (e.key === 'Escape') {
+                    showView('dashboard');
+                } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    alert('Video navigation: ' + (e.key === 'ArrowUp' ? 'Previous' : 'Next') + ' video');
+                }
+            }
+        });
+        
+        // Product Import Step Management
+        function showImportStep(step) {
+            const steps = ['upload', 'mapping', 'preview', 'complete'];
+            steps.forEach(s => {
+                const element = document.getElementById('import-step-' + s);
+                if (element) {
+                    if (s === step) {
+                        element.classList.remove('hidden');
+                    } else {
+                        element.classList.add('hidden');
+                    }
+                }
+            });
+            
+            // Update progress indicators
+            updateImportProgress(step);
+        }
+        
+        function updateImportProgress(currentStep) {
+            // This would update the step circles to show progress
+            // For demo, steps are styled statically
+        }
+        
+        function handleFileSelect(input) {
+            if (input.files && input.files[0]) {
+                const fileName = input.files[0].name;
+                alert(`File selected: ${fileName}\nProceeding to column mapping...`);
+                showImportStep('mapping');
+            }
+        }
+        
+        // Show sidebar by default on desktop
+        window.addEventListener('DOMContentLoaded', () => {
+            if (window.innerWidth >= 1024) {
+                document.getElementById('sidebar').classList.remove('sidebar-hidden');
+            }
+        });
+    </script>
+</body>
+</html>

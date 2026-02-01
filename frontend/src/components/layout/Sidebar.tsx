@@ -1,0 +1,172 @@
+import { NavLink } from 'react-router-dom';
+import { Home, Grid3x3, PlayCircle, FolderKanban, DollarSign, Users, Calculator, Settings, BarChart3, Building2 } from 'lucide-react';
+import { useAuthStore } from '@/stores/authStore';
+import clsx from 'clsx';
+
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
+  const { user } = useAuthStore();
+
+  const navItems = [
+    { path: '/dashboard', icon: Home, label: 'Dashboard', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
+    { path: '/catalog', icon: Grid3x3, label: 'Catalog', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
+    { path: '/catalog-list', icon: FolderKanban, label: 'My Catalogs', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
+    { path: '/videos', icon: PlayCircle, label: 'Video Academy', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
+    { path: '/projects', icon: FolderKanban, label: 'Projects', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
+    { path: '/quotes', icon: DollarSign, label: 'Quotes', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
+  ];
+
+  const teamItems = [
+    { path: '/team', icon: Users, label: 'My Team', roles: ['TURNKEY'] },
+    { path: '/cost-tables', icon: Calculator, label: 'Cost Tables', roles: ['TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
+  ];
+
+  const managementItems = [
+    { path: '/managed-users', icon: Building2, label: 'Managed Users', roles: ['DISTRIBUTOR', 'RSM', 'ADMIN'] },
+    { path: '/activity', icon: BarChart3, label: 'Activity Dashboard', roles: ['DISTRIBUTOR', 'RSM', 'ADMIN'] },
+  ];
+
+  const adminItems = [
+    { path: '/admin', icon: Settings, label: 'Administration', roles: ['ADMIN'] },
+  ];
+
+  const shouldShowNav = (navRoles: string[]) => {
+    return user && navRoles.includes(user.role);
+  };
+
+  const filteredTeamItems = teamItems.filter(item => shouldShowNav(item.roles));
+  const filteredManagementItems = managementItems.filter(item => shouldShowNav(item.roles));
+  const filteredAdminItems = adminItems.filter(item => shouldShowNav(item.roles));
+
+  return (
+    <>
+      {/* Overlay for mobile */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={onClose}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={clsx(
+          'fixed top-16 left-0 h-[calc(100vh-4rem)] w-60 bg-white border-r border-gray-200 z-40 transition-transform duration-300 overflow-y-auto',
+          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        )}
+      >
+        {/* Main Navigation */}
+        <nav className="p-4 border-b border-gray-200">
+          <div className="text-xs font-semibold text-gray-500 uppercase mb-3">Main</div>
+          <div className="space-y-1">
+            {navItems.filter(item => shouldShowNav(item.roles)).map((item) => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                onClick={onClose}
+                className={({ isActive }) =>
+                  clsx(
+                    'flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors',
+                    isActive
+                      ? 'bg-green-600 text-white'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  )
+                }
+              >
+                <item.icon className="w-5 h-5" />
+                <span className="font-medium">{item.label}</span>
+              </NavLink>
+            ))}
+          </div>
+        </nav>
+
+        {/* Team Section (TurnKey Users) */}
+        {filteredTeamItems.length > 0 && (
+          <nav className="p-4 border-b border-gray-200">
+            <div className="text-xs font-semibold text-gray-500 uppercase mb-3">Team</div>
+            <div className="space-y-1">
+              {filteredTeamItems.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  onClick={onClose}
+                  className={({ isActive }) =>
+                    clsx(
+                      'flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors',
+                      isActive
+                        ? 'bg-green-600 text-white'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    )
+                  }
+                >
+                  <item.icon className="w-5 h-5" />
+                  <span className="font-medium">{item.label}</span>
+                </NavLink>
+              ))}
+            </div>
+          </nav>
+        )}
+
+        {/* Management Section (Distributor, RSM, Admin) */}
+        {filteredManagementItems.length > 0 && (
+          <nav className="p-4 border-b border-gray-200">
+            <div className="text-xs font-semibold text-gray-500 uppercase mb-3">Management</div>
+            <div className="space-y-1">
+              {filteredManagementItems.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  onClick={onClose}
+                  className={({ isActive }) =>
+                    clsx(
+                      'flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors',
+                      isActive
+                        ? 'bg-green-600 text-white'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    )
+                  }
+                >
+                  <item.icon className="w-5 h-5" />
+                  <span className="font-medium">{item.label}</span>
+                </NavLink>
+              ))}
+            </div>
+          </nav>
+        )}
+
+        {/* Admin Section */}
+        {filteredAdminItems.length > 0 && (
+          <nav className="p-4">
+            <div className="text-xs font-semibold text-gray-500 uppercase mb-3">System</div>
+            <div className="space-y-1">
+              {filteredAdminItems.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  onClick={onClose}
+                  className={({ isActive }) =>
+                    clsx(
+                      'flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors',
+                      isActive
+                        ? 'bg-green-600 text-white'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    )
+                  }
+                >
+                  <item.icon className="w-5 h-5" />
+                  <span className="font-medium">{item.label}</span>
+                </NavLink>
+              ))}
+            </div>
+          </nav>
+        )}
+      </aside>
+    </>
+  );
+};
+
+export default Sidebar;

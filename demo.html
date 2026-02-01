@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WAGO Project Hub - Interactive Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        * { 
+            font-family: 'Inter', sans-serif;
+            box-sizing: border-box;
+        }
+        
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+        
+        /* Desktop Sidebar */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 64px;
+            width: 240px;
+            height: calc(100vh - 64px);
+            background: white;
+            border-right: 1px solid #e5e7eb;
+            overflow-y: auto;
+            z-index: 40;
+        }
+        
+        .sidebar-nav-group {
+            padding: 1rem;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        .sidebar-nav-item {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            margin-bottom: 0.25rem;
+            border-radius: 0.5rem;
+            color: #6b7280;
+            cursor: pointer;
+            transition: all 150ms;
+        }
+        
+        .sidebar-nav-item:hover {
+            background: #f3f4f6;
+            color: #111827;
+        }
+        
+        .sidebar-nav-item.active {
+            background: #00A651;
+            color: white;
+        }
+        
+        .sidebar-nav-item svg {
+            margin-right: 0.75rem;
+        }
+        
+        /* Main Content Area */
+        .main-content {
+            margin-left: 240px;
+            margin-top: 64px;
+            height: calc(100vh - 64px);
+            overflow-y: auto;
+            background: #f9fafb;
+        }
+        
+        /* Video Feed (TikTok Style) */
+        .video-feed-mobile {
+            position: relative;
+            height: 100vh;
+            overflow: hidden;
+            background: #000;
+        }
+        
+        .video-slide {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transition: transform 300ms ease-out;
+        }
+        
+        .video-slide.current {
+            transform: translateY(0);
+        }
+        
+        .video-slide.next {
+            transform: translateY(100%);
+        }
+        
+        .video-slide.prev {
+            transform: translateY(-100%);
+        }
+        
+        .video-player-fullscreen {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: #000;
+        }
+        
+        .video-overlay {
+            position: absolute;
+            bottom: 120px;
+            left: 20px;
+            right: 80px;
+            color: white;
+            z-index: 10;
+        }
+        
+        .video-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        .part-tag {
+            display: inline-block;
+            background: rgba(0, 166, 81, 0.9);
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        
+        .video-actions {
+            position: absolute;
+            right: 20px;
+            bottom: 120px;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            z-index: 10;
+        }
+        
+        .video-action-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+            cursor: pointer;
+            transition: transform 150ms;
+        }
+        
+        .video-action-btn:active {
+            transform: scale(0.9);
+        }
+        
+        .video-action-count {
+            font-size: 0.75rem;
+            margin-top: 0.25rem;
+        }
+        
+        .swipe-hint {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 0.875rem;
+            opacity: 0.7;
+            animation: bounce 2s infinite;
+        }
+        
+        @keyframes bounce {
+            0%, 100% { transform: translateX(-50%) translateY(0); }
+            50% { transform: translateX(-50%) translateY(10px); }
+        }
+        
+        /* Responsive */
+        @media (max-width: 1023px) {
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 300ms;
+            }
+            
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .bottom-nav {
+                display: flex;
+            }
+        }
+        
+        @media (min-width: 1024px) {
+            .bottom-nav {
+                display: none;
+            }
+        }
+        
+        .card {
+            background: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid #e5e7eb;
+            overflow: hidden;
+        }
+        
+        .card-hover {
+            transition: all 200ms;
+            cursor: pointer;
+        }
+        
+        .card-hover:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            transition: all 200ms;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .btn-primary {
+            background: #00A651;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #007A3D;
+        }
+        
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+        }
+        
+        .btn-secondary:hover {
+            background: #e5e7eb;
+        }
+        
+        .input {
+            width: 100%;
+            padding: 0.5rem 1rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+        }
+        
+        .input:focus {
+            outline: none;
+            border-color: #00A651;
+            box-shadow: 0 0 0 3px rgba(0, 166, 81, 0.1);
+        }
+        
+        .hidden { display: none !important; }
+        
+        .bottom-nav {
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #00A651 0%, #007A3D 100%);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+        
+        .stat-label {
+            font-size: 0.875rem;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    
+    <!-- Login Screen -->
+    <div id="login-screen" class="min-h-screen bg-gradient-to-br from-blue-700 to-green-600 flex items-center justify-center p-4">
+        <div class="w-full max-w-md">
+            <div class="text-center mb-8">
+                <h1 class="text-4xl font-bold text-white mb-2">WAGO</h1>
+                <p class="text-white text-lg">Project Hub</p>
+            </div>
+            <div class="bg-white rounded-2xl shadow-2xl p-8">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">Sign In</h2>
+                <form onsubmit="login(event)">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                        <input type="email" class="input" placeholder="your.email@company.com" value="demo@wago.com">
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                        <input type="password" class="input" placeholder="••••••••" value="demo123">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full">Sign In</button>
+                </form>
+                <p class="text-center text-sm text-gray-600 mt-6">
+                    Demo credentials are pre-filled - just click Sign In!
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App (hidden initially) -->
+    <div id="app" class="hidden">
+        <!-- Header -->
+        <header class="bg-white border-b border-gray-200 fixed top-0 left-0 right-0 z-50" style="height: 64px;">
+            <div class="h-full px-4 flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <button onclick="toggleSidebar()" class="lg:hidden p-2 text-gray-600 hover:text-gray-900">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                        </svg>
+                    </button>
+                    <div class="flex items-center space-x-2 cursor-pointer" onclick="showDashboard()">
+                        <div class="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
+                            <span class="text-white font-bold text-xl">W</span>
+                        </div>
+                        <span class="font-bold text-xl text-gray-900 hidden sm:inline">WAGO Hub</span>
+                    </div>
+                </div>
+                
+                <!-- Search Bar (Desktop) -->
+                <div class="hidden md:flex flex-1 max-w-lg mx-8">
+                    <div class="relative w-full">
+                        <input type="text" placeholder="Search parts, projects..." class="input pl-10" />
+                        <svg class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    <button class="relative p-2 text-gray-600 hover:text-gray-900">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                        </svg>
+                        <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                    </button>
+                    <div class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 cursor-pointer">
+                        <div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                            <span class="text-white text-sm font-semibold">D</span>
+                        </div>
+                        <span class="text-sm font-medium text-gray-900 hidden md:inline">Demo User</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Desktop Sidebar -->
+        <aside id="sidebar" class="sidebar">
+            <div class="sidebar-nav-group">
+                <div class="text-xs font-semibold text-gray-500 uppercase mb-2">Main</div>
+                <div class="sidebar-nav-item active" id="sidebar-dashboard" onclick="showDashboard()">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                    </svg>
+                    <span>Dashboard</span>
+                </div>
+                <div class="sidebar-nav-item" id="sidebar-catalog" onclick="showCatalog()">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+                    </svg>
+                    <span>Catalog</span>
+                </div>
+                <div class="sidebar-nav-item" id="sidebar-videos" onclick="showVideoFeed()">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span>Video Academy</span>
+                </div>
+                <div class="sidebar-nav-item" id="sidebar-projects" onclick="showProjects()">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                    </svg>
+                    <span>Projects</span>
+                </div>
+                <div class="sidebar-nav-item" id="sidebar-quotes" onclick="showQuotes()">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span>Quotes</span>
+                </div>
+            </div>
+            
+            <!-- Team Section (TurnKey Users) -->
+            <div class="sidebar-nav-group">
+                <div class="text-xs font-semibold text-gray-500 uppercase mb-2">Team</div>
+                <div class="sidebar-nav-item">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                    </svg>
+                    <span>My Team</span>
+                </div>
+                <div class="sidebar-nav-item">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                    </svg>
+                    <span>Cost Tables</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Content Area -->
+        <main id="content" class="main-content">
+            <!-- Dashboard View -->
+            <div id="dashboard-view" class="p-6">
+                <div class="mb-6">
+                    <h1 class="text-3xl font-bold text-gray-900 mb-2">Welcome back, Demo User!</h1>
+                    <p class="text-gray-600">WAGO Demo Catalog • 248 parts available</p>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                    <div class="stat-card">
+                        <div class="stat-value">248</div>
+                        <div class="stat-label">Total Parts</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #0066A1 0%, #004B77 100%);">
+                        <div class="stat-value">12</div>
+                        <div class="stat-label">Projects</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #9333ea 0%, #7e22ce 100%);">
+                        <div class="stat-value">45</div>
+                        <div class="stat-label">Videos</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                        <div class="stat-value">23</div>
+                        <div class="stat-label">Quotes</div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions & Recent Activity -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                    <!-- Quick Actions -->
+                    <div class="lg:col-span-1">
+                        <div class="card p-6">
+                            <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+                            <div class="space-y-3">
+                                <button class="w-full btn btn-primary text-left flex items-center justify-between" onclick="showProjects()">
+                                    <span>+ New Project</span>
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                    </svg>
+                                </button>
+                                <button class="w-full btn btn-secondary text-left flex items-center justify-between" onclick="showQuotes()">
+                                    <span>+ Create Quote</span>
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                    </svg>
+                                </button>
+                                <button class="w-full btn btn-secondary text-left flex items-center justify-between">
+                                    <span>📤 Upload BOM</span>
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                    </svg>
+                                </button>
+                                <button class="w-full btn btn-secondary text-left flex items-center justify-between" onclick="showCatalog()">
+                                    <span>🔍 Browse Catalog</span>
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Activity -->
+                    <div class="lg:col-span-2">
+                        <div class="card p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="text-lg font-semibold text-gray-900">Recent Activity</h3>
+                                <button class="text-sm text-green-600 font-medium hover:underline">View All</button>
+                            </div>
+                            <div class="space-y-4">
+                                <div class="flex items-start space-x-3 pb-4 border-b border-gray-100">
+                                    <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                    </div>
+                                    <div class="flex-1">
+                                        <p class="font-medium text-gray-900">Project Updated</p>
+                                        <p class="text-sm text-gray-600">Control Panel Upgrade • 2 hours ago</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start space-x-3 pb-4 border-b border-gray-100">
+                                    <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                        <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                                        </svg>
+                                    </div>
+                                    <div class="flex-1">
+                                        <p class="font-medium text-gray-900">New Video Approved</p>
+                                        <p class="text-sm text-gray-600">Terminal Block Installation • Yesterday</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start space-x-3">
+                                    <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                        <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                    </div>
+                                    <div class="flex-1">
+                                        <p class="font-medium text-gray-900">Quote Sent</p>
+                                        <p class="text-sm text-gray-600">PP#000123 • 2 days ago</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Team Activity (TurnKey Users) -->
+                <div class="card p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">Team Activity</h3>
+                        <span class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">TurnKey Team</span>
+                    </div>
+                    <div class="space-y-3">
+                        <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                            <div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                                <span class="text-white text-sm font-semibold">S</span>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-sm"><span class="font-medium">Sarah</span> updated <span class="text-green-600">Control Panel Project</span></p>
+                                <p class="text-xs text-gray-500">30 minutes ago</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                            <div class="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                                <span class="text-white text-sm font-semibold">M</span>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-sm"><span class="font-medium">Mike</span> created new <span class="text-green-600">cost table</span></p>
+                                <p class="text-xs text-gray-500">1 hour ago</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Catalog View -->
+            <div id="catalog-view" class="hidden p-6">
+                <div class="mb-6">
+                    <h1 class="text-3xl font-bold text-gray-900 mb-2">Product Catalog</h1>
+                    <p class="text-gray-600">Browse 248 WAGO products across 12 categories</p>
+                </div>
+                
+                <!-- Category Tabs (Desktop) -->
+                <div class="bg-white border border-gray-200 rounded-lg p-4 mb-6">
+                    <div class="flex items-center space-x-2 overflow-x-auto">
+                        <button class="px-4 py-2 bg-green-600 text-white rounded-lg font-medium whitespace-nowrap">Terminal Blocks</button>
+                        <button class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium whitespace-nowrap hover:border-green-600">Electronics</button>
+                        <button class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium whitespace-nowrap hover:border-green-600">Automation</button>
+                        <button class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium whitespace-nowrap hover:border-green-600">Tools & Marking</button>
+                        <button class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium whitespace-nowrap hover:border-green-600">PCB Connectors</button>
+                    </div>
+                </div>
+
+                <!-- Subcategories -->
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">Subcategories</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
+                    <div class="card card-hover p-6" onclick="showPartDetail()">
+                        <div class="text-center mb-4">
+                            <div class="w-20 h-20 bg-gray-100 rounded-lg mx-auto mb-4 flex items-center justify-center">
+                                <span class="text-gray-400 text-xs">Terminal</span>
+                            </div>
+                        </div>
+                        <h3 class="font-semibold text-gray-900 mb-2">Push-in Terminal Blocks</h3>
+                        <p class="text-sm text-gray-600 mb-3">CAGE CLAMP® technology</p>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-500">42 parts</span>
+                            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <div class="card card-hover p-6">
+                        <div class="text-center mb-4">
+                            <div class="w-20 h-20 bg-gray-100 rounded-lg mx-auto mb-4 flex items-center justify-center">
+                                <span class="text-gray-400 text-xs">Splicing</span>
+                            </div>
+                        </div>
+                        <h3 class="font-semibold text-gray-900 mb-2">Splicing Connectors</h3>
+                        <p class="text-sm text-gray-600 mb-3">LEVER-NUTS® connectors</p>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-500">28 parts</span>
+                            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <div class="card card-hover p-6">
+                        <div class="text-center mb-4">
+                            <div class="w-20 h-20 bg-gray-100 rounded-lg mx-auto mb-4 flex items-center justify-center">
+                                <span class="text-gray-400 text-xs">DIN Rail</span>
+                            </div>
+                        </div>
+                        <h3 class="font-semibold text-gray-900 mb-2">DIN Rail Terminal Blocks</h3>
+                        <p class="text-sm text-gray-600 mb-3">Standard rail mounting</p>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-500">65 parts</span>
+                            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </div>
+                    </div>
+                    
+                    <div class="card card-hover p-6">
+                        <div class="text-center mb-4">
+                            <div class="w-20 h-20 bg-gray-100 rounded-lg mx-auto mb-4 flex items-center justify-center">
+                                <span class="text-gray-400 text-xs">Screw</span>
+                            </div>
+                        </div>
+                        <h3 class="font-semibold text-gray-900 mb-2">Screw Terminal Blocks</h3>
+                        <p class="text-sm text-gray-600 mb-3">Classic screw connections</p>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-500">38 parts</span>
+                            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Part Detail View -->
+            <div id="part-detail-view" class="hidden p-6">
+                <div>
+                    <button onclick="showCatalog()" class="flex items-center text-green-600 hover:underline mb-6">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                        Back to Terminal Blocks
+                    </button>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                        <div class="card p-8">
+                            <div class="aspect-square bg-gray-50 rounded-lg flex items-center justify-center">
+                                <div class="text-center text-gray-400">
+                                    <p class="text-sm mb-2">Product Image</p>
+                                    <p class="text-xs">Terminal Block Photo</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="text-sm text-green-600 font-semibold mb-2">2002-1201</div>
+                            <h1 class="text-3xl font-bold text-gray-900 mb-4">
+                                Push-in CAGE CLAMP® Terminal Block
+                            </h1>
+
+                            <div class="space-y-3 mb-6">
+                                <div class="flex items-center justify-between py-2 border-b border-gray-200">
+                                    <span class="text-gray-600">Conductor Size</span>
+                                    <span class="font-semibold">2.5 mm²</span>
+                                </div>
+                                <div class="flex items-center justify-between py-2 border-b border-gray-200">
+                                    <span class="text-gray-600">Poles</span>
+                                    <span class="font-semibold">2-pole</span>
+                                </div>
+                                <div class="flex items-center justify-between py-2 border-b border-gray-200">
+                                    <span class="text-gray-600">Package Qty</span>
+                                    <span class="font-semibold">50</span>
+                                </div>
+                                <div class="flex items-center justify-between py-2 border-b border-gray-200">
+                                    <span class="text-gray-600">Min Order Qty</span>
+                                    <span class="font-semibold">1</span>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-wrap gap-3">
+                                <button class="btn btn-primary">Add to Project</button>
+                                <button class="btn btn-secondary">Request Quote</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-8">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-4">Video Tutorials</h2>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div class="card card-hover overflow-hidden" onclick="showVideoPlayer()">
+                                <div class="relative aspect-video bg-gray-900">
+                                    <div class="absolute inset-0 flex items-center justify-center">
+                                        <svg class="w-16 h-16 text-white opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                    </div>
+                                    <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                                        Level 1
+                                    </div>
+                                </div>
+                                <div class="p-4">
+                                    <h3 class="font-semibold text-gray-900 mb-1">Installation Guide</h3>
+                                    <p class="text-sm text-gray-600">Basic installation and wiring</p>
+                                </div>
+                            </div>
+
+                            <div class="card overflow-hidden opacity-60">
+                                <div class="relative aspect-video bg-gray-900">
+                                    <div class="absolute inset-0 flex items-center justify-center">
+                                        <svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                        </svg>
+                                    </div>
+                                    <div class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                                        Level 2 🔒
+                                    </div>
+                                </div>
+                                <div class="p-4">
+                                    <h3 class="font-semibold text-gray-900 mb-1">Advanced Techniques</h3>
+                                    <p class="text-sm text-gray-600">Unlocks after watching Level 1 twice</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Video Player View -->
+            <div id="video-player-view" class="hidden p-6">
+                <div class="bg-black rounded-lg overflow-hidden mb-6">
+                    <div class="aspect-video bg-black flex items-center justify-center">
+                        <div class="text-center">
+                            <svg class="w-24 h-24 text-white opacity-50 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                            </svg>
+                            <p class="text-white">Video Player (Demo)</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <button onclick="showPartDetail()" class="flex items-center text-green-600 hover:underline mb-6">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                        Back to Part
+                    </button>
+
+                    <div class="flex items-center space-x-3 mb-3">
+                        <span class="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium">Level 1</span>
+                        <span class="text-sm text-gray-600">324 views</span>
+                    </div>
+                    <h1 class="text-3xl font-bold text-gray-900 mb-2">Installation Guide</h1>
+                    <p class="text-gray-600 mb-8">Learn the basics of installing CAGE CLAMP® terminal blocks</p>
+
+                    <h2 class="text-xl font-bold text-gray-900 mb-4">Comments (5)</h2>
+                    <div class="space-y-4">
+                        <div class="card p-4">
+                            <div class="flex items-start space-x-3">
+                                <div class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <span class="text-white font-semibold text-sm">JD</span>
+                                </div>
+                                <div class="flex-1">
+                                    <div class="font-semibold text-gray-900 mb-1">John Doe</div>
+                                    <p class="text-gray-700 mb-2">Great tutorial! Very clear instructions.</p>
+                                    <div class="flex items-center space-x-4 text-sm text-gray-600">
+                                        <button class="hover:text-green-600">👍 Like (12)</button>
+                                        <button class="hover:text-green-600">Reply</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Projects View -->
+            <div id="projects-view" class="hidden p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h1 class="text-3xl font-bold text-gray-900">My Projects</h1>
+                    <button class="btn btn-primary flex items-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        </svg>
+                        <span>New Project</span>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <div class="card card-hover p-6">
+                        <h3 class="text-xl font-bold text-gray-900 mb-2">Control Panel Upgrade</h3>
+                        <p class="text-gray-600 mb-4">Modernizing legacy panel with new terminal blocks</p>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-600">32 items</span>
+                            <span class="text-gray-600">Rev 3</span>
+                        </div>
+                    </div>
+
+                    <div class="card card-hover p-6">
+                        <h3 class="text-xl font-bold text-gray-900 mb-2">Factory Automation System</h3>
+                        <p class="text-gray-600 mb-4">Complete I/O system for assembly line</p>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-600">128 items</span>
+                            <span class="text-gray-600">Rev 1</span>
+                        </div>
+                    </div>
+
+                    <div class="card card-hover p-6">
+                        <h3 class="text-xl font-bold text-gray-900 mb-2">Building Management BOM</h3>
+                        <p class="text-gray-600 mb-4">HVAC control and monitoring equipment</p>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-600">45 items</span>
+                            <span class="text-gray-600">Rev 2</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quotes View -->
+            <div id="quotes-view" class="hidden p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h1 class="text-3xl font-bold text-gray-900">Pricing Proposals</h1>
+                    <button class="btn btn-primary">Create New</button>
+                </div>
+
+                <div class="grid grid-cols-1 gap-4">
+                    <div class="card card-hover p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900 mb-1">PP#000123</h3>
+                                <p class="text-gray-600">Industrial Controls Corp • Valid until: 2024-02-28</p>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-2xl font-bold text-gray-900">$3,456.78</div>
+                                <div class="text-sm text-green-600 font-medium">32 items</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card card-hover p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900 mb-1">PP#000122</h3>
+                                <p class="text-gray-600">Metro Electric Supply • Valid until: 2024-03-15</p>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-2xl font-bold text-gray-900">$8,234.50</div>
+                                <div class="text-sm text-green-600 font-medium">67 items</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- TikTok-Style Video Feed -->
+            <div id="video-feed-mobile" class="hidden video-feed-mobile">
+                <!-- Video 1 -->
+                <div class="video-slide current" id="video-0">
+                    <div class="video-player-fullscreen" style="background: linear-gradient(45deg, #0066A1, #00A651); display: flex; align-items: center; justify-content: center;">
+                        <div class="text-center">
+                            <svg class="w-24 h-24 text-white opacity-50 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                            </svg>
+                            <p class="text-white text-lg">Video Player Demo</p>
+                            <p class="text-white text-sm opacity-75">Tap to play/pause</p>
+                        </div>
+                    </div>
+                    <div class="video-overlay">
+                        <div class="video-title">Installation Guide</div>
+                        <div class="mb-2"><span class="part-tag">2002-1201</span></div>
+                        <p class="text-sm opacity-90">Learn how to install CAGE CLAMP® terminal blocks</p>
+                        <div class="flex items-center mt-2 text-sm">
+                            <span class="mr-4">❤️ 324</span>
+                            <span class="mr-4">💬 45</span>
+                            <span>👁️ 1.2K views</span>
+                        </div>
+                    </div>
+                    <div class="video-actions">
+                        <div class="video-action-btn" onclick="likeVideo(0)">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
+                            </svg>
+                            <div class="video-action-count">324</div>
+                        </div>
+                        <div class="video-action-btn" onclick="showComments()">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                            </svg>
+                            <div class="video-action-count">45</div>
+                        </div>
+                        <div class="video-action-btn" onclick="shareVideo()">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
+                            </svg>
+                            <div class="video-action-count">Share</div>
+                        </div>
+                        <div class="video-action-btn" onclick="saveVideo()">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path>
+                            </svg>
+                            <div class="video-action-count">Save</div>
+                        </div>
+                    </div>
+                    <div class="swipe-hint">↓ Swipe to see more</div>
+                </div>
+                
+                <!-- Video 2 -->
+                <div class="video-slide next" id="video-1">
+                    <div class="video-player-fullscreen" style="background: linear-gradient(45deg, #9333ea, #f59e0b); display: flex; align-items: center; justify-content: center;">
+                        <div class="text-center">
+                            <svg class="w-24 h-24 text-white opacity-50 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                            </svg>
+                            <p class="text-white text-lg">Video 2</p>
+                        </div>
+                    </div>
+                    <div class="video-overlay">
+                        <div class="video-title">Advanced Wiring Techniques</div>
+                        <div class="mb-2"><span class="part-tag">221-412</span></div>
+                        <p class="text-sm opacity-90">Professional tips for LEVER-NUTS® connections</p>
+                        <div class="flex items-center mt-2 text-sm">
+                            <span class="mr-4">❤️ 567</span>
+                            <span class="mr-4">💬 89</span>
+                            <span>👁️ 2.3K views</span>
+                        </div>
+                    </div>
+                    <div class="video-actions">
+                        <div class="video-action-btn"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg><div class="video-action-count">567</div></div>
+                        <div class="video-action-btn"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg><div class="video-action-count">89</div></div>
+                        <div class="video-action-btn"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg><div class="video-action-count">Share</div></div>
+                        <div class="video-action-btn"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg><div class="video-action-count">Save</div></div>
+                    </div>
+                    <div class="swipe-hint">↓ Swipe</div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Bottom Navigation (Mobile) -->
+        <nav class="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 bottom-nav" style="display: none;">
+            <div class="flex justify-around items-center h-16">
+                <button onclick="showDashboard()" class="flex flex-col items-center justify-center flex-1 h-full text-gray-600 hover:text-green-600" id="nav-dashboard">
+                    <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                    </svg>
+                    <span class="text-xs font-medium">Home</span>
+                </button>
+
+                <button onclick="showCatalog()" class="flex flex-col items-center justify-center flex-1 h-full text-gray-600 hover:text-green-600" id="nav-catalog">
+                    <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+                    </svg>
+                    <span class="text-xs font-medium">Catalog</span>
+                </button>
+                
+                <button onclick="showVideoFeed()" class="flex flex-col items-center justify-center flex-1 h-full text-gray-600 hover:text-green-600" id="nav-videos">
+                    <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span class="text-xs font-medium">Videos</span>
+                </button>
+
+                <button onclick="showProjects()" class="flex flex-col items-center justify-center flex-1 h-full text-gray-600 hover:text-green-600" id="nav-projects">
+                    <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                    </svg>
+                    <span class="text-xs font-medium">Projects</span>
+                </button>
+
+                <button onclick="toggleSidebar()" class="flex flex-col items-center justify-center flex-1 h-full text-gray-600 hover:text-green-600">
+                    <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                    <span class="text-xs font-medium">More</span>
+                </button>
+            </div>
+        </nav>
+    </div>
+
+    <script>
+        let currentVideoIndex = 0;
+        const totalVideos = 2;
+        
+        // Login function
+        function login(event) {
+            event.preventDefault();
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('app').classList.remove('hidden');
+            initSwiper();
+        }
+
+        // Sidebar toggle (mobile)
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('open');
+        }
+
+        // Navigation functions
+        function showDashboard() {
+            hideAllViews();
+            document.getElementById('dashboard-view').classList.remove('hidden');
+            updateSidebarActive('dashboard');
+            updateNavActive('dashboard');
+        }
+
+        function showCatalog() {
+            hideAllViews();
+            document.getElementById('catalog-view').classList.remove('hidden');
+            updateSidebarActive('catalog');
+            updateNavActive('catalog');
+            setTimeout(initSwiper, 100);
+        }
+
+        function showPartDetail() {
+            hideAllViews();
+            document.getElementById('part-detail-view').classList.remove('hidden');
+            updateSidebarActive('catalog');
+            updateNavActive('catalog');
+        }
+
+        function showVideoPlayer() {
+            hideAllViews();
+            document.getElementById('video-player-view').classList.remove('hidden');
+            updateSidebarActive('videos');
+            updateNavActive('videos');
+        }
+        
+        function showVideoFeed() {
+            hideAllViews();
+            document.getElementById('video-feed-mobile').classList.remove('hidden');
+            updateSidebarActive('videos');
+            updateNavActive('videos');
+            initVideoFeed();
+        }
+
+        function showProjects() {
+            hideAllViews();
+            document.getElementById('projects-view').classList.remove('hidden');
+            updateSidebarActive('projects');
+            updateNavActive('projects');
+        }
+
+        function showQuotes() {
+            hideAllViews();
+            document.getElementById('quotes-view').classList.remove('hidden');
+            updateSidebarActive('quotes');
+            updateNavActive('quotes');
+        }
+
+        function hideAllViews() {
+            const views = ['dashboard-view', 'catalog-view', 'part-detail-view', 'video-player-view', 'projects-view', 'quotes-view', 'video-feed-mobile'];
+            views.forEach(view => {
+                const element = document.getElementById(view);
+                if (element) element.classList.add('hidden');
+            });
+        }
+
+        // Update sidebar navigation
+        function updateSidebarActive(active) {
+            const sidebarItems = ['sidebar-dashboard', 'sidebar-catalog', 'sidebar-videos', 'sidebar-projects', 'sidebar-quotes'];
+            sidebarItems.forEach(item => {
+                const element = document.getElementById(item);
+                if (element) {
+                    if (item === 'sidebar-' + active) {
+                        element.classList.add('active');
+                    } else {
+                        element.classList.remove('active');
+                    }
+                }
+            });
+        }
+
+        // Update bottom nav (mobile)
+        function updateNavActive(active) {
+            const navItems = ['nav-dashboard', 'nav-catalog', 'nav-projects', 'nav-quotes', 'nav-videos'];
+            navItems.forEach(item => {
+                const element = document.getElementById(item);
+                if (element) {
+                    if (item === 'nav-' + active) {
+                        element.classList.remove('text-gray-600');
+                        element.classList.add('text-green-600');
+                    } else {
+                        element.classList.remove('text-green-600');
+                        element.classList.add('text-gray-600');
+                    }
+                }
+            });
+        }
+
+        // Video Feed Functions
+        function initVideoFeed() {
+            currentVideoIndex = 0;
+            updateVideoSlides();
+            
+            // Add touch/swipe support
+            let startY = 0;
+            const feedElement = document.getElementById('video-feed-mobile');
+            
+            feedElement.addEventListener('touchstart', (e) => {
+                startY = e.touches[0].clientY;
+            });
+            
+            feedElement.addEventListener('touchend', (e) => {
+                const endY = e.changedTouches[0].clientY;
+                const diff = startY - endY;
+                
+                if (Math.abs(diff) > 50) { // Minimum swipe distance
+                    if (diff > 0) {
+                        // Swiped up - next video
+                        nextVideo();
+                    } else {
+                        // Swiped down - previous video
+                        prevVideo();
+                    }
+                }
+            });
+            
+            // Keyboard support
+            document.addEventListener('keydown', handleVideoKeyboard);
+        }
+        
+        function handleVideoKeyboard(e) {
+            if (document.getElementById('video-feed-mobile').classList.contains('hidden')) return;
+            
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                nextVideo();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                prevVideo();
+            }
+        }
+        
+        function nextVideo() {
+            if (currentVideoIndex < totalVideos - 1) {
+                currentVideoIndex++;
+                updateVideoSlides();
+            }
+        }
+        
+        function prevVideo() {
+            if (currentVideoIndex > 0) {
+                currentVideoIndex--;
+                updateVideoSlides();
+            }
+        }
+        
+        function updateVideoSlides() {
+            for (let i = 0; i < totalVideos; i++) {
+                const slide = document.getElementById(`video-${i}`);
+                if (i === currentVideoIndex) {
+                    slide.className = 'video-slide current';
+                } else if (i < currentVideoIndex) {
+                    slide.className = 'video-slide prev';
+                } else {
+                    slide.className = 'video-slide next';
+                }
+            }
+        }
+        
+        function likeVideo(index) {
+            console.log('Liked video', index);
+            // Add animation or update like count
+        }
+        
+        function showComments() {
+            alert('Comments overlay would appear here');
+        }
+        
+        function shareVideo() {
+            alert('Share dialog would appear here');
+        }
+        
+        function saveVideo() {
+            alert('Video saved to bookmarks');
+        }
+
+        function selectCategory(category) {
+            console.log('Selected category:', category);
+        }
+
+        // Initialize Swiper
+        function initSwiper() {
+            if (typeof Swiper !== 'undefined') {
+                new Swiper('.category-swiper', {
+                    slidesPerView: 'auto',
+                    spaceBetween: 16,
+                    freeMode: true,
+                });
+            }
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Auto-show login screen
+        });
+    </script>
+</body>
+</html>

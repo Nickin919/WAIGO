@@ -1,0 +1,563 @@
+// Prisma schema for WAGO Project Hub
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// AUTHENTICATION & USERS
+// ============================================================================
+
+enum UserRole {
+  FREE          // No login - BOM Cross, Product Finder only
+  BASIC         // Login required - Save projects, quotes, catalogs
+  TURNKEY       // Teams, custom cost tables
+  DISTRIBUTOR   // Manages Basic/TurnKey users, builds catalogs
+  RSM           // Regional Sales Manager - assigns to distributors
+  ADMIN         // Full access
+}
+
+model User {
+  id              String    @id @default(uuid())
+  email           String?   @unique // Nullable for FREE users (anonymous sessions)
+  passwordHash    String?   @map("password_hash") // Nullable for FREE users
+  firstName       String?   @map("first_name")
+  lastName        String?   @map("last_name")
+  companyName     String?   @map("company_name")
+  role            UserRole  @default(FREE)
+  catalogId       String?   @map("catalog_id")
+  isActive        Boolean   @default(true) @map("is_active")
+  
+  // Hierarchical relationships
+  assignedToDistributorId String? @map("assigned_to_distributor_id") // Basic/TurnKey users assigned to Distributor
+  assignedToRsmId         String? @map("assigned_to_rsm_id") // Distributor assigned to RSM
+  
+  // TurnKey Team
+  turnkeyTeamId   String?   @map("turnkey_team_id")
+  
+  // Distributor settings
+  distributorMarginPercent Float? @map("distributor_margin_percent")
+  
+  // Session tracking for FREE users
+  sessionId       String?   @unique @map("session_id")
+  lastActiveAt    DateTime? @map("last_active_at")
+  
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  catalog         Catalog?  @relation(fields: [catalogId], references: [id])
+  turnkeyTeam     TurnkeyTeam? @relation(fields: [turnkeyTeamId], references: [id])
+  
+  // Hierarchical relations
+  assignedToDistributor User? @relation("DistributorAssignments", fields: [assignedToDistributorId], references: [id])
+  managedUsers          User[] @relation("DistributorAssignments")
+  
+  assignedToRsm         User? @relation("RsmAssignments", fields: [assignedToRsmId], references: [id])
+  managedByRsm          User[] @relation("RsmAssignments")
+  
+  // Content relations
+  videoViews      UserVideoView[]
+  comments        Comment[]
+  videosUploaded  Video[]   @relation("VideoUploader")
+  videosApproved  Video[]   @relation("VideoApprover")
+  projects        Project[]
+  quotes          Quote[]
+  costTables      CostTable[]
+  catalogsCreated Catalog[] @relation("CatalogCreator")
+  catalogAssignments CatalogAssignment[]
+  priceChanges    PriceHistory[] @relation("PriceChanges")
+
+  @@map("users")
+}
+
+// ============================================================================
+// TURNKEY TEAMS
+// ============================================================================
+
+model TurnkeyTeam {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  createdById String    @map("created_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  members     User[]
+  costTables  CostTable[]
+
+  @@map("turnkey_teams")
+}
+
+// ============================================================================
+// COST TABLES (for TurnKey users)
+// ============================================================================
+
+model CostTable {
+  id              String    @id @default(uuid())
+  name            String
+  description     String?
+  userId          String?   @map("user_id") // Individual TurnKey user
+  turnkeyTeamId   String?   @map("turnkey_team_id") // Or shared by team
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user            User?     @relation(fields: [userId], references: [id])
+  turnkeyTeam     TurnkeyTeam? @relation(fields: [turnkeyTeamId], references: [id])
+  items           CostTableItem[]
+
+  @@map("cost_tables")
+}
+
+model CostTableItem {
+  id              String    @id @default(uuid())
+  costTableId     String    @map("cost_table_id")
+  partNumber      String    @map("part_number")
+  description     String?
+  customCost      Float     @map("custom_cost")
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  costTable       CostTable @relation(fields: [costTableId], references: [id], onDelete: Cascade)
+
+  @@unique([costTableId, partNumber])
+  @@map("cost_table_items")
+}
+
+// ============================================================================
+// CATALOG ASSIGNMENTS (Distributors assign catalogs to users)
+// ============================================================================
+
+model CatalogAssignment {
+  id          String    @id @default(uuid())
+  catalogId   String    @map("catalog_id")
+  userId      String    @map("user_id")
+  assignedById String   @map("assigned_by_id") // Distributor/RSM/Admin who assigned
+  assignedAt  DateTime  @default(now()) @map("assigned_at")
+
+  // Relations
+  catalog     Catalog   @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([catalogId, userId])
+  @@map("catalog_assignments")
+}
+
+// ============================================================================
+// CATALOGS & CATEGORIES
+// ============================================================================
+
+model Catalog {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  isActive    Boolean   @default(true) @map("is_active")
+  isPublic    Boolean   @default(false) @map("is_public") // Public catalogs for FREE users
+  createdById String?   @map("created_by_id") // Distributor/Admin who created
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  users       User[]
+  createdBy   User?     @relation("CatalogCreator", fields: [createdById], references: [id])
+  categories  Category[]
+  parts       Part[]
+  assignments CatalogAssignment[]
+  catalogItems CatalogItem[] // User-selected products for this catalog
+
+  @@map("catalogs")
+}
+
+// ============================================================================
+// CATALOG ITEMS (User-selected products in custom catalogs)
+// ============================================================================
+
+model CatalogItem {
+  id          String    @id @default(uuid())
+  catalogId   String    @map("catalog_id")
+  productId   String?   @map("product_id") // Selected product
+  categoryId  String?   @map("category_id") // Or entire category selected
+  addedAt     DateTime  @default(now()) @map("added_at")
+
+  // Relations
+  catalog     Catalog   @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+  product     Part?     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([catalogId])
+  @@index([productId])
+  @@index([categoryId])
+  @@map("catalog_items")
+}
+
+model Category {
+  id            String    @id @default(uuid())
+  catalogId     String    @map("catalog_id")
+  parentId      String?   @map("parent_id")
+  name          String
+  shortText     String?   @map("short_text") @db.VarChar(100)
+  longText      String?   @map("long_text") @db.Text
+  thumbnailUrl  String?   @map("thumbnail_url")
+  order         Int       @default(0)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  catalog       Catalog   @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+  parent        Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children      Category[] @relation("CategoryHierarchy")
+  parts         Part[]
+  catalogItems  CatalogItem[] // Categories selected in user catalogs
+
+  @@index([catalogId])
+  @@index([parentId])
+  @@index([order])
+  @@map("categories")
+}
+
+// ============================================================================
+// PARTS & PRODUCTS
+// ============================================================================
+
+model Part {
+  id                  String    @id @default(uuid())
+  catalogId           String    @map("catalog_id")
+  categoryId          String    @map("category_id")
+  partNumber          String    @map("part_number")
+  series              String?   // Product series/family
+  description         String    @db.Text
+  englishDescription  String?   @map("english_description") @db.Text
+  thumbnailUrl        String?   @map("thumbnail_url")
+  minQty              Int       @default(1) @map("min_qty")
+  packageQty          Int       @default(1) @map("package_qty")
+  level               Int       @default(1) // Video progression level
+  basePrice           Float?    @map("base_price") // List price (each)
+  listPricePer100     Float?    @map("list_price_per_100") // List price per 100 units
+  wagoIdent           String?   @map("wago_ident") // WAGO internal identifier
+  distributorDiscount Float     @default(0) @map("distributor_discount") // Discount percentage
+  active              Boolean   @default(true) // Active/inactive flag
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  catalog       Catalog   @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+  category      Category  @relation(fields: [categoryId], references: [id])
+  videos        Video[]
+  files         PartFile[]
+  quoteItems    QuoteItem[]
+  projectItems  ProjectItem[]
+  wagoEquivalents CrossReference[] @relation("WagoPart")
+  priceHistory  PriceHistory[]
+  catalogItems  CatalogItem[] // Products selected in user catalogs
+
+  @@unique([catalogId, partNumber])
+  @@index([catalogId])
+  @@index([categoryId])
+  @@index([partNumber])
+  @@index([series])
+  @@index([active])
+  @@map("parts")
+}
+
+// ============================================================================
+// PRICE HISTORY (for tracking price changes during imports)
+// ============================================================================
+
+model PriceHistory {
+  id          String    @id @default(uuid())
+  partId      String    @map("part_id")
+  partNumber  String    @map("part_number")
+  oldPrice    Float     @map("old_price")
+  newPrice    Float     @map("new_price")
+  changedById String    @map("changed_by_id")
+  changedAt   DateTime  @default(now()) @map("changed_at")
+  importBatch String?   @map("import_batch") // Groups changes from same import
+
+  // Relations
+  part        Part      @relation(fields: [partId], references: [id], onDelete: Cascade)
+  changedBy   User      @relation("PriceChanges", fields: [changedById], references: [id])
+
+  @@index([partId])
+  @@index([partNumber])
+  @@index([importBatch])
+  @@index([changedAt])
+  @@map("price_history")
+}
+
+model PartFile {
+  id          String    @id @default(uuid())
+  partId      String    @map("part_id")
+  fileType    String    @map("file_type") // datasheet, cad, brochure, image
+  fileName    String    @map("file_name")
+  fileUrl     String    @map("file_url")
+  fileSize    Int?      @map("file_size")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  part        Part      @relation(fields: [partId], references: [id], onDelete: Cascade)
+
+  @@index([partId])
+  @@map("part_files")
+}
+
+// ============================================================================
+// VIDEOS & ENGAGEMENT
+// ============================================================================
+
+enum VideoStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Video {
+  id            String      @id @default(uuid())
+  partId        String      @map("part_id")
+  videoUrl      String      @map("video_url")
+  title         String
+  description   String?     @db.Text
+  duration      Int?        // Duration in seconds
+  level         Int         @default(1) // 1, 2, or 3
+  status        VideoStatus @default(PENDING)
+  thumbnailUrl  String?     @map("thumbnail_url")
+  uploadedById  String?     @map("uploaded_by_id")
+  approvedById  String?     @map("approved_by_id")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  approvedAt    DateTime?   @map("approved_at")
+
+  // Relations
+  part          Part        @relation(fields: [partId], references: [id], onDelete: Cascade)
+  uploadedBy    User?       @relation("VideoUploader", fields: [uploadedById], references: [id])
+  approvedBy    User?       @relation("VideoApprover", fields: [approvedById], references: [id])
+  views         UserVideoView[]
+  comments      Comment[]
+
+  @@index([partId])
+  @@index([status])
+  @@index([level])
+  @@map("videos")
+}
+
+model UserVideoView {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  videoId     String    @map("video_id")
+  viewCount   Int       @default(0) @map("view_count")
+  lastViewedAt DateTime @map("last_viewed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video       Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, videoId])
+  @@index([userId])
+  @@index([videoId])
+  @@map("user_video_views")
+}
+
+model Comment {
+  id          String    @id @default(uuid())
+  videoId     String    @map("video_id")
+  userId      String    @map("user_id")
+  parentId    String?   @map("parent_id")
+  content     String    @db.Text
+  imageUrl    String?   @map("image_url")
+  likesCount  Int       @default(0) @map("likes_count")
+  isApproved  Boolean   @default(true) @map("is_approved")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  video       Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent      Comment?  @relation("CommentThread", fields: [parentId], references: [id])
+  replies     Comment[] @relation("CommentThread")
+
+  @@index([videoId])
+  @@index([userId])
+  @@index([parentId])
+  @@map("comments")
+}
+
+// ============================================================================
+// PRICING & QUOTES
+// ============================================================================
+
+model Quote {
+  id            String    @id @default(uuid())
+  quoteNumber   String    @unique @map("quote_number") // PP#[ID]
+  catalogId     String    @map("catalog_id")
+  userId        String    @map("user_id")
+  customerName  String?   @map("customer_name")
+  customerEmail String?   @map("customer_email")
+  customerCompany String? @map("customer_company")
+  note          String?   @db.VarChar(150)
+  validUntil    DateTime? @map("valid_until")
+  fob           String?   @db.VarChar(100)
+  terms         String?   @default("Net 30") @db.VarChar(100)
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user          User      @relation(fields: [userId], references: [id])
+  items         QuoteItem[]
+  discounts     QuoteDiscount[]
+
+  @@index([catalogId])
+  @@index([userId])
+  @@map("quotes")
+}
+
+model QuoteItem {
+  id            String    @id @default(uuid())
+  quoteId       String    @map("quote_id")
+  partId        String    @map("part_id")
+  partNumber    String    @map("part_number")
+  description   String
+  packageQty    Int       @map("package_qty")
+  minQty        Int       @map("min_qty")
+  costPrice     Float     @map("cost_price") // Cost to distributor (after discounts)
+  sellPrice     Float?    @map("sell_price") // Price to customer (if specified)
+  isCostAffected Boolean  @default(false) @map("is_cost_affected") // Bold/asterisk indicator
+  isSellAffected Boolean  @default(false) @map("is_sell_affected") // Bold/asterisk indicator
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  quote         Quote     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  part          Part      @relation(fields: [partId], references: [id])
+
+  @@index([quoteId])
+  @@index([partId])
+  @@map("quote_items")
+}
+
+model QuoteDiscount {
+  id              String    @id @default(uuid())
+  quoteId         String    @map("quote_id")
+  discountType    String    @map("discount_type") // category, series, part
+  targetValue     String    @map("target_value") // category name, series name, or part number
+  discountPercent Float     @map("discount_percent")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  quote           Quote     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
+  @@map("quote_discounts")
+}
+
+// ============================================================================
+// PROJECTS & BOMs
+// ============================================================================
+
+model Project {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  name          String
+  description   String?   @db.Text
+  currentRevision Int     @default(1) @map("current_revision")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items         ProjectItem[]
+  revisions     ProjectRevision[]
+
+  @@index([userId])
+  @@map("projects")
+}
+
+model ProjectItem {
+  id                String    @id @default(uuid())
+  projectId         String    @map("project_id")
+  revisionNumber    Int       @map("revision_number")
+  partId            String?   @map("part_id") // NULL if non-WAGO part
+  manufacturer      String?
+  partNumber        String    @map("part_number")
+  description       String
+  quantity          Int       @default(1)
+  unitPrice         Float?    @map("unit_price")
+  isWagoPart        Boolean   @default(false) @map("is_wago_part")
+  hasWagoEquivalent Boolean   @default(false) @map("has_wago_equivalent")
+  notes             String?   @db.Text
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  part              Part?     @relation(fields: [partId], references: [id])
+
+  @@index([projectId])
+  @@index([revisionNumber])
+  @@map("project_items")
+}
+
+model ProjectRevision {
+  id              String    @id @default(uuid())
+  projectId       String    @map("project_id")
+  revisionNumber  Int       @map("revision_number")
+  changeSummary   String    @map("change_summary") @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, revisionNumber])
+  @@index([projectId])
+  @@map("project_revisions")
+}
+
+// ============================================================================
+// CROSS-REFERENCES
+// ============================================================================
+
+model CrossReference {
+  id                    String    @id @default(uuid())
+  originalManufacturer  String    @map("original_manufacturer")
+  originalPartNumber    String    @map("original_part_number")
+  wagoPartId            String    @map("wago_part_id")
+  compatibilityScore    Float     @default(1.0) @map("compatibility_score") // 0.0 to 1.0
+  notes                 String?   @db.Text
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  // Relations (originalPart omitted - partNumber is not globally unique)
+  wagoPart              Part      @relation("WagoPart", fields: [wagoPartId], references: [id], onDelete: Cascade)
+
+  @@unique([originalManufacturer, originalPartNumber, wagoPartId])
+  @@index([originalManufacturer, originalPartNumber])
+  @@index([wagoPartId])
+  @@map("cross_references")
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+model Notification {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  type        String    // video_approved, new_comment, etc.
+  title       String
+  message     String    @db.Text
+  relatedId   String?   @map("related_id") // Video ID, Comment ID, etc.
+  isRead      Boolean   @default(false) @map("is_read")
+  sentEmail   Boolean   @default(false) @map("sent_email")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([isRead])
+  @@map("notifications")
+}
