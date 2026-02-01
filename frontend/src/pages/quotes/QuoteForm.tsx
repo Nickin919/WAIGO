@@ -18,6 +18,8 @@ interface LineItem {
   quantity: number;
   discountPct: number;
   marginPct: number;
+  marginSelected?: boolean;
+  discountSelected?: boolean;
 }
 
 interface Customer {
@@ -70,6 +72,8 @@ const QuoteForm = () => {
   const [notFoundParts, setNotFoundParts] = useState<string[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const marginSelectAllRef = useRef<HTMLInputElement>(null);
+  const discountSelectAllRef = useRef<HTMLInputElement>(null);
 
   const [newCustomer, setNewCustomer] = useState({
     name: '',
@@ -84,8 +88,16 @@ const QuoteForm = () => {
 
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(isEdit);
+  const [bulkMarginValue, setBulkMarginValue] = useState('');
+  const [bulkDiscountValue, setBulkDiscountValue] = useState('');
 
   const maxDiscount = ROLE_MAX_DISCOUNT[user?.role || 'BASIC'] ?? 10;
+  const marginSelectedCount = items.filter((i) => i.marginSelected).length;
+  const discountSelectedCount = items.filter((i) => i.discountSelected).length;
+  const allMarginSelected = items.length > 0 && items.every((i) => i.marginSelected);
+  const allDiscountSelected = items.length > 0 && items.every((i) => i.discountSelected);
+  const someMarginSelected = items.some((i) => i.marginSelected);
+  const someDiscountSelected = items.some((i) => i.discountSelected);
   const isDistributorOrHigher = ['ADMIN', 'RSM', 'DISTRIBUTOR'].includes(user?.role || '');
 
   useEffect(() => {
@@ -119,6 +131,8 @@ const QuoteForm = () => {
           quantity: i.quantity || 1,
           discountPct: i.discountPct ?? 0,
           marginPct: i.marginPct ?? 0,
+          marginSelected: false,
+          discountSelected: false,
         })));
       }).catch(() => toast.error('Failed to load quote')).finally(() => setLoading(false));
     }
@@ -135,6 +149,15 @@ const QuoteForm = () => {
       }).catch(() => setCustomers([]));
     }
   }, [showCustomerPicker, customerSearch]);
+
+  useEffect(() => {
+    const el = marginSelectAllRef.current;
+    if (el) el.indeterminate = someMarginSelected && !allMarginSelected;
+  }, [someMarginSelected, allMarginSelected]);
+  useEffect(() => {
+    const el = discountSelectAllRef.current;
+    if (el) el.indeterminate = someDiscountSelected && !allDiscountSelected;
+  }, [someDiscountSelected, allDiscountSelected]);
 
   useEffect(() => {
     if (showProductPicker && catalogId && productSearch.trim().length >= 2) {
@@ -163,7 +186,7 @@ const QuoteForm = () => {
         i.partId === part.id ? { ...i, quantity: i.quantity + 1 } : i
       ));
     } else {
-      setItems([
+        setItems([
         ...items,
         {
           partId: part.id,
@@ -176,6 +199,8 @@ const QuoteForm = () => {
           quantity: 1,
           discountPct: defaultDisc,
           marginPct: 0,
+          marginSelected: false,
+          discountSelected: false,
         },
       ]);
     }
@@ -220,6 +245,8 @@ const QuoteForm = () => {
               quantity: count,
               discountPct: defaultDisc,
               marginPct: 0,
+              marginSelected: false,
+              discountSelected: false,
             });
           }
         }
@@ -288,6 +315,28 @@ const QuoteForm = () => {
 
   const updateItem = (index: number, updates: Partial<LineItem>) => {
     setItems(items.map((i, idx) => (idx === index ? { ...i, ...updates } : i)));
+  };
+
+  const toggleMarginSelectAll = () => {
+    const next = !allMarginSelected;
+    setItems(items.map((i) => ({ ...i, marginSelected: next })));
+  };
+  const toggleDiscountSelectAll = () => {
+    const next = !allDiscountSelected;
+    setItems(items.map((i) => ({ ...i, discountSelected: next })));
+  };
+  const toggleMarginSelected = (index: number) => {
+    updateItem(index, { marginSelected: !items[index].marginSelected });
+  };
+  const toggleDiscountSelected = (index: number) => {
+    updateItem(index, { discountSelected: !items[index].discountSelected });
+  };
+  const applyBulkMargin = (value: number) => {
+    setItems(items.map((i) => (i.marginSelected ? { ...i, marginPct: value } : i)));
+  };
+  const applyBulkDiscount = (value: number) => {
+    const clamped = Math.min(value, maxDiscount);
+    setItems(items.map((i) => (i.discountSelected ? { ...i, discountPct: clamped } : i)));
   };
 
   const removeItem = (index: number) => {
@@ -494,8 +543,26 @@ const QuoteForm = () => {
                   <th className="px-4 py-2 text-left">Product</th>
                   <th className="px-4 py-2 text-right">List Price</th>
                   <th className="px-4 py-2 text-center">Min Qty</th>
-                  {isDistributorOrHigher && <th className="px-4 py-2 text-right">Disc %</th>}
-                  {isDistributorOrHigher && <th className="px-4 py-2 text-right">Margin %</th>}
+                  {isDistributorOrHigher && (
+                    <th className="px-4 py-2">
+                      <div className="flex items-center gap-2 justify-end">
+                        <input type="checkbox" checked={allDiscountSelected} ref={discountSelectAllRef} onChange={toggleDiscountSelectAll} className="rounded border-gray-300" title="Select all" />
+                        <input type="number" min={0} max={maxDiscount} step={0.5} value={bulkDiscountValue} onChange={(e) => { const v = e.target.value; setBulkDiscountValue(v); const n = parseFloat(v); if (!isNaN(n)) applyBulkDiscount(n); }} placeholder="Apply %" className="input py-1 w-16 text-right" title="Apply to selected" />
+                        <span className="text-xs text-gray-500 w-14">{discountSelectedCount ? `${discountSelectedCount} sel` : ''}</span>
+                      </div>
+                      <div className="text-xs font-normal text-gray-500 mt-0.5">Disc %</div>
+                    </th>
+                  )}
+                  {isDistributorOrHigher && (
+                    <th className="px-4 py-2">
+                      <div className="flex items-center gap-2 justify-end">
+                        <input type="checkbox" checked={allMarginSelected} ref={marginSelectAllRef} onChange={toggleMarginSelectAll} className="rounded border-gray-300" title="Select all" />
+                        <input type="number" min={0} step={0.5} value={bulkMarginValue} onChange={(e) => { const v = e.target.value; setBulkMarginValue(v); const n = parseFloat(v); if (!isNaN(n)) applyBulkMargin(n); }} placeholder="Apply %" className="input py-1 w-16 text-right" title="Apply to selected" />
+                        <span className="text-xs text-gray-500 w-14">{marginSelectedCount ? `${marginSelectedCount} sel` : ''}</span>
+                      </div>
+                      <div className="text-xs font-normal text-gray-500 mt-0.5">Margin %</div>
+                    </th>
+                  )}
                   <th className="px-4 py-2 text-right">Sell</th>
                   <th className="px-4 py-2 text-center">Qty</th>
                   <th className="px-4 py-2 text-right">Total</th>
@@ -504,7 +571,7 @@ const QuoteForm = () => {
               </thead>
               <tbody>
                 {items.map((item, idx) => (
-                  <tr key={idx} className="border-t">
+                  <tr key={idx} className={`border-t ${(item.marginSelected || item.discountSelected) ? 'bg-green-50/50' : ''}`}>
                     <td className="px-4 py-2">
                       <div className="font-medium">{item.productPartNumber}</div>
                       <div className="text-gray-500 truncate max-w-xs">{item.productDescription.slice(0, 40)}...</div>
@@ -513,12 +580,18 @@ const QuoteForm = () => {
                     <td className="px-4 py-2 text-center">{item.minQty ?? '—'}</td>
                     {isDistributorOrHigher && (
                       <td className="px-4 py-2">
-                        <input type="number" min={0} max={maxDiscount} step={0.5} value={item.discountPct} onChange={(e) => updateItem(idx, { discountPct: parseFloat(e.target.value) || 0 })} className="input py-1 w-16 text-right" />
+                        <div className="flex items-center gap-2 justify-end">
+                          <input type="checkbox" checked={!!item.discountSelected} onChange={() => toggleDiscountSelected(idx)} className="rounded border-gray-300" />
+                          <input type="number" min={0} max={maxDiscount} step={0.5} value={item.discountPct} onChange={(e) => updateItem(idx, { discountPct: parseFloat(e.target.value) || 0 })} className="input py-1 w-16 text-right" />
+                        </div>
                       </td>
                     )}
                     {isDistributorOrHigher && (
                       <td className="px-4 py-2">
-                        <input type="number" min={0} step={0.5} value={item.marginPct} onChange={(e) => updateItem(idx, { marginPct: parseFloat(e.target.value) || 0 })} className="input py-1 w-16 text-right" />
+                        <div className="flex items-center gap-2 justify-end">
+                          <input type="checkbox" checked={!!item.marginSelected} onChange={() => toggleMarginSelected(idx)} className="rounded border-gray-300" />
+                          <input type="number" min={0} step={0.5} value={item.marginPct} onChange={(e) => updateItem(idx, { marginPct: parseFloat(e.target.value) || 0 })} className="input py-1 w-16 text-right" />
+                        </div>
                       </td>
                     )}
                     <td className="px-4 py-2 text-right font-medium">{formatCurrency(calculateSellPrice(item))}</td>
