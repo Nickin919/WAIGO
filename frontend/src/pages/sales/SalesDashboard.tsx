@@ -600,7 +600,7 @@ const SalesDashboard = () => {
                   <TrendingUp className="w-5 h-5 text-green-600" />
                   Top 10 trending up (sales growth)
                 </h3>
-                <p className="text-xs text-gray-500 mb-3">Comparing last 3 months vs prior 3 months (same year)</p>
+                <p className="text-xs text-gray-500 mb-3">Comparing last 3 months vs prior 3 months (same year). Only accounts with ≥$5,000 in one period.</p>
                 <ul className="space-y-2">
                   {(data.trending?.top10Growing ?? []).map((c, i) => (
                     <li key={`grow-${c.code}-${i}`} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
@@ -621,7 +621,7 @@ const SalesDashboard = () => {
                   <TrendingDown className="w-5 h-5 text-red-600" />
                   Top 10 trending down (declining sales)
                 </h3>
-                <p className="text-xs text-gray-500 mb-3">Comparing last 3 months vs prior 3 months (same year)</p>
+                <p className="text-xs text-gray-500 mb-3">Comparing last 3 months vs prior 3 months (same year). Only accounts with ≥$5,000 in one period.</p>
                 <ul className="space-y-2">
                   {(data.trending?.top10Declining ?? []).map((c, i) => (
                     <li key={`decl-${c.code}-${i}`} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">

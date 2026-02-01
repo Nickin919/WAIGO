@@ -396,7 +396,10 @@ async function buildSummary(where: SummaryWhere, customerCount: number) {
   };
 }
 
-/** Compute top 10 growing and top 10 declining by comparing last 3 months vs prior 3 months (same year) */
+/** Minimum sales in at least one 3‑month period to appear in trending (filters out small accounts). */
+const TRENDING_MIN_SALES = 5000;
+
+/** Compute top 10 growing and top 10 declining by comparing last 3 months vs prior 3 months (same year). Only includes accounts with at least TRENDING_MIN_SALES in one of the two periods. */
 async function getTrending(where: SummaryWhere, year?: number): Promise<{ top10Growing: Array<{ code: string; name: string; total: number; priorTotal: number; growthPercent: number }>; top10Declining: Array<{ code: string; name: string; total: number; priorTotal: number; growthPercent: number }> }> {
   const trendYear = year ?? await prisma.monthlySale.aggregate({
     where: { ...where },
@@ -416,7 +419,9 @@ async function getTrending(where: SummaryWhere, year?: number): Promise<{ top10G
     if (recentMonths.includes(s.month)) byCustomer[id].recent += amt;
     if (priorMonths.includes(s.month)) byCustomer[id].prior += amt;
   });
-  const customerIds = Object.keys(byCustomer).filter((id) => byCustomer[id].prior > 0 || byCustomer[id].recent > 0);
+  const customerIds = Object.keys(byCustomer).filter(
+    (id) => byCustomer[id].prior >= TRENDING_MIN_SALES || byCustomer[id].recent >= TRENDING_MIN_SALES,
+  );
   if (customerIds.length === 0) return { top10Growing: [], top10Declining: [] };
   const customers = await prisma.salesCustomer.findMany({
     where: { id: { in: customerIds } },
