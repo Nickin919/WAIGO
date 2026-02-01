@@ -106,10 +106,10 @@ export const clearProducts = async (req: AuthRequest, res: Response): Promise<vo
       // Remove quote items that reference these parts
       await tx.quoteItem.deleteMany({ where: { partId: { in: partIds } } });
       // Unlink project items (partId becomes null)
-      await tx.projectItem.updateMany(
-        { where: { partId: { in: partIds } } },
-        { data: { partId: null } }
-      );
+      await tx.projectItem.updateMany({
+        where: { partId: { in: partIds } },
+        data: { partId: null },
+      });
       // Delete parts (cascades: PriceHistory, PartFile, Video, CatalogItem, CrossReference)
       await tx.part.deleteMany({ where: whereClause });
     });
