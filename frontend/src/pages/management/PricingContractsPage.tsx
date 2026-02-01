@@ -38,6 +38,10 @@ const PricingContractsPage = () => {
     imported: number;
     skipped: Array<{ partNumber: string; reason: string }>;
     unparsed: string[];
+    seriesDiscounts?: Array<{ series: string; discountPercent: number; description: string }>;
+    warnings?: Array<{ type: string; message: string; partNumber?: string }>;
+    metadata?: { quoteNumber?: string; customerName?: string };
+    stats?: { totalLinesProcessed: number; productRows: number; discountRows: number };
   } | null>(null);
 
   const canManage = user?.role && ['TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'].includes(user.role);
@@ -141,34 +145,40 @@ const PricingContractsPage = () => {
           const imported = data?.itemsImported ?? 0;
           const skipped = data?.skipped ?? [];
           const unparsed = data?.unparsedRowDetails ?? [];
+          const seriesDiscounts = data?.seriesDiscounts ?? [];
+          const warnings = data?.warnings ?? [];
+          const metadata = data?.metadata ?? {};
+          const stats = data?.stats ?? {};
           
           if (imported > 0) {
-            toast.success(`PDF imported: ${imported} items added`);
+            const quoteInfo = metadata?.quoteNumber ? ` (Quote: ${metadata.quoteNumber})` : '';
+            toast.success(`PDF imported: ${imported} items added${quoteInfo}`);
           }
           
-          // Show results modal if there are skipped/unparsed items
-          if (skipped.length > 0 || unparsed.length > 0) {
-            setUploadResult({
-              contractId: id,
-              imported,
-              skipped,
-              unparsed,
-            });
-          }
+          // Show results modal (always show for PDF to display series discounts)
+          setUploadResult({
+            contractId: id,
+            imported,
+            skipped,
+            unparsed,
+            seriesDiscounts,
+            warnings,
+            metadata,
+            stats,
+          });
           
           loadContracts();
         })
         .catch((err: unknown) => {
-          const errData = (err as { response?: { data?: { error?: string; unparsedRows?: string[] } } })?.response?.data;
+          const errData = (err as { response?: { data?: { error?: string; unparsedRows?: string[]; warnings?: Array<{ type: string; message: string }> } } })?.response?.data;
           toast.error(errData?.error || 'Failed to upload PDF');
-          if (errData?.unparsedRows?.length) {
-            setUploadResult({
-              contractId: id,
-              imported: 0,
-              skipped: [],
-              unparsed: errData.unparsedRows,
-            });
-          }
+          setUploadResult({
+            contractId: id,
+            imported: 0,
+            skipped: [],
+            unparsed: errData?.unparsedRows ?? [],
+            warnings: errData?.warnings ?? [],
+          });
         })
         .finally(() => setUploadingId(null));
     } else {
@@ -288,15 +298,15 @@ const PricingContractsPage = () => {
     </div>
   );
 
-  // Results modal for showing skipped/unparsed rows
+  // Results modal for showing import details
   const UploadResultsModal = () => {
     if (!uploadResult) return null;
-    const { imported, skipped, unparsed } = uploadResult;
-    const hasIssues = skipped.length > 0 || unparsed.length > 0;
+    const { imported, skipped, unparsed, seriesDiscounts, warnings, metadata, stats } = uploadResult;
+    const hasIssues = skipped.length > 0 || unparsed.length > 0 || (warnings && warnings.length > 0);
 
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+        <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[85vh] overflow-hidden">
           <div className="p-4 border-b flex items-center justify-between">
             <div className="flex items-center gap-2">
               {hasIssues ? (
@@ -304,20 +314,93 @@ const PricingContractsPage = () => {
               ) : (
                 <CheckCircle className="w-5 h-5 text-green-500" />
               )}
-              <h3 className="font-semibold">PDF Import Results</h3>
+              <div>
+                <h3 className="font-semibold">PDF Import Results</h3>
+                {metadata?.quoteNumber && (
+                  <p className="text-xs text-gray-500">Quote: {metadata.quoteNumber}</p>
+                )}
+              </div>
             </div>
             <button onClick={() => setUploadResult(null)} className="text-gray-400 hover:text-gray-600">
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          <div className="p-4 overflow-y-auto max-h-[60vh]">
-            <div className="mb-4 p-3 bg-green-50 rounded-lg">
-              <span className="text-green-700 font-medium">{imported} items imported successfully</span>
+          <div className="p-4 overflow-y-auto max-h-[65vh] space-y-4">
+            {/* Summary stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3 bg-green-50 rounded-lg text-center">
+                <div className="text-2xl font-bold text-green-700">{imported}</div>
+                <div className="text-xs text-green-600">Items Imported</div>
+              </div>
+              {stats?.discountRows !== undefined && stats.discountRows > 0 && (
+                <div className="p-3 bg-blue-50 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-blue-700">{stats.discountRows}</div>
+                  <div className="text-xs text-blue-600">Series Discounts</div>
+                </div>
+              )}
+              {skipped.length > 0 && (
+                <div className="p-3 bg-yellow-50 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-yellow-700">{skipped.length}</div>
+                  <div className="text-xs text-yellow-600">Skipped</div>
+                </div>
+              )}
+              {unparsed.length > 0 && (
+                <div className="p-3 bg-red-50 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-red-700">{unparsed.length}</div>
+                  <div className="text-xs text-red-600">Unparsed</div>
+                </div>
+              )}
             </div>
 
+            {/* Series discounts applied */}
+            {seriesDiscounts && seriesDiscounts.length > 0 && (
+              <div>
+                <h4 className="font-medium text-blue-700 mb-2 flex items-center gap-1">
+                  <CheckCircle className="w-4 h-4" />
+                  Series Discounts Applied
+                </h4>
+                <div className="bg-blue-50 rounded-lg p-3 text-sm">
+                  <div className="flex flex-wrap gap-2">
+                    {seriesDiscounts.map((d, i) => (
+                      <span key={i} className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                        Series {d.series}: {d.discountPercent}% off
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-xs text-blue-600 mt-2">
+                    Net prices calculated and applied to matching part numbers.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Validation warnings */}
+            {warnings && warnings.length > 0 && (
+              <div>
+                <h4 className="font-medium text-orange-700 mb-2 flex items-center gap-1">
+                  <AlertTriangle className="w-4 h-4" />
+                  {warnings.length} validation warning{warnings.length > 1 ? 's' : ''}
+                </h4>
+                <div className="bg-orange-50 rounded-lg p-3 text-sm max-h-32 overflow-y-auto">
+                  <ul className="text-orange-700 space-y-1">
+                    {warnings.slice(0, 10).map((w, i) => (
+                      <li key={i} className="flex items-start gap-1">
+                        <span className="text-orange-500">•</span>
+                        <span>{w.partNumber && <code className="text-xs bg-orange-100 px-1 rounded">{w.partNumber}</code>} {w.message}</span>
+                      </li>
+                    ))}
+                    {warnings.length > 10 && (
+                      <li className="text-orange-600">...and {warnings.length - 10} more</li>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            {/* Skipped items */}
             {skipped.length > 0 && (
-              <div className="mb-4">
+              <div>
                 <h4 className="font-medium text-yellow-700 mb-2 flex items-center gap-1">
                   <AlertTriangle className="w-4 h-4" />
                   {skipped.length} items skipped
@@ -326,20 +409,20 @@ const PricingContractsPage = () => {
                   <table className="w-full">
                     <thead>
                       <tr className="text-left text-yellow-800">
-                        <th className="pb-1">Part Number</th>
+                        <th className="pb-1 pr-4">Part/Series</th>
                         <th className="pb-1">Reason</th>
                       </tr>
                     </thead>
                     <tbody className="text-yellow-700">
                       {skipped.slice(0, 20).map((s, i) => (
                         <tr key={i}>
-                          <td className="py-0.5 font-mono text-xs">{s.partNumber}</td>
-                          <td className="py-0.5">{s.reason}</td>
+                          <td className="py-0.5 pr-4 font-mono text-xs">{s.partNumber}</td>
+                          <td className="py-0.5 text-xs">{s.reason}</td>
                         </tr>
                       ))}
                       {skipped.length > 20 && (
                         <tr>
-                          <td colSpan={2} className="py-1 text-yellow-600">
+                          <td colSpan={2} className="py-1 text-yellow-600 text-xs">
                             ...and {skipped.length - 20} more
                           </td>
                         </tr>
@@ -350,13 +433,14 @@ const PricingContractsPage = () => {
               </div>
             )}
 
+            {/* Unparsed rows */}
             {unparsed.length > 0 && (
               <div>
                 <h4 className="font-medium text-red-700 mb-2 flex items-center gap-1">
                   <AlertTriangle className="w-4 h-4" />
                   {unparsed.length} rows could not be parsed
                 </h4>
-                <div className="bg-red-50 rounded-lg p-3 text-sm max-h-40 overflow-y-auto">
+                <div className="bg-red-50 rounded-lg p-3 text-sm max-h-32 overflow-y-auto">
                   <ul className="text-red-700 space-y-1">
                     {unparsed.slice(0, 10).map((row, i) => (
                       <li key={i} className="font-mono text-xs truncate">{row}</li>
@@ -366,6 +450,13 @@ const PricingContractsPage = () => {
                     )}
                   </ul>
                 </div>
+              </div>
+            )}
+
+            {/* Processing stats */}
+            {stats && (
+              <div className="text-xs text-gray-500 border-t pt-3">
+                Processed {stats.totalLinesProcessed} lines: {stats.productRows} products, {stats.discountRows} discounts
               </div>
             )}
           </div>

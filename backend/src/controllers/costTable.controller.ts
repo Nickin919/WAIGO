@@ -395,6 +395,13 @@ export const getPartCustomCost = async (req: AuthRequest, res: Response): Promis
 /**
  * Upload PDF and parse into cost table items
  * POST /api/cost-tables/:id/upload-pdf
+ * 
+ * Uses native TypeScript PDF parser with:
+ * - Multi-page table continuity
+ * - MOQ extraction
+ * - Series discount auto-application
+ * - Net price calculation
+ * - Validation warnings
  */
 export const uploadPdf = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -417,7 +424,7 @@ export const uploadPdf = async (req: AuthRequest, res: Response): Promise<void> 
 
     const pdfPath = req.file.path;
 
-    // Parse PDF using Python tool
+    // Parse PDF using native TypeScript parser
     const parseResult = await parseWagoPDF(pdfPath);
 
     // Clean up uploaded PDF
@@ -432,16 +439,33 @@ export const uploadPdf = async (req: AuthRequest, res: Response): Promise<void> 
         error: 'Failed to parse PDF or no valid rows found',
         details: parseResult.errors,
         unparsedRows: parseResult.unparsedRows,
+        warnings: parseResult.warnings,
       });
       return;
     }
 
     // Import parsed rows as cost table items
-    const imported: Array<{ partNumber: string; description: string; customCost: number }> = [];
+    const imported: Array<{
+      partNumber: string;
+      description: string;
+      customCost: number;
+      netPrice: number | null;
+      moq: string;
+      discount: string;
+    }> = [];
     const skipped: Array<{ partNumber: string; reason: string }> = [];
 
     for (const row of parseResult.rows) {
       try {
+        // Skip series discount rows (no part number, just discount %)
+        if (!row.partNumber && row.discount) {
+          skipped.push({ 
+            partNumber: `Series ${row.series}`, 
+            reason: `Series discount (${row.discount}) - applied to matching parts` 
+          });
+          continue;
+        }
+
         // Extract price (remove $ and commas)
         const priceStr = row.price.replace(/[$,]/g, '').trim();
         const customCost = parseFloat(priceStr);
@@ -451,17 +475,22 @@ export const uploadPdf = async (req: AuthRequest, res: Response): Promise<void> 
           continue;
         }
 
-        // Skip series discount rows (no part number, just discount %)
-        if (!row.partNumber && row.discount) {
-          skipped.push({ partNumber: row.series || 'Series discount', reason: 'Series discounts not imported to cost table' });
-          continue;
-        }
-
         const partNumber = row.partNumber || row.series;
         if (!partNumber) {
           skipped.push({ partNumber: '(empty)', reason: 'No part number' });
           continue;
         }
+
+        // Extract net price if available
+        const netPriceStr = row.netPrice?.replace(/[$,]/g, '').trim();
+        const netPrice = netPriceStr ? parseFloat(netPriceStr) : null;
+
+        // Build notes with MOQ and discount info
+        const notesParts: string[] = ['Imported from PDF'];
+        if (row.discount) notesParts.push(`Discount: ${row.discount}`);
+        if (row.moq) notesParts.push(`MOQ: ${row.moq}`);
+        if (netPrice && netPrice !== customCost) notesParts.push(`Net: $${netPrice.toFixed(2)}`);
+        const notes = notesParts.join(' | ');
 
         // Upsert item (update if exists, create if not)
         await prisma.costTableItem.upsert({
@@ -472,17 +501,24 @@ export const uploadPdf = async (req: AuthRequest, res: Response): Promise<void> 
             costTableId,
             partNumber,
             description: row.description || '',
-            customCost,
-            notes: `Imported from PDF${row.discount ? ` (discount: ${row.discount})` : ''}`,
+            customCost: netPrice || customCost, // Use net price if available
+            notes,
           },
           update: {
             description: row.description || undefined,
-            customCost,
-            notes: `Imported from PDF${row.discount ? ` (discount: ${row.discount})` : ''}`,
+            customCost: netPrice || customCost,
+            notes,
           },
         });
 
-        imported.push({ partNumber, description: row.description, customCost });
+        imported.push({ 
+          partNumber, 
+          description: row.description, 
+          customCost,
+          netPrice,
+          moq: row.moq,
+          discount: row.discount,
+        });
       } catch (err: any) {
         skipped.push({ partNumber: row.partNumber || '?', reason: err.message || 'Database error' });
       }
@@ -500,7 +536,10 @@ export const uploadPdf = async (req: AuthRequest, res: Response): Promise<void> 
       imported,
       skipped,
       unparsedRowDetails: parseResult.unparsedRows,
+      seriesDiscounts: parseResult.seriesDiscounts,
+      warnings: parseResult.warnings,
       metadata: parseResult.metadata,
+      stats: parseResult.stats,
     });
   } catch (error) {
     console.error('Upload PDF error:', error);

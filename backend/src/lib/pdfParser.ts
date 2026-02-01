@@ -1,9 +1,16 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import * as path from 'path';
-import * as fs from 'fs/promises';
+/**
+ * WAGO Quote PDF Parser - TypeScript Implementation
+ * 
+ * Robust PDF parsing for WAGO pricing quote documents.
+ * Handles multi-page tables, varying layouts, and edge cases.
+ */
 
-const execAsync = promisify(exec);
+import * as fs from 'fs/promises';
+import pdf from 'pdf-parse';
+
+// ============================================================================
+// Types
+// ============================================================================
 
 export interface ParsedRow {
   partNumber: string;
@@ -11,134 +18,753 @@ export interface ParsedRow {
   description: string;
   price: string;
   discount: string;
+  moq: string;           // Minimum order quantity
+  netPrice: string;      // Price after series discount applied
+  lineNumber: number;    // Original line for debugging
+}
+
+export interface SeriesDiscount {
+  series: string;
+  discountPercent: number;
+  description: string;
+}
+
+export interface QuoteMetadata {
+  quoteNumber?: string;
+  quoteDate?: string;
+  expirationDate?: string;
+  customerName?: string;
+  customerNumber?: string;
+}
+
+export interface ValidationWarning {
+  type: 'duplicate_part' | 'missing_price' | 'anomalous_price' | 'missing_discount' | 'parse_issue';
+  message: string;
+  lineNumber?: number;
+  partNumber?: string;
 }
 
 export interface ParseResult {
   success: boolean;
   rows: ParsedRow[];
-  unparsedRows: string[]; // Rows that couldn't be parsed
+  seriesDiscounts: SeriesDiscount[];
+  unparsedRows: string[];
   errors: string[];
-  metadata?: {
-    quoteNumber?: string;
-    totalRows?: number;
-    parsedRows?: number;
+  warnings: ValidationWarning[];
+  metadata: QuoteMetadata;
+  stats: {
+    totalLinesProcessed: number;
+    productRows: number;
+    discountRows: number;
+    skippedRows: number;
   };
 }
 
+// ============================================================================
+// Constants & Patterns
+// ============================================================================
+
+// Series prefix mapping for auto-applying discounts
+const SERIES_PREFIXES: Record<string, string[]> = {
+  '206': ['206-'],
+  '209': ['209-'],
+  '210': ['210-'],
+  '218': ['218-'],
+  '221': ['221-'],
+  '222': ['222-'],
+  '224': ['224-'],
+  '231': ['231-'],
+  '232': ['232-'],
+  '233': ['233-'],
+  '234': ['234-'],
+  '235': ['235-'],
+  '236': ['236-'],
+  '243': ['243-'],
+  '249': ['249-'],
+  '250': ['250-'],
+  '251': ['251-'],
+  '252': ['252-'],
+  '254': ['254-'],
+  '255': ['255-'],
+  '256': ['256-'],
+  '257': ['257-'],
+  '258': ['258-'],
+  '260': ['260-'],
+  '261': ['261-'],
+  '264': ['264-'],
+  '268': ['268-'],
+  '269': ['269-'],
+  '270': ['270-'],
+  '272': ['272-'],
+  '279': ['279-'],
+  '280': ['280-'],
+  '281': ['281-'],
+  '282': ['282-'],
+  '283': ['283-'],
+  '284': ['284-'],
+  '285': ['285-'],
+  '286': ['286-'],
+  '289': ['289-'],
+  '290': ['290-'],
+  '291': ['291-'],
+  '292': ['292-'],
+  '294': ['294-'],
+  '727': ['727-'],
+  '733': ['733-', '734-'],
+  '734': ['733-', '734-'],
+  '750': ['750-'],
+  '753': ['753-'],
+  '756': ['756-'],
+  '757': ['757-'],
+  '759': ['759-'],
+  '760': ['760-'],
+  '761': ['761-'],
+  '762': ['762-'],
+  '763': ['763-'],
+  '767': ['767-'],
+  '768': ['768-'],
+  '769': ['769-'],
+  '770': ['770-'],
+  '771': ['771-'],
+  '773': ['773-'],
+  '777': ['777-'],
+  '778': ['778-'],
+  '779': ['779-'],
+  '787': ['787-'],
+  '788': ['788-'],
+  '789': ['789-'],
+  '793': ['793-'],
+  '857': ['857-'],
+  '858': ['858-'],
+  '859': ['859-'],
+  '879': ['879-'],
+  '880': ['880-'],
+  '881': ['881-'],
+  '898': ['898-'],
+  '899': ['899-'],
+  '2000': ['2000-'],
+  '2001': ['2001-'],
+  '2002': ['2002-'],
+  '2003': ['2003-'],
+  '2004': ['2004-'],
+  '2005': ['2005-'],
+  '2006': ['2006-'],
+  '2007': ['2007-'],
+  '2009': ['2009-'],
+  '2016': ['2016-'],
+  '2020': ['2020-'],
+  '2022': ['2022-'],
+  '2054': ['2054-'],
+  '2057': ['2057-'],
+  '2059': ['2059-'],
+  '2060': ['2060-'],
+  '2065': ['2065-'],
+  '2070': ['2070-'],
+  '2086': ['2086-'],
+  '2087': ['2087-'],
+  '2091': ['2091-'],
+  '2092': ['2092-'],
+  '2093': ['2093-'],
+  '2094': ['2094-'],
+  '2095': ['2095-'],
+  '2096': ['2096-'],
+  '2097': ['2097-'],
+  '2098': ['2098-'],
+  '2099': ['2099-'],
+  '2100': ['2100-'],
+  '2101': ['2101-'],
+  '2102': ['2102-'],
+  '2103': ['2103-'],
+  '2104': ['2104-'],
+  '2105': ['2105-'],
+  '2106': ['2106-'],
+  '2107': ['2107-'],
+  '2108': ['2108-'],
+  '2109': ['2109-'],
+  '2110': ['2110-'],
+  '2111': ['2111-'],
+  '2112': ['2112-'],
+  '2113': ['2113-'],
+  '2114': ['2114-'],
+  '2115': ['2115-'],
+  '2116': ['2116-'],
+  '2117': ['2117-'],
+  '2118': ['2118-'],
+  '2119': ['2119-'],
+  '2120': ['2120-'],
+  '2121': ['2121-'],
+  '2122': ['2122-'],
+  '2123': ['2123-'],
+  '2124': ['2124-'],
+  '2125': ['2125-'],
+  '2126': ['2126-'],
+  '2127': ['2127-'],
+  '2128': ['2128-'],
+  '2129': ['2129-'],
+  '2130': ['2130-'],
+  '2131': ['2131-'],
+  '2132': ['2132-'],
+  '2133': ['2133-'],
+  '2134': ['2134-'],
+  '2135': ['2135-'],
+  '2136': ['2136-'],
+  '2137': ['2137-'],
+  '2138': ['2138-'],
+  '2139': ['2139-'],
+  '2140': ['2140-'],
+};
+
+// Regex patterns
+const PATTERNS = {
+  // Quote metadata
+  quoteNumber: /(?:quote|quotation|Q)\s*#?\s*:?\s*([A-Z0-9\-]+)/i,
+  quoteDate: /(?:date|dated?)\s*:?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/i,
+  expirationDate: /(?:exp(?:ires?|iration)?|valid\s*(?:until|through|thru))\s*:?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/i,
+  customerName: /(?:customer|company|ship\s*to|sold\s*to)\s*:?\s*([A-Z][A-Za-z0-9\s&.,'-]+?)(?:\n|$)/i,
+  customerNumber: /(?:customer\s*(?:#|no|num(?:ber)?)|acct)\s*:?\s*([A-Z0-9\-]+)/i,
+
+  // Part number patterns (WAGO format: 3-4 digits, dash, more digits, optional suffix)
+  partNumber: /^(\d{3,4}-\d{1,5}(?:[-\/][A-Z0-9]+)*)$/i,
+  partNumberLoose: /(\d{3,4}-\d{1,5}(?:[-\/][A-Z0-9]+)*)/i,
+
+  // Price patterns
+  price: /\$?\s*([\d,]+\.?\d*)/,
+  priceStrict: /^\$?\s*([\d,]+\.\d{2})$/,
+
+  // Series discount patterns
+  seriesDiscount: /(\d{3,4})\s*Series.*?([\d.]+)\s*%/i,
+  seriesDiscountAlt: /Series\s*(\d{3,4}).*?([\d.]+)\s*%/i,
+  discountPercent: /([\d.]+)\s*%/,
+
+  // MOQ patterns
+  moq: /(?:MOQ|min(?:imum)?\s*(?:order)?\s*(?:qty|quantity)?|order\s*(\d+)[-–](\d+))\s*:?\s*(\d+)/i,
+  moqInline: /\((?:Order\s*)?(\d+)[-–](\d+)\)/i,
+  moqMinimum: /minimum\s*(?:order\s*)?(?:qty|quantity)?\s*(?:of)?\s*:?\s*(\d+)/i,
+
+  // Header detection (to skip)
+  tableHeader: /^(?:wago\s*)?part\s*(?:#|no|num)/i,
+  tableHeaderAlt: /^(?:item|description|price|qty)/i,
+
+  // Internal/alternate part numbers (to skip)
+  internalPart: /^\d{8,}$/,  // 8+ digit internal codes
+};
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
 /**
- * Parse a WAGO quote PDF using the Python parser tool.
- * Returns parsed rows and any unparsed/error rows for user review.
+ * Normalize text by replacing various line break formats
+ */
+function normalizeText(text: string): string {
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/\\n/g, '\n');
+}
+
+/**
+ * Clean and normalize a cell value
+ */
+function cleanCell(value: string): string {
+  return value
+    .replace(/\n+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Extract price value from string, returns null if invalid
+ */
+function extractPrice(text: string): number | null {
+  const match = text.match(PATTERNS.price);
+  if (!match) return null;
+  
+  const value = parseFloat(match[1].replace(/,/g, ''));
+  if (isNaN(value) || value <= 0) return null;
+  
+  return value;
+}
+
+/**
+ * Format price as string with $ prefix
+ */
+function formatPrice(value: number | null): string {
+  if (value === null) return '';
+  return `$${value.toFixed(2)}`;
+}
+
+/**
+ * Extract MOQ from description text
+ */
+function extractMOQ(text: string): string {
+  // Try inline format: (Order 1-99)
+  let match = text.match(PATTERNS.moqInline);
+  if (match) {
+    return `${match[1]}-${match[2]}`;
+  }
+
+  // Try minimum order format
+  match = text.match(PATTERNS.moqMinimum);
+  if (match) {
+    return match[1];
+  }
+
+  // Try general MOQ format
+  match = text.match(PATTERNS.moq);
+  if (match) {
+    return match[3] || match[1] || '';
+  }
+
+  return '';
+}
+
+/**
+ * Determine series from part number
+ */
+function getSeriesFromPart(partNumber: string): string {
+  // Extract the prefix (first 3-4 digits before dash)
+  const match = partNumber.match(/^(\d{3,4})-/);
+  if (!match) return '';
+  
+  const prefix = match[1];
+  
+  // Check if this prefix maps to a known series
+  for (const [series, prefixes] of Object.entries(SERIES_PREFIXES)) {
+    if (prefixes.some(p => partNumber.startsWith(p))) {
+      return series;
+    }
+  }
+  
+  return prefix;
+}
+
+/**
+ * Calculate net price after applying series discount
+ */
+function calculateNetPrice(
+  price: number | null,
+  partNumber: string,
+  seriesDiscounts: Map<string, number>
+): number | null {
+  if (price === null) return null;
+  
+  const series = getSeriesFromPart(partNumber);
+  if (!series) return price;
+  
+  const discountPercent = seriesDiscounts.get(series);
+  if (!discountPercent) return price;
+  
+  return price * (1 - discountPercent / 100);
+}
+
+/**
+ * Check if a line is a table header (should be skipped)
+ */
+function isHeaderLine(line: string): boolean {
+  const lower = line.toLowerCase();
+  return (
+    PATTERNS.tableHeader.test(line) ||
+    PATTERNS.tableHeaderAlt.test(line) ||
+    lower.includes('wago part') ||
+    lower.includes('description') && lower.includes('price') ||
+    lower.includes('item') && lower.includes('qty')
+  );
+}
+
+/**
+ * Check if a part number is an internal/alternate code (should be skipped)
+ */
+function isInternalPartNumber(partNumber: string): boolean {
+  return PATTERNS.internalPart.test(partNumber.trim());
+}
+
+// ============================================================================
+// Metadata Extraction
+// ============================================================================
+
+function extractMetadata(text: string): QuoteMetadata {
+  const metadata: QuoteMetadata = {};
+  
+  // Extract from first ~2000 characters (first 1-2 pages typically)
+  const headerText = text.substring(0, 2000);
+  
+  // Quote number
+  let match = headerText.match(PATTERNS.quoteNumber);
+  if (match) {
+    metadata.quoteNumber = match[1].trim();
+  }
+  
+  // Quote date
+  match = headerText.match(PATTERNS.quoteDate);
+  if (match) {
+    metadata.quoteDate = match[1].trim();
+  }
+  
+  // Expiration date
+  match = headerText.match(PATTERNS.expirationDate);
+  if (match) {
+    metadata.expirationDate = match[1].trim();
+  }
+  
+  // Customer name
+  match = headerText.match(PATTERNS.customerName);
+  if (match) {
+    metadata.customerName = match[1].trim();
+  }
+  
+  // Customer number
+  match = headerText.match(PATTERNS.customerNumber);
+  if (match) {
+    metadata.customerNumber = match[1].trim();
+  }
+  
+  return metadata;
+}
+
+// ============================================================================
+// Line Parsing
+// ============================================================================
+
+interface ParsedLine {
+  type: 'product' | 'discount' | 'skip';
+  partNumber?: string;
+  series?: string;
+  description?: string;
+  price?: number;
+  discountPercent?: number;
+  moq?: string;
+  reason?: string;
+}
+
+/**
+ * Parse a single line from the PDF text
+ */
+function parseLine(line: string, lineNumber: number): ParsedLine {
+  const trimmed = line.trim();
+  
+  // Skip empty lines
+  if (!trimmed) {
+    return { type: 'skip', reason: 'empty' };
+  }
+  
+  // Skip header lines
+  if (isHeaderLine(trimmed)) {
+    return { type: 'skip', reason: 'header' };
+  }
+  
+  // Check for series discount line
+  let discountMatch = trimmed.match(PATTERNS.seriesDiscount) || trimmed.match(PATTERNS.seriesDiscountAlt);
+  if (discountMatch || (trimmed.toLowerCase().includes('series') && trimmed.includes('%'))) {
+    // Extract series and discount
+    const seriesMatch = trimmed.match(/(\d{3,4})\s*Series/i) || trimmed.match(/Series\s*(\d{3,4})/i);
+    const percentMatch = trimmed.match(PATTERNS.discountPercent);
+    
+    if (seriesMatch && percentMatch) {
+      return {
+        type: 'discount',
+        series: seriesMatch[1],
+        discountPercent: parseFloat(percentMatch[1]),
+        description: trimmed.split('Discount')[0].replace(/\d{3,4}\s*Series/i, '').trim(),
+      };
+    }
+  }
+  
+  // Try to parse as product line
+  // Split by common delimiters (tabs, multiple spaces, |)
+  const parts = trimmed.split(/\t+|\s{2,}|\|/).map(p => p.trim()).filter(p => p);
+  
+  if (parts.length < 2) {
+    return { type: 'skip', reason: 'insufficient_columns' };
+  }
+  
+  // Try to identify part number, description, and price
+  let partNumber = '';
+  let description = '';
+  let price: number | null = null;
+  
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    
+    // Check if this looks like a part number
+    if (!partNumber && PATTERNS.partNumber.test(part)) {
+      partNumber = part.replace(/\n/g, '/');
+      continue;
+    }
+    
+    // Check if this looks like a price
+    if (!price && PATTERNS.priceStrict.test(part)) {
+      price = extractPrice(part);
+      continue;
+    }
+    
+    // Check for loose price match (if no strict match found yet)
+    if (!price && parts.length - i <= 2) {
+      const extracted = extractPrice(part);
+      if (extracted !== null) {
+        price = extracted;
+        continue;
+      }
+    }
+    
+    // Otherwise, append to description
+    if (description) {
+      description += '; ' + part;
+    } else {
+      description = part;
+    }
+  }
+  
+  // Also try to extract part number from within description if not found
+  if (!partNumber && description) {
+    const partMatch = description.match(PATTERNS.partNumberLoose);
+    if (partMatch) {
+      partNumber = partMatch[1];
+      description = description.replace(partMatch[0], '').trim();
+    }
+  }
+  
+  // Skip if no valid part number found
+  if (!partNumber) {
+    return { type: 'skip', reason: 'no_part_number' };
+  }
+  
+  // Skip internal part numbers
+  if (isInternalPartNumber(partNumber)) {
+    return { type: 'skip', reason: 'internal_part' };
+  }
+  
+  // Skip if no price (strict requirement)
+  if (price === null) {
+    return { type: 'skip', reason: 'no_price' };
+  }
+  
+  // Extract MOQ from description
+  const moq = extractMOQ(description);
+  
+  // Clean MOQ info from description
+  let cleanDesc = description
+    .replace(PATTERNS.moqInline, '')
+    .replace(PATTERNS.moqMinimum, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  return {
+    type: 'product',
+    partNumber,
+    description: cleanDesc,
+    price,
+    moq,
+  };
+}
+
+// ============================================================================
+// Main Parser
+// ============================================================================
+
+/**
+ * Parse a WAGO quote PDF file
  */
 export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
   const result: ParseResult = {
     success: false,
     rows: [],
+    seriesDiscounts: [],
     unparsedRows: [],
     errors: [],
+    warnings: [],
+    metadata: {},
+    stats: {
+      totalLinesProcessed: 0,
+      productRows: 0,
+      discountRows: 0,
+      skippedRows: 0,
+    },
   };
-
+  
   try {
-    // Path to Python parser script
-    const scriptPath = path.join(__dirname, '../../../tools/wago-pdf-parser/parse_wago_quote_pdf.py');
-    const outputDir = path.dirname(pdfPath);
-
-    // Check if Python and dependencies are available
-    try {
-      await execAsync('python --version');
-    } catch {
-      result.errors.push('Python not found. Install Python 3.8+ and dependencies (pip install -r requirements.txt)');
+    // Read PDF file
+    const dataBuffer = await fs.readFile(pdfPath);
+    
+    // Parse PDF
+    const pdfData = await pdf(dataBuffer);
+    
+    if (!pdfData.text) {
+      result.errors.push('PDF contains no extractable text (may be scanned/image-based)');
       return result;
     }
-
-    // Run Python parser
-    const { stdout, stderr } = await execAsync(
-      `python "${scriptPath}" "${pdfPath}" "${outputDir}"`,
-      { timeout: 30000 } // 30 second timeout
-    );
-
-    if (stderr && !stderr.includes('Rows:')) {
-      result.errors.push(`Parser warning: ${stderr}`);
-    }
-
-    // Extract quote number and row count from stdout
-    const quoteMatch = stdout.match(/Quote Number: (.+)/);
-    const rowsMatch = stdout.match(/Rows: (\d+)/);
-    const savedMatch = stdout.match(/Saved: (.+)/);
-
-    if (!savedMatch) {
-      result.errors.push('Parser did not generate CSV output');
-      return result;
-    }
-
-    const csvPath = savedMatch[1].trim();
-
-    // Read generated CSV
-    const csvContent = await fs.readFile(csvPath, 'utf-8');
-    const lines = csvContent.split('\n').filter(l => l.trim());
-
-    if (lines.length < 2) {
-      result.errors.push('CSV is empty or has no data rows');
-      return result;
-    }
-
-    // Parse CSV (skip header)
-    const header = lines[0].split(',');
-    const rows: ParsedRow[] = [];
-    const unparsed: string[] = [];
-
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-
-      try {
-        // Simple CSV parse (handles quoted fields)
-        const cols = line.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g) || [];
-        const cleaned = cols.map(c => c.replace(/^"|"$/g, '').trim());
-
-        if (cleaned.length < 5) {
-          unparsed.push(`Row ${i}: Incomplete data - ${line}`);
-          continue;
-        }
-
-        const [partNumber, series, description, price, discount] = cleaned;
-
-        // Skip rows with invalid data (e.g. "Failure" in price)
-        if (price && (price.toLowerCase().includes('failure') || price.toLowerCase().includes('error'))) {
-          unparsed.push(`Row ${i}: Invalid price - ${line}`);
-          continue;
-        }
-
-        rows.push({
-          partNumber: partNumber || '',
-          series: series || '',
-          description: description || '',
-          price: price || '',
-          discount: discount || '',
+    
+    // Normalize text
+    const text = normalizeText(pdfData.text);
+    
+    // Extract metadata from first pages
+    result.metadata = extractMetadata(text);
+    
+    // Split into lines
+    const lines = text.split('\n');
+    result.stats.totalLinesProcessed = lines.length;
+    
+    // First pass: collect series discounts
+    const seriesDiscountMap = new Map<string, number>();
+    
+    for (let i = 0; i < lines.length; i++) {
+      const parsed = parseLine(lines[i], i + 1);
+      
+      if (parsed.type === 'discount' && parsed.series && parsed.discountPercent) {
+        seriesDiscountMap.set(parsed.series, parsed.discountPercent);
+        
+        result.seriesDiscounts.push({
+          series: parsed.series,
+          discountPercent: parsed.discountPercent,
+          description: parsed.description || '',
         });
-      } catch (err) {
-        unparsed.push(`Row ${i}: Parse error - ${line}`);
+        
+        result.stats.discountRows++;
       }
     }
-
-    // Clean up CSV file
-    try {
-      await fs.unlink(csvPath);
-    } catch {
-      // Ignore cleanup errors
+    
+    // Second pass: parse product lines
+    const seenPartNumbers = new Set<string>();
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineNum = i + 1;
+      const parsed = parseLine(line, lineNum);
+      
+      if (parsed.type === 'product' && parsed.partNumber) {
+        // Check for duplicates
+        if (seenPartNumbers.has(parsed.partNumber)) {
+          result.warnings.push({
+            type: 'duplicate_part',
+            message: `Duplicate part number found`,
+            lineNumber: lineNum,
+            partNumber: parsed.partNumber,
+          });
+        }
+        seenPartNumbers.add(parsed.partNumber);
+        
+        // Calculate net price
+        const netPrice = calculateNetPrice(
+          parsed.price ?? null,
+          parsed.partNumber,
+          seriesDiscountMap
+        );
+        
+        // Determine series
+        const series = getSeriesFromPart(parsed.partNumber);
+        
+        // Check if discount should apply but doesn't
+        if (series && seriesDiscountMap.has(series) && netPrice === parsed.price) {
+          result.warnings.push({
+            type: 'missing_discount',
+            message: `Part has series ${series} but discount not applied`,
+            lineNumber: lineNum,
+            partNumber: parsed.partNumber,
+          });
+        }
+        
+        // Anomalous price check (too low or too high)
+        if (parsed.price !== undefined) {
+          if (parsed.price < 0.01) {
+            result.warnings.push({
+              type: 'anomalous_price',
+              message: `Price is unusually low: $${parsed.price}`,
+              lineNumber: lineNum,
+              partNumber: parsed.partNumber,
+            });
+          } else if (parsed.price > 50000) {
+            result.warnings.push({
+              type: 'anomalous_price',
+              message: `Price is unusually high: $${parsed.price}`,
+              lineNumber: lineNum,
+              partNumber: parsed.partNumber,
+            });
+          }
+        }
+        
+        result.rows.push({
+          partNumber: parsed.partNumber,
+          series,
+          description: parsed.description || '',
+          price: formatPrice(parsed.price ?? null),
+          discount: series && seriesDiscountMap.has(series) 
+            ? `${seriesDiscountMap.get(series)}%` 
+            : '',
+          moq: parsed.moq || '',
+          netPrice: formatPrice(netPrice),
+          lineNumber: lineNum,
+        });
+        
+        result.stats.productRows++;
+      } else if (parsed.type === 'skip') {
+        // Only track significant skips
+        if (parsed.reason !== 'empty' && parsed.reason !== 'header') {
+          const trimmed = line.trim();
+          if (trimmed.length > 5 && trimmed.length < 500) {
+            result.unparsedRows.push(`Line ${lineNum} (${parsed.reason}): ${trimmed.substring(0, 100)}${trimmed.length > 100 ? '...' : ''}`);
+          }
+        }
+        result.stats.skippedRows++;
+      }
     }
-
-    result.success = rows.length > 0;
-    result.rows = rows;
-    result.unparsedRows = unparsed;
-    result.metadata = {
-      quoteNumber: quoteMatch ? quoteMatch[1].trim() : undefined,
-      totalRows: lines.length - 1,
-      parsedRows: rows.length,
-    };
-
-    return result;
+    
+    // Add series discount rows to output
+    for (const discount of result.seriesDiscounts) {
+      result.rows.push({
+        partNumber: '',
+        series: discount.series,
+        description: discount.description,
+        price: '',
+        discount: `${discount.discountPercent}%`,
+        moq: '',
+        netPrice: '',
+        lineNumber: 0,
+      });
+    }
+    
+    result.success = result.rows.length > 0;
+    
+    // Final validation
+    if (result.rows.length === 0) {
+      result.errors.push('No valid product rows found in PDF');
+    }
+    
+    if (result.seriesDiscounts.length === 0) {
+      result.warnings.push({
+        type: 'parse_issue',
+        message: 'No series discounts found - prices may be list prices',
+      });
+    }
+    
   } catch (error: any) {
-    result.errors.push(error.message || 'Unknown error during PDF parsing');
-    return result;
+    if (error.code === 'ENOENT') {
+      result.errors.push(`PDF file not found: ${pdfPath}`);
+    } else if (error.message?.includes('Invalid PDF')) {
+      result.errors.push('Invalid or corrupted PDF file');
+    } else {
+      result.errors.push(`Parse error: ${error.message || 'Unknown error'}`);
+    }
   }
+  
+  return result;
+}
+
+// ============================================================================
+// CSV Export (for testing/debugging)
+// ============================================================================
+
+export function toCSV(result: ParseResult): string {
+  const headers = ['Part Number', 'Series', 'Description', 'Price', 'Discount', 'MOQ', 'Net Price'];
+  const rows = result.rows.map(r => [
+    r.partNumber,
+    r.series,
+    `"${r.description.replace(/"/g, '""')}"`,
+    r.price,
+    r.discount,
+    r.moq,
+    r.netPrice,
+  ].join(','));
+  
+  return [headers.join(','), ...rows].join('\n');
 }
