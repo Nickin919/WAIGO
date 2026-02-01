@@ -13,6 +13,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
 
   const navItems = [
     { path: '/dashboard', icon: Home, label: 'Dashboard', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
+    { path: '/sales', icon: TrendingUp, label: 'Sales Dashboard', roles: ['RSM', 'ADMIN'] },
     { path: '/catalog', icon: Grid3x3, label: 'Catalog', roles: ['FREE', 'BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
     { path: '/catalog-list', icon: FolderKanban, label: 'My Catalogs', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
     { path: '/product-finder', icon: Search, label: 'Product Finder', roles: ['FREE'] },
@@ -30,7 +31,6 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const managementItems = [
     { path: '/managed-users', icon: Building2, label: 'Managed Users', roles: ['DISTRIBUTOR', 'RSM', 'ADMIN'] },
     { path: '/assignments', icon: Users, label: 'Assignments', roles: ['DISTRIBUTOR', 'RSM', 'ADMIN'] },
-    { path: '/sales', icon: TrendingUp, label: 'Sales Dashboard', roles: ['RSM', 'ADMIN'] },
     { path: '/pricing-contracts', icon: Calculator, label: 'Pricing Contracts', roles: ['TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
     { path: '/activity', icon: BarChart3, label: 'Activity Dashboard', roles: ['DISTRIBUTOR', 'RSM', 'ADMIN'] },
   ];
