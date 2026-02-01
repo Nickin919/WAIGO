@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Heart, MessageCircle, Share2, Bookmark, ChevronDown } from 'lucide-react';
 import { videoApi } from '@/lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
+import clsx from 'clsx';
 
 interface Video {
   id: string;

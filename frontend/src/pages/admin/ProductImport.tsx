@@ -127,7 +127,7 @@ const ProductImport = () => {
       : PRODUCT_FIELDS.filter((f) => f.required).map((f) => f.value);
 
     requiredFields.forEach((field) => {
-      if (!mappedFields.includes(field)) {
+      if (!mappedFields.includes(field as ProductField)) {
         const fieldDef = PRODUCT_FIELDS.find((f) => f.value === field);
         errors.push(`Required field "${fieldDef?.label}" is not mapped`);
       }
@@ -372,10 +372,12 @@ const UploadStep = ({ onFileUpload, file }: { onFileUpload: any; file: File | nu
 // Mapping Step
 const MappingStep = ({
   headers,
+  rawData,
   columnMapping,
   setColumnMapping,
   updateOnly,
   setUpdateOnly,
+  validateMappings,
   onProceed,
   onBack,
 }: any) => {
@@ -432,7 +434,7 @@ const MappingStep = ({
               <tr key={index}>
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">{header}</td>
                 <td className="px-4 py-3 text-sm text-gray-600">
-                  {rawData[0]?.[index] || <span className="text-gray-400">—</span>}
+                  {rawData?.[0]?.[index] || <span className="text-gray-400">—</span>}
                 </td>
                 <td className="px-4 py-3">
                   <select
