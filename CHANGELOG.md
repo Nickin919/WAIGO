@@ -2,6 +2,24 @@
 
 All notable changes to the WAIGO App will be documented in this file.
 
+## [1.0.1] - 2026-01-31
+
+### Product Import Improvements
+
+#### Changes
+- **Drag-and-drop CSV upload** – Drop zone accepts CSV files via drag-and-drop or click-to-browse
+- **Column mapping** – Matching and mapping of CSV columns works reliably
+- **Sample file download** – Download sample CSV template for testing imports
+- **Catalog selector** – Choose which catalog to import into (fixes "No catalog selected")
+- **Custom CSV parser** – Replaced Papa.parse with FileReader + custom parser (handles BOM, quoted fields, large files)
+
+#### Restore
+```bash
+git checkout v1.0.1
+```
+
+---
+
 ## [1.0.0] - 2026-01-31
 
 ### First Production Release
@@ -65,4 +83,5 @@ git checkout -b hotfix/from-v1.0.0 v1.0.0
 
 | Version | Date | Description |
 |---------|------|-------------|
+| v1.0.1 | 2026-01-31 | Product import: drag-and-drop, catalog selector, sample download |
 | v1.0.0 | 2026-01-31 | First production release on Railway |
