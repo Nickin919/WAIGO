@@ -133,6 +133,48 @@ export const deleteCatalog = async (req: AuthRequest, res: Response): Promise<vo
 };
 
 /**
+ * GET /api/catalogs/my-summary – count of catalogs (assigned + created) and avg parts per catalog
+ */
+export const getMyCatalogSummary = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const userId = req.user.id;
+
+    const [assigned, created] = await Promise.all([
+      prisma.catalogAssignment.findMany({
+        where: { userId },
+        select: { catalogId: true },
+      }),
+      prisma.catalog.findMany({
+        where: { createdById: userId, isActive: true },
+        select: { id: true },
+      }),
+    ]);
+
+    const catalogIds = [...new Set([
+      ...assigned.map((a) => a.catalogId),
+      ...created.map((c) => c.id),
+    ])];
+
+    const catalogCount = catalogIds.length;
+    const totalPartsCount = catalogIds.length > 0
+      ? await prisma.part.count({ where: { catalogId: { in: catalogIds } } })
+      : 0;
+    const averagePartsPerCatalog = catalogCount > 0
+      ? Math.round(totalPartsCount / catalogCount)
+      : 0;
+
+    res.json({ catalogCount, averagePartsPerCatalog });
+  } catch (error) {
+    console.error('Get my catalog summary error:', error);
+    res.status(500).json({ error: 'Failed to fetch catalog summary' });
+  }
+};
+
+/**
  * Get catalog statistics
  */
 export const getCatalogStats = async (req: AuthRequest, res: Response): Promise<void> => {

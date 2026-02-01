@@ -21,9 +21,68 @@ function getRsmFilter(req: AuthRequest): { rsmId?: string } | undefined {
   return undefined;
 }
 
+const DEFAULT_YEAR = 2025;
+
 /**
- * POST /api/sales/upload - Upload Excel sales file (RSM/Admin only)
- * Parses ZANALYSIS_PATTERN format: row 7+, Col E=code, F=name, G-R=Jan-Dec amounts
+ * Parse Direct sales file: ZANALYSIS_PATTERN (8), row 7+, Col D=code, E=name, F–Q=Jan–Dec, R=Total (ignored).
+ */
+function parseDirectFile(worksheet: ExcelJS.Worksheet): { code: string; name: string; amounts: number[] }[] {
+  const dataStartRow = 7;
+  const colCode = 4;   // D – Sold-to party
+  const colName = 5;   // E – Customer name
+  const colJan = 6;    // F – first month (Jan); F–Q = Jan–Dec (12 cols), R(18)=Result ignored
+
+  const rows: { code: string; name: string; amounts: number[] }[] = [];
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber < dataStartRow) return;
+    const code = String(row.getCell(colCode)?.value ?? '').trim();
+    const name = String(row.getCell(colName)?.value ?? '').trim();
+    if (!code || !name) return;
+    const amounts: number[] = [];
+    for (let m = 0; m < 12; m++) {
+      const cell = row.getCell(colJan + m);
+      const val = cell?.value;
+      if (val === null || val === undefined || val === '') {
+        amounts.push(0);
+      } else {
+        const num = typeof val === 'number' ? val : parseFloat(String(val));
+        amounts.push(isNaN(num) ? 0 : Math.max(0, num));
+      }
+    }
+    rows.push({ code, name, amounts });
+  });
+  return rows;
+}
+
+/**
+ * Parse POS sales file: ZANALYSIS_PATTERN (7), row 6+, Col C=end customer code, E=name, F=amount.
+ * Skip "Result" rows. Returns list of { code, name, amount } (one amount per line; caller aggregates by customer).
+ */
+function parsePosFile(worksheet: ExcelJS.Worksheet): { code: string; name: string; amount: number }[] {
+  const dataStartRow = 6;
+  const colCode = 3;   // C – End Customer (code)
+  const colName = 5;   // E – Name End Customer
+  const colAmount = 6; // F – $ amount
+
+  const rows: { code: string; name: string; amount: number }[] = [];
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber < dataStartRow) return;
+    const code = String(row.getCell(colCode)?.value ?? '').trim();
+    const name = String(row.getCell(colName)?.value ?? '').trim();
+    if (!code || !name || code === 'Result' || name === 'Result') return;
+    const val = row.getCell(colAmount)?.value;
+    if (val === null || val === undefined || val === '') return;
+    const num = typeof val === 'number' ? val : parseFloat(String(val));
+    const amount = isNaN(num) ? 0 : Math.max(0, num);
+    if (amount === 0) return;
+    rows.push({ code, name, amount });
+  });
+  return rows;
+}
+
+/**
+ * POST /api/sales/upload - Upload Excel sales file (RSM/Admin only).
+ * Body: type = 'direct' | 'pos' (default 'direct'). For POS: month (1–12) and year required.
  */
 export const uploadSales = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -31,14 +90,11 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
-
-    // Only RSM can upload (Admin could add later if needed)
     if (req.user.role !== 'RSM' && req.user.role !== 'ADMIN') {
       res.status(403).json({ error: 'Only RSM or Admin can upload sales data' });
       return;
     }
 
-    // RSM uploads their own data; Admin must specify rsmId in body to upload on behalf of RSM
     const effectiveRsmId =
       req.user.role === 'RSM' ? req.user.id : (req.body?.rsmId as string | undefined);
     if (!effectiveRsmId) {
@@ -62,52 +118,87 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
+    const uploadType = (req.body?.type as string) || 'direct';
+    const year = req.body?.year != null ? parseInt(String(req.body.year), 10) : DEFAULT_YEAR;
+    const month = req.body?.month != null ? parseInt(String(req.body.month), 10) : undefined;
+
+    if (uploadType === 'pos') {
+      if (month == null || month < 1 || month > 12) {
+        fs.unlinkSync(req.file.path);
+        res.status(400).json({ error: 'For POS uploads, select the month (1–12) this data is for' });
+        return;
+      }
+      if (!year || year < 2000 || year > 2100) {
+        fs.unlinkSync(req.file.path);
+        res.status(400).json({ error: 'Invalid year for POS upload' });
+        return;
+      }
+    }
+
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(req.file.path);
 
-    let worksheet = workbook.getWorksheet('ZANALYSIS_PATTERN (8)');
-    if (!worksheet) {
-      worksheet = workbook.worksheets[0];
+    if (uploadType === 'pos') {
+      let worksheet = workbook.getWorksheet('ZANALYSIS_PATTERN (7)');
+      if (!worksheet) worksheet = workbook.worksheets[0];
+      if (!worksheet) {
+        fs.unlinkSync(req.file.path);
+        res.status(400).json({ error: 'No worksheet found in file' });
+        return;
+      }
+      const posRows = parsePosFile(worksheet);
+      fs.unlinkSync(req.file.path);
+      // Replace existing data for this RSM + year + month: delete then insert
+      await prisma.monthlySale.deleteMany({
+        where: {
+          salesCustomer: { rsmId: effectiveRsmId },
+          year,
+          month: month!,
+        },
+      });
+      // Aggregate by (code, name)
+      const byCustomer = new Map<string, { code: string; name: string; total: number }>();
+      for (const r of posRows) {
+        const key = `${r.code}\t${r.name}`;
+        const existing = byCustomer.get(key);
+        if (existing) existing.total += r.amount;
+        else byCustomer.set(key, { code: r.code, name: r.name, total: r.amount });
+      }
+      let processed = 0;
+      for (const { code, name, total } of byCustomer.values()) {
+        const salesCustomer = await prisma.salesCustomer.upsert({
+          where: { rsmId_code: { rsmId: effectiveRsmId, code } },
+          create: { rsmId: effectiveRsmId, code, name },
+          update: { name },
+        });
+        await prisma.monthlySale.upsert({
+          where: {
+            salesCustomerId_year_month: { salesCustomerId: salesCustomer.id, year, month: month! },
+          },
+          create: {
+            salesCustomerId: salesCustomer.id,
+            customerCode: code,
+            year,
+            month: month!,
+            amount: total,
+          },
+          update: { amount: total },
+        });
+        processed++;
+      }
+      res.json({ success: true, type: 'pos', rowsProcessed: processed, lineItems: posRows.length });
+      return;
     }
+
+    // Direct upload
+    let worksheet = workbook.getWorksheet('ZANALYSIS_PATTERN (8)');
+    if (!worksheet) worksheet = workbook.worksheets[0];
     if (!worksheet) {
       fs.unlinkSync(req.file.path);
       res.status(400).json({ error: 'No worksheet found in file' });
       return;
     }
-
-    const year = 2025;
-    const dataStartRow = 7;
-    const colCode = 5;   // E
-    const colName = 6;   // F
-    const colJan = 7;    // G
-
-    const rows: { code: string; name: string; amounts: number[] }[] = [];
-
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber < dataStartRow) return;
-
-      const codeCell = row.getCell(colCode);
-      const nameCell = row.getCell(colName);
-      const code = String(codeCell?.value ?? '').trim();
-      const name = String(nameCell?.value ?? '').trim();
-
-      if (!code || !name) return;
-
-      const amounts: number[] = [];
-      for (let m = 0; m < 12; m++) {
-        const cell = row.getCell(colJan + m);
-        let val = cell?.value;
-        if (val === null || val === undefined || val === '') {
-          amounts.push(0);
-        } else {
-          const num = typeof val === 'number' ? val : parseFloat(String(val));
-          amounts.push(isNaN(num) ? 0 : Math.max(0, num));
-        }
-      }
-
-      rows.push({ code, name, amounts });
-    });
-
+    const rows = parseDirectFile(worksheet);
     fs.unlinkSync(req.file.path);
 
     if (rows.length === 0) {
@@ -115,13 +206,18 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
+    const effectiveYear = year;
+    // Replace existing data for this RSM + year: delete all monthly sales for that year then insert
+    await prisma.monthlySale.deleteMany({
+      where: {
+        salesCustomer: { rsmId: effectiveRsmId },
+        year: effectiveYear,
+      },
+    });
     for (const row of rows) {
       const salesCustomer = await prisma.salesCustomer.upsert({
         where: {
-          rsmId_code: {
-            rsmId: effectiveRsmId,
-            code: row.code,
-          },
+          rsmId_code: { rsmId: effectiveRsmId, code: row.code },
         },
         create: {
           rsmId: effectiveRsmId,
@@ -130,23 +226,22 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
         },
         update: { name: row.name },
       });
-
-      for (let month = 1; month <= 12; month++) {
-        const amount = row.amounts[month - 1];
+      for (let m = 1; m <= 12; m++) {
+        const amount = row.amounts[m - 1];
         if (amount > 0) {
           await prisma.monthlySale.upsert({
             where: {
               salesCustomerId_year_month: {
                 salesCustomerId: salesCustomer.id,
-                year,
-                month,
+                year: effectiveYear,
+                month: m,
               },
             },
             create: {
               salesCustomerId: salesCustomer.id,
               customerCode: row.code,
-              year,
-              month,
+              year: effectiveYear,
+              month: m,
               amount,
             },
             update: { amount },
@@ -155,15 +250,14 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
           await prisma.monthlySale.deleteMany({
             where: {
               salesCustomerId: salesCustomer.id,
-              year,
-              month,
+              year: effectiveYear,
+              month: m,
             },
           });
         }
       }
     }
-
-    res.json({ success: true, rowsProcessed: rows.length });
+    res.json({ success: true, type: 'direct', rowsProcessed: rows.length });
   } catch (error) {
     console.error('Sales upload error:', error);
     if (req.file?.path && fs.existsSync(req.file.path)) {
@@ -263,6 +357,59 @@ export const getSalesSummary = async (req: AuthRequest, res: Response): Promise<
   } catch (error) {
     console.error('Sales summary error:', error);
     res.status(500).json({ error: 'Failed to fetch sales summary' });
+  }
+};
+
+/**
+ * DELETE /api/sales/by-period - Clear sales data by month or by year (RSM/Admin).
+ * Body or query: year (required), month (optional, 1–12). If month omitted, clears entire year.
+ * Admin can send rsmId to clear for that RSM.
+ */
+export const clearSalesByPeriod = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    if (req.user.role !== 'RSM' && req.user.role !== 'ADMIN') {
+      res.status(403).json({ error: 'Only RSM or Admin can clear sales data' });
+      return;
+    }
+    const effectiveRsmId =
+      req.user.role === 'RSM' ? req.user.id : (req.body?.rsmId ?? req.query?.rsmId as string | undefined);
+    if (!effectiveRsmId) {
+      res.status(400).json({ error: 'Select an RSM to clear data for (Admin)' });
+      return;
+    }
+    const year = req.body?.year ?? req.query?.year;
+    const month = req.body?.month ?? req.query?.month;
+    const yearNum = year != null ? parseInt(String(year), 10) : NaN;
+    if (!yearNum || yearNum < 2000 || yearNum > 2100) {
+      res.status(400).json({ error: 'Valid year (2000–2100) required' });
+      return;
+    }
+    const where: { salesCustomer: { rsmId: string }; year: number; month?: number } = {
+      salesCustomer: { rsmId: effectiveRsmId },
+      year: yearNum,
+    };
+    if (month != null) {
+      const monthNum = parseInt(String(month), 10);
+      if (monthNum < 1 || monthNum > 12) {
+        res.status(400).json({ error: 'Month must be 1–12' });
+        return;
+      }
+      where.month = monthNum;
+    }
+    const result = await prisma.monthlySale.deleteMany({ where });
+    res.json({
+      success: true,
+      deleted: result.count,
+      year: yearNum,
+      ...(where.month != null ? { month: where.month } : {}),
+    });
+  } catch (error) {
+    console.error('Clear sales by period error:', error);
+    res.status(500).json({ error: 'Failed to clear sales data' });
   }
 };
 

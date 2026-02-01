@@ -1,25 +1,43 @@
 # Sales Dashboard
 
-Sales analytics dashboard for RSM and Admin users. Data is imported from Excel (.xlsx) files.
+Sales analytics dashboard for RSM and Admin users. Data is imported from Excel (.xlsx) files in two formats: **Direct sales** (12 months per file) and **POS sales** (one month per file; user selects the month).
 
 ## Access
 
 - **RSM**: View and upload their own sales data
 - **Admin**: View all RSMs' data or select a specific RSM; upload on behalf of an RSM
 
-## Excel Format
+## Excel formats
+
+### 1. Direct sales (12 months + total)
 
 - **Sheet name**: `ZANALYSIS_PATTERN (8)` or first sheet if not found
 - **Data starts at row 7**
 - **Columns**:
-  - E (5): Sold-to party (customer code)
-  - F (6): Customer name
-  - G–R (7–18): Jan–Dec sales amounts (2025)
+  - D (4): Sold-to party (customer code)
+  - E (5): Customer name
+  - F–Q (6–17): Jan–Dec sales amounts
+  - R (18): **Ignored** (Total column)
 - Empty cells and negative values are treated as 0
+
+### 2. POS sales (one month from distributors)
+
+- **Sheet name**: `ZANALYSIS_PATTERN (7)` or first sheet if not found
+- **Data starts at row 6**
+- **Columns**:
+  - A (1): Sales rep (ignored for import)
+  - B (2): Name CP / distributor (informational)
+  - C (3): End customer code
+  - D (4): End customer (duplicate/code)
+  - E (5): Name End Customer
+  - F (6): Amount ($)
+  - G (7): Result / total (ignored)
+- Rows where C or E is `"Result"` are skipped (subtotal rows).
+- **Month is not in the file** — the user selects the month (and year) when uploading in the dashboard.
 
 ## Database
 
-Models: `SalesCustomer`, `MonthlySale`
+Models: `SalesCustomer`, `MonthlySale` (no schema change for POS; same tables, aggregated by customer per month).
 
 Run migration (if using migrate):
 ```bash
@@ -35,6 +53,6 @@ cd backend && npx prisma db push
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | /api/sales/upload | RSM, Admin | Upload Excel file. Admin must send `rsmId` in form body. |
+| POST | /api/sales/upload | RSM, Admin | Upload Excel. Body: `type` = `direct` \| `pos` (default `direct`). For POS: `month` (1–12) and `year` required. Admin: `rsmId` in body. |
 | GET | /api/sales/summary | RSM, Admin | Sales summary. Admin can pass `?rsmId=` to filter. |
 | GET | /api/sales/rsms | Admin | List RSMs for dropdown. |

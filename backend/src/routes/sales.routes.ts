@@ -14,6 +14,9 @@ router.post('/upload', uploadExcel, salesController.uploadSales);
 // Get sales summary (RSM: own data, Admin: all or ?rsmId=)
 router.get('/summary', salesController.getSalesSummary);
 
+// Clear sales data by month or by year (query: year, month optional; Admin can pass rsmId)
+router.delete('/by-period', salesController.clearSalesByPeriod);
+
 // List RSMs for Admin dropdown (Admin only)
 router.get('/rsms', salesController.getRsms);
 

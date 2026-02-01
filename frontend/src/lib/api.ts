@@ -87,6 +87,8 @@ export const catalogApi = {
   getAll: () => api.get('/catalogs'),
   getById: (id: string) => api.get(`/catalogs/${id}`),
   getStats: (id: string) => api.get(`/catalogs/${id}/stats`),
+  /** Current user: catalogs assigned + created; average parts per catalog */
+  getMySummary: () => api.get('/catalogs/my-summary'),
   create: (name: string, description?: string) =>
     api.post('/catalogs', { name, description }),
   update: (id: string, data: { name?: string; description?: string; isActive?: boolean }) =>
@@ -356,6 +358,9 @@ export const salesApi = {
   getRsms: () => api.get('/sales/rsms'),
   upload: (formData: FormData) =>
     api.post('/sales/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  /** Clear data by month (year + month) or entire year (year only). Admin can pass rsmId in params. */
+  clearByPeriod: (params: { year: number; month?: number; rsmId?: string }) =>
+    api.delete('/sales/by-period', { params }),
 };
 
 // ============================================================================

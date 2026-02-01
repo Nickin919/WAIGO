@@ -12,7 +12,7 @@ import {
   Cell,
   Legend,
 } from 'recharts';
-import { Upload, TrendingUp, Users, Calendar } from 'lucide-react';
+import { Upload, TrendingUp, Users, Calendar, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { salesApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
@@ -49,6 +49,7 @@ interface RsmOption {
 }
 
 const COLORS = ['#16a34a', '#2563eb', '#7c3aed', '#dc2626', '#ea580c', '#ca8a04', '#0891b2', '#db2777', '#65a30d', '#4f46e5'];
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 const formatCurrency = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
@@ -60,7 +61,14 @@ const SalesDashboard = () => {
   const [uploading, setUploading] = useState(false);
   const [rsms, setRsms] = useState<RsmOption[]>([]);
   const [selectedRsmId, setSelectedRsmId] = useState<string>('');
-  const [fileInputKey, setFileInputKey] = useState(0);
+  const [fileInputKeyDirect, setFileInputKeyDirect] = useState(0);
+  const [fileInputKeyPos, setFileInputKeyPos] = useState(0);
+  const [posMonth, setPosMonth] = useState<number>(new Date().getMonth() + 1);
+  const [posYear, setPosYear] = useState<number>(new Date().getFullYear());
+  const [clearYear, setClearYear] = useState<number>(new Date().getFullYear());
+  const [clearMonth, setClearMonth] = useState<number>(new Date().getMonth() + 1);
+  const [clearEntireYear, setClearEntireYear] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const isAdmin = user?.role === 'ADMIN';
 
@@ -89,7 +97,17 @@ const SalesDashboard = () => {
     }
   }, [isAdmin]);
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const buildFormData = (file: File, type: 'direct' | 'pos', month?: number, year?: number): FormData => {
+    const formData = new FormData();
+    formData.append('excel', file);
+    formData.append('type', type);
+    if (isAdmin && selectedRsmId) formData.append('rsmId', selectedRsmId);
+    if (type === 'pos' && month != null) formData.append('month', String(month));
+    if (type === 'pos' && year != null) formData.append('year', String(year));
+    return formData;
+  };
+
+  const handleDirectUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.xlsx') && !file.name.toLowerCase().endsWith('.xls')) {
@@ -97,15 +115,10 @@ const SalesDashboard = () => {
       return;
     }
     setUploading(true);
-    const formData = new FormData();
-    formData.append('excel', file);
-    if (isAdmin && selectedRsmId) {
-      formData.append('rsmId', selectedRsmId);
-    }
     try {
-      await salesApi.upload(formData);
-      toast.success('Sales data uploaded');
-      setFileInputKey((k) => k + 1);
+      await salesApi.upload(buildFormData(file, 'direct'));
+      toast.success('Direct sales data uploaded');
+      setFileInputKeyDirect((k) => k + 1);
       fetchSummary(isAdmin && selectedRsmId ? selectedRsmId : undefined);
     } catch (err: unknown) {
       toast.error((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Upload failed');
@@ -113,6 +126,43 @@ const SalesDashboard = () => {
       setUploading(false);
     }
     e.target.value = '';
+  };
+
+  const handlePosUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.xlsx') && !file.name.toLowerCase().endsWith('.xls')) {
+      toast.error('Only .xlsx or .xls files allowed');
+      return;
+    }
+    setUploading(true);
+    try {
+      await salesApi.upload(buildFormData(file, 'pos', posMonth, posYear));
+      toast.success(`POS sales for ${MONTH_NAMES[posMonth - 1]} ${posYear} uploaded`);
+      setFileInputKeyPos((k) => k + 1);
+      fetchSummary(isAdmin && selectedRsmId ? selectedRsmId : undefined);
+    } catch (err: unknown) {
+      toast.error((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+    e.target.value = '';
+  };
+
+  const handleClearData = async () => {
+    setClearing(true);
+    try {
+      const params: { year: number; month?: number; rsmId?: string } = { year: clearYear };
+      if (!clearEntireYear) params.month = clearMonth;
+      if (isAdmin && selectedRsmId) params.rsmId = selectedRsmId;
+      await salesApi.clearByPeriod(params);
+      toast.success(clearEntireYear ? `Cleared all data for ${clearYear}` : `Cleared ${MONTH_NAMES[clearMonth - 1]} ${clearYear}`);
+      fetchSummary(isAdmin && selectedRsmId ? selectedRsmId : undefined);
+    } catch (err: unknown) {
+      toast.error((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to clear data');
+    } finally {
+      setClearing(false);
+    }
   };
 
   const pieData = (data?.topCustomers ?? []).map((c) => ({
@@ -154,29 +204,147 @@ const SalesDashboard = () => {
         )}
       </div>
 
-      {/* Upload section */}
-      <div className="card p-4 mb-6">
-        <label className="flex items-center gap-2 cursor-pointer w-fit">
-          <input
-            key={fileInputKey}
-            type="file"
-            accept=".xlsx,.xls"
-            className="hidden"
-            disabled={uploading || (isAdmin && !selectedRsmId)}
-            onChange={handleUpload}
-          />
-          <span className="btn btn-primary flex items-center gap-2">
-            <Upload className="w-4 h-4" />
-            {uploading ? 'Uploading...' : 'Upload Excel (.xlsx)'}
-          </span>
-        </label>
-        {isAdmin && !selectedRsmId && (
-          <p className="text-sm text-amber-600 mt-2">Select an RSM above to upload data on their behalf.</p>
-        )}
-        <p className="text-xs text-gray-500 mt-2">
-          Expected format: Sheet &quot;ZANALYSIS_PATTERN (8)&quot;, row 7+, Col E=code, F=name, G-R=Jan-Dec
-        </p>
+      {/* Upload sections: Direct and POS */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Direct sales – 12 months + total */}
+        <div className="card p-4">
+          <h3 className="font-semibold text-gray-900 mb-2">Direct sales (12 months)</h3>
+          <p className="text-sm text-gray-600 mb-3">
+            Excel with 12 months of direct account sales. Column R (Total) is ignored.
+          </p>
+          <label className="flex items-center gap-2 cursor-pointer w-fit">
+            <input
+              key={fileInputKeyDirect}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              disabled={uploading || (isAdmin && !selectedRsmId)}
+              onChange={handleDirectUpload}
+            />
+            <span className="btn btn-primary flex items-center gap-2">
+              <Upload className="w-4 h-4" />
+              {uploading ? 'Uploading...' : 'Upload direct (.xlsx)'}
+            </span>
+          </label>
+          <p className="text-xs text-gray-500 mt-2">
+            Sheet &quot;ZANALYSIS_PATTERN (8)&quot;, row 7+. D=code, E=name, F–Q=Jan–Dec, R=Total (ignored).
+          </p>
+        </div>
+
+        {/* POS sales – one month, user selects month */}
+        <div className="card p-4">
+          <h3 className="font-semibold text-gray-900 mb-2">POS sales (distributors)</h3>
+          <p className="text-sm text-gray-600 mb-3">
+            One month of POS data from distributors. Select which month this file is for.
+          </p>
+          <div className="flex flex-wrap items-center gap-3 mb-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Month</label>
+              <select
+                value={posMonth}
+                onChange={(e) => setPosMonth(Number(e.target.value))}
+                className="input w-[140px]"
+              >
+                {MONTH_NAMES.map((name, i) => (
+                  <option key={i} value={i + 1}>{name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Year</label>
+              <input
+                type="number"
+                min={2000}
+                max={2100}
+                value={posYear}
+                onChange={(e) => setPosYear(Number(e.target.value) || posYear)}
+                className="input w-[90px]"
+              />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer w-fit">
+            <input
+              key={fileInputKeyPos}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              disabled={uploading || (isAdmin && !selectedRsmId)}
+              onChange={handlePosUpload}
+            />
+            <span className="btn btn-primary flex items-center gap-2">
+              <Upload className="w-4 h-4" />
+              {uploading ? 'Uploading...' : 'Upload POS (.xlsx)'}
+            </span>
+          </label>
+          <p className="text-xs text-gray-500 mt-2">
+            Sheet &quot;ZANALYSIS_PATTERN (7)&quot;, row 6+. C=end customer code, E=name, F=amount. &quot;Result&quot; rows skipped.
+          </p>
+        </div>
       </div>
+      <p className="text-sm text-gray-500 mb-4">
+        Uploads replace existing data for that period: direct = full year, POS = selected month.
+      </p>
+
+      {/* Clear data by month or year */}
+      <div className="card p-4 mb-6">
+        <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+          <Trash2 className="w-4 h-4" />
+          Clear data
+        </h3>
+        <p className="text-sm text-gray-600 mb-3">
+          Remove sales data for a specific month or for an entire year. This cannot be undone.
+        </p>
+        <div className="flex flex-wrap items-end gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Year</label>
+            <select
+              value={clearYear}
+              onChange={(e) => setClearYear(Number(e.target.value))}
+              className="input w-[100px]"
+            >
+              {Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={clearEntireYear}
+              onChange={(e) => setClearEntireYear(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            <span className="text-sm text-gray-700">Entire year</span>
+          </label>
+          {!clearEntireYear && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Month</label>
+              <select
+                value={clearMonth}
+                onChange={(e) => setClearMonth(Number(e.target.value))}
+                className="input w-[140px]"
+              >
+                {MONTH_NAMES.map((name, i) => (
+                  <option key={i} value={i + 1}>{name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={handleClearData}
+            disabled={clearing || (isAdmin && !selectedRsmId)}
+            className="btn border border-red-200 text-red-700 hover:bg-red-50 flex items-center gap-2"
+          >
+            <Trash2 className="w-4 h-4" />
+            {clearing ? 'Clearing...' : clearEntireYear ? `Clear ${clearYear}` : `Clear ${MONTH_NAMES[clearMonth - 1]} ${clearYear}`}
+          </button>
+        </div>
+      </div>
+
+      {isAdmin && !selectedRsmId && (
+        <p className="text-sm text-amber-600 mb-6">Select an RSM above to upload or clear data on their behalf.</p>
+      )}
 
       {loading ? (
         <div className="card p-12 text-center">

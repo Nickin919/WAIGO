@@ -6,6 +6,8 @@ const router = Router();
 
 // Public routes
 router.get('/', catalogController.getAllCatalogs);
+// Must be before /:id so "my-summary" is not treated as id
+router.get('/my-summary', authenticate, catalogController.getMyCatalogSummary);
 router.get('/:id', catalogController.getCatalogById);
 
 // Protected routes (admin only)
