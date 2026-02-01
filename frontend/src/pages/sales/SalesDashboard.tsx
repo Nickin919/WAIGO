@@ -89,7 +89,7 @@ const SalesDashboard = () => {
   const [directYear, setDirectYear] = useState<number>(new Date().getFullYear());
   const [posMonth, setPosMonth] = useState<number>(new Date().getMonth() + 1);
   const [posYear, setPosYear] = useState<number>(new Date().getFullYear());
-  const [viewYear, setViewYear] = useState<number | 'all'>('all');
+  const [viewYear, setViewYear] = useState<number | 'all'>(new Date().getFullYear());
   const [clearYear, setClearYear] = useState<number>(new Date().getFullYear());
   const [clearMonth, setClearMonth] = useState<number>(new Date().getMonth() + 1);
   const [clearEntireYear, setClearEntireYear] = useState(false);
@@ -250,9 +250,9 @@ const SalesDashboard = () => {
               }}
               className="input max-w-[120px]"
             >
-              <option value="all">All years</option>
+              <option value="all">All years (combined)</option>
               {(data?.years?.length
-                ? data.years
+                ? [...data.years].sort((a, b) => b - a)
                 : Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i)
               ).map((y) => (
                 <option key={y} value={y}>{y}</option>
