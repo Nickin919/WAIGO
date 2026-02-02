@@ -72,12 +72,12 @@ const ManageCustomers = () => {
           <Link to="/quotes" className="text-green-600 hover:underline flex items-center gap-1">
             <ArrowLeft className="w-5 h-5" /> Back to Quotes
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900">Manage Customers</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Manage my customers</h1>
         </div>
       </div>
 
       <p className="text-gray-600 mb-6">
-        Remove duplicate or unused customers. Only customers you created are shown. Deleting unlinks them from quotes; quote names are kept.
+        Remove duplicate or unused customers. Only customers you created are shown. Deleting unlinks them from quotes; the name on the quote is kept.
       </p>
 
       <div className="flex gap-2 mb-6">

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, Search, UserPlus, Upload, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
@@ -585,7 +585,10 @@ const QuoteForm = () => {
 
         {/* Customer */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Customer</label>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <label className="block text-sm font-medium text-gray-700">Customer</label>
+            <Link to="/customers" className="text-sm text-green-600 hover:underline">Manage my customers</Link>
+          </div>
           <div className="flex gap-2">
             <div className="relative flex-1 max-w-md">
               <input
