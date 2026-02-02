@@ -65,6 +65,16 @@ export function useCreateProjectMutation() {
   });
 }
 
+export function useDeleteProjectMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (projectId: string) => projectApi.delete(projectId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: projectKeys.all });
+    },
+  });
+}
+
 export function useSubmitProjectMutation(projectId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useProjectStore, type ProjectItem } from '@/stores/projectStore';
 import { projectApi } from '@/lib/api';
@@ -13,6 +13,7 @@ import {
   useDeleteItemMutation,
   useUploadBOMMutation,
   useApplyUpgradeMutation,
+  useDeleteProjectMutation,
   projectKeys,
 } from '@/hooks/useProjectQueries';
 import {
@@ -47,12 +48,14 @@ const columnHelper = createColumnHelper<ProjectItem>();
 
 export default function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const projectQuery = useProjectQuery(projectId);
   const submitMutation = useSubmitProjectMutation(projectId);
   const finalizeMutation = useFinalizeProjectMutation(projectId);
   const addItemMutation = useAddItemMutation(projectId);
   const deleteItemMutation = useDeleteItemMutation(projectId);
+  const deleteProjectMutation = useDeleteProjectMutation();
   const uploadBOMMutation = useUploadBOMMutation(projectId);
   const applyUpgradeMutation = useApplyUpgradeMutation(projectId);
 
@@ -119,6 +122,7 @@ export default function ProjectDetail() {
   >([]);
   const [applyingItemId, setApplyingItemId] = useState<string | null>(null);
   const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [resolveItemId, setResolveItemId] = useState<string | null>(null);
   const [resolveSearchQuery, setResolveSearchQuery] = useState('');
   const [resolveSearchResults, setResolveSearchResults] = useState<Array<{ id: string; partNumber: string; description: string; category: string; catalogName: string }>>([]);
@@ -348,6 +352,21 @@ export default function ProjectDetail() {
       toast.success(`Resolved with ${part.partNumber}`);
     } catch {
       toast.error('Failed to resolve');
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!projectId) return;
+    setShowDeleteConfirm(false);
+    try {
+      await deleteProjectMutation.mutateAsync(projectId);
+      toast.success('Project deleted');
+      navigate('/projects');
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : 'Failed to delete project';
+      toast.error(msg);
     }
   };
 
@@ -601,8 +620,54 @@ export default function ProjectDetail() {
               View Report
             </Link>
           )}
+          <button
+            type="button"
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={deleteProjectMutation.isPending}
+            className="p-2 rounded-lg hover:bg-red-50 text-gray-500 hover:text-red-600 transition-colors"
+            aria-label="Delete project"
+          >
+            {deleteProjectMutation.isPending ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Trash2 className="w-5 h-5" />
+            )}
+          </button>
         </div>
       </div>
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete project</h3>
+            <p className="text-gray-600 mb-4">
+              This will permanently delete &quot;{project.name}&quot; and all its BOM items. This cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteProject}
+                disabled={deleteProjectMutation.isPending}
+                className="btn bg-red-600 hover:bg-red-700 text-white flex items-center gap-2"
+              >
+                {deleteProjectMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showFinalizeConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

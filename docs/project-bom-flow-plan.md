@@ -195,6 +195,21 @@ This document compares the original flow plan with the new recommendation, then 
 
 ---
 
+### Phase 8 – Delete project
+
+**Goal:** Allow users to delete a project from the editor with confirmation; keep list cache in sync.
+
+**8.1 Backend**
+- No change (DELETE `/projects/:id` already exists).
+
+**8.2 Frontend**
+- **useDeleteProjectMutation**: call `projectApi.delete(projectId)`; on success invalidate `projectKeys.all`.
+- **ProjectDetail**: “Delete project” button in header (trash icon); confirmation modal (“Delete project”, project name, “This cannot be undone”); on confirm call mutation then navigate to `/projects`.
+
+**Deliverables (Phase 8):** Delete project mutation; delete button and confirmation modal in Project Detail; redirect to list after delete.
+
+---
+
 ## 4. Summary – Phased order
 
 1. **Phase 1** – Routing (`/projects`, `/projects/new`, `/projects/:id`); Project status; useProjectStore + useProjectsListStore; Projects list; New project page; Project editor (tabs: Upload, Product Finder, BOM Table); BOM CSV upload + sample; Product Finder → add to BOM; Tanstack Table + debounced auto-save; API upload + security.
@@ -204,6 +219,7 @@ This document compares the original flow plan with the new recommendation, then 
 5. **Phase 5** – Tanstack Query, BullMQ, WebSockets, virtualization, shared Zod, feature flags (optional).
 6. **Phase 6** – Zod validation (BOM CSV/addItem), feature flags (env-based, sidebar).
 7. **Phase 7** – Project list pagination; stricter rate limits for upload and submit.
+8. **Phase 8** – Delete project (mutation + confirmation modal in Project Detail).
 
 ---
 
