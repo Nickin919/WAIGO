@@ -90,32 +90,76 @@ const PricingContractsPage = () => {
       })
       .then((res) => {
         const newId = res.data?.id;
-        toast.success('Pricing contract created');
+        const fileToUpload = createDropFile;
         setShowCreate(false);
         setNewName('');
         setNewDesc('');
         setCreateDropFile(null);
+        toast.success('Pricing contract created');
         loadContracts();
 
-        // If user dropped a file, upload it to the new contract
-        if (newId && createDropFile) {
+        // If user dropped a file, upload it to the new contract (PDF or CSV)
+        if (newId && fileToUpload) {
+          const isPdf = fileToUpload.name.toLowerCase().endsWith('.pdf');
+          const isCsv = fileToUpload.name.toLowerCase().endsWith('.csv');
+          if (!isPdf && !isCsv) {
+            toast.error('Only CSV or PDF files can be uploaded');
+            return;
+          }
           setUploadingId(newId);
           const formData = new FormData();
-          formData.append('csv', createDropFile);
-          formData.append('costTableId', newId);
-          costTableApi
-            .uploadCsv(formData)
-            .then((uploadRes) => {
-              toast.success(`CSV uploaded: ${uploadRes.data?.itemsImported ?? 'items'} imported`);
-              loadContracts();
-            })
-            .catch((err: unknown) =>
-              toast.error((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to upload CSV')
-            )
-            .finally(() => {
-              setUploadingId(null);
-              setCreateDropFile(null);
-            });
+          if (isPdf) {
+            formData.append('pdf', fileToUpload);
+            costTableApi
+              .uploadPdf(newId, formData)
+              .then((uploadRes) => {
+                const data = uploadRes.data;
+                const imported = data?.itemsImported ?? 0;
+                const metadata = data?.metadata ?? {};
+                const quoteInfo = metadata?.quoteNumber ? ` (Quote: ${metadata.quoteNumber})` : '';
+                toast.success(`PDF imported: ${imported} items added${quoteInfo}`);
+                loadContracts();
+                setUploadResult({
+                  contractId: newId,
+                  imported,
+                  skipped: data?.skipped ?? [],
+                  unparsed: data?.unparsedRowDetails ?? [],
+                  seriesDiscounts: data?.seriesDiscounts ?? [],
+                  warnings: data?.warnings ?? [],
+                  metadata: data?.metadata ?? {},
+                  stats: data?.stats ?? {},
+                });
+              })
+              .catch((err: unknown) => {
+                const errData = (err as { response?: { data?: { error?: string; unparsedRows?: string[]; warnings?: unknown[] } } })?.response?.data;
+                toast.error(errData?.error || 'Failed to upload PDF');
+                setUploadResult({
+                  contractId: newId,
+                  imported: 0,
+                  skipped: [],
+                  unparsed: errData?.unparsedRows ?? [],
+                  warnings: (Array.isArray(errData?.warnings) ? errData.warnings : []) as Array<{ type: string; message: string; partNumber?: string }>,
+                });
+              })
+              .finally(() => {
+                setUploadingId(null);
+              });
+          } else {
+            formData.append('csv', fileToUpload);
+            formData.append('costTableId', newId);
+            costTableApi
+              .uploadCsv(formData)
+              .then((uploadRes) => {
+                toast.success(`CSV uploaded: ${uploadRes.data?.itemsImported ?? 'items'} imported`);
+                loadContracts();
+              })
+              .catch((err: unknown) =>
+                toast.error((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to upload CSV')
+              )
+              .finally(() => {
+                setUploadingId(null);
+              });
+          }
         }
       })
       .catch((err: unknown) =>

@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import path from 'path';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import Papa from 'papaparse';
@@ -422,7 +423,8 @@ export const uploadPdf = async (req: AuthRequest, res: Response): Promise<void> 
       return;
     }
 
-    const pdfPath = req.file.path;
+    // Resolve to absolute path so read works regardless of cwd (e.g. on Railway)
+    const pdfPath = path.isAbsolute(req.file.path) ? req.file.path : path.resolve(req.file.path);
 
     // Parse PDF using native TypeScript parser
     const parseResult = await parseWagoPDF(pdfPath);
