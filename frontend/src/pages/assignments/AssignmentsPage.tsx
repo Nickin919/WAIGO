@@ -225,19 +225,50 @@ const AssignmentsPage = () => {
             <span className="text-sm text-gray-600">{selectedIds.size} selected</span>
             <button onClick={() => setModal('catalogs')} className="btn bg-gray-200">Assign Catalogs</button>
             <button onClick={() => setModal('contracts')} className="btn bg-gray-200">Assign Price Contracts</button>
-            {showAssignToDistributor && (
-              <button onClick={() => { setModal('distributor'); setSelectedDistributorId(''); }} className="btn bg-blue-100 text-blue-800 flex items-center gap-1">
+            <button onClick={() => setSelectedIds(new Set())} className="btn bg-gray-100 text-gray-600">Clear</button>
+          </div>
+        )}
+        {/* Always visible: Assign to distributor / Assign to RSM (disabled until valid selection) */}
+        {(canAssignToDistributor || canAssignDistributorToRsm) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {canAssignToDistributor && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedIds.size > 0 && selectedCustomers.length > 0) {
+                    setModal('distributor');
+                    setSelectedDistributorId('');
+                  } else {
+                    toast(selectedIds.size === 0 ? 'Select one or more users in the table first' : 'Selected users must include at least one customer (not Admin/RSM)');
+                  }
+                }}
+                disabled={selectedIds.size === 0 || selectedCustomers.length === 0}
+                title={selectedIds.size === 0 ? 'Select users in the table first' : selectedCustomers.length === 0 ? 'Selected users must include at least one customer (not Admin/RSM)' : 'Assign selected customers to a distributor'}
+                className={`btn flex items-center gap-1 ${selectedIds.size > 0 && selectedCustomers.length > 0 ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-500'}`}
+              >
                 <Building2 className="w-4 h-4" />
                 Assign to distributor
               </button>
             )}
-            {showAssignToRsm && (
-              <button onClick={() => { setModal('rsm'); setSelectedRsmId(''); }} className="btn bg-indigo-100 text-indigo-800 flex items-center gap-1">
+            {canAssignDistributorToRsm && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedIds.size > 0 && selectedDistributors.length > 0) {
+                    setModal('rsm');
+                    setSelectedRsmId('');
+                  } else {
+                    toast(selectedIds.size === 0 ? 'Select one or more users in the table first' : 'Selected users must include at least one distributor');
+                  }
+                }}
+                disabled={selectedIds.size === 0 || selectedDistributors.length === 0}
+                title={selectedIds.size === 0 ? 'Select users in the table first' : selectedDistributors.length === 0 ? 'Selected users must include at least one distributor' : 'Assign selected distributors to an RSM'}
+                className={`btn flex items-center gap-1 ${selectedIds.size > 0 && selectedDistributors.length > 0 ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-500'}`}
+              >
                 <UserCog className="w-4 h-4" />
                 Assign to RSM
               </button>
             )}
-            <button onClick={() => setSelectedIds(new Set())} className="btn bg-gray-100 text-gray-600">Clear</button>
           </div>
         )}
       </div>

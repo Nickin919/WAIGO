@@ -209,7 +209,7 @@ const ManagedUsersPage = () => {
                       <div className="flex flex-wrap items-center justify-end gap-2">
                         <Link
                           to={`/assignments?userId=${u.id}`}
-                          className="text-green-600 hover:underline text-sm"
+                          className="btn btn-outline text-sm py-1 px-2"
                         >
                           Catalog & Contracts
                         </Link>
@@ -220,7 +220,7 @@ const ManagedUsersPage = () => {
                               setAssignDistributorFor(u);
                               setSelectedDistributorId(u.assignedToDistributor?.id ?? '');
                             }}
-                            className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                            className="btn bg-blue-50 text-blue-700 border border-blue-200 text-sm py-1 px-2 flex items-center gap-1 hover:bg-blue-100"
                           >
                             <Building2 className="w-4 h-4" />
                             {u.assignedToDistributor ? 'Change distributor' : 'Assign to distributor'}
@@ -233,7 +233,7 @@ const ManagedUsersPage = () => {
                               setAssignRsmFor(u);
                               setSelectedRsmId(u.assignedToRsm?.id ?? '');
                             }}
-                            className="text-sm text-indigo-600 hover:underline flex items-center gap-1"
+                            className="btn bg-indigo-50 text-indigo-700 border border-indigo-200 text-sm py-1 px-2 flex items-center gap-1 hover:bg-indigo-100"
                           >
                             <UserCog className="w-4 h-4" />
                             {u.assignedToRsm ? 'Change RSM' : 'Assign to RSM'}
