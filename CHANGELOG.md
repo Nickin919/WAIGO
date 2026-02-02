@@ -2,6 +2,26 @@
 
 All notable changes to the WAIGO App will be documented in this file.
 
+## [1.3.1] - 2026-02-02
+
+### Manage my customers & button loading states
+
+#### Features
+- **Manage my customers** – New page to list and remove duplicate/unused customers (sidebar: "Manage my customers"; link also on Quote form next to Customer)
+- **Customer delete API** – `DELETE /api/customers/:id` (only creator can delete; quotes keep name, link cleared)
+- **Loading states** – Create/delete buttons show loading and are disabled during requests to prevent double-submit: Quote form (New Customer, Bulk Import), Create Project, Catalog delete, Quote delete
+
+#### Fixes
+- **Visibility** – Sidebar label "Manage my customers", legacy roles (TURNKEY, BASIC, DISTRIBUTOR) included so nav shows for all quote users
+- **Quote form** – "Manage my customers" link next to Customer label for quick access
+
+#### Restore
+```bash
+git checkout v1.3.1
+```
+
+---
+
 ## [1.2.0] - 2026-02-02
 
 ### PDF Pricing Contract Import
