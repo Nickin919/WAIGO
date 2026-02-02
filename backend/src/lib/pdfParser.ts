@@ -227,9 +227,10 @@ const PATTERNS = {
   partNumber: /^(\d{3,4}-\d{1,5}(?:[-\/][A-Z0-9]+)*)$/i,
   partNumberLoose: /(\d{3,4}-\d{1,5}(?:[-\/][A-Z0-9]+)*)/i,
 
-  // Price patterns
+  // Price patterns (strict requires .XX; loose accepts .X or .XX)
   price: /\$?\s*([\d,]+\.?\d*)/,
-  priceStrict: /^\$?\s*([\d,]+\.\d{2})$/,
+  priceStrict: /^\$?\s*([\d,]+\.?\d*)$/,
+  priceInLine: /\$\s*[\d,]+\.?\d*/,
 
   // Series discount patterns
   seriesDiscount: /(\d{3,4})\s*Series.*?([\d.]+)\s*%/i,
@@ -439,7 +440,7 @@ interface ParsedLine {
 }
 
 /**
- * Parse a single line from the PDF text
+ * Parse a single line from the PDF text (single-line mode: part, desc, price on one line)
  */
 function parseLine(line: string, lineNumber: number): ParsedLine {
   const trimmed = line.trim();
@@ -457,7 +458,6 @@ function parseLine(line: string, lineNumber: number): ParsedLine {
   // Check for series discount line
   let discountMatch = trimmed.match(PATTERNS.seriesDiscount) || trimmed.match(PATTERNS.seriesDiscountAlt);
   if (discountMatch || (trimmed.toLowerCase().includes('series') && trimmed.includes('%'))) {
-    // Extract series and discount
     const seriesMatch = trimmed.match(/(\d{3,4})\s*Series/i) || trimmed.match(/Series\s*(\d{3,4})/i);
     const percentMatch = trimmed.match(PATTERNS.discountPercent);
     
@@ -471,15 +471,31 @@ function parseLine(line: string, lineNumber: number): ParsedLine {
     }
   }
   
-  // Try to parse as product line
-  // Split by common delimiters (tabs, multiple spaces, |)
+  // Try single-line: part number and price on same line (with optional description between)
+  const partMatch = trimmed.match(PATTERNS.partNumberLoose);
+  const priceMatch = trimmed.match(PATTERNS.price);
+  if (partMatch && priceMatch) {
+    const partNumber = partMatch[1];
+    const priceVal = extractPrice(priceMatch[0]);
+    if (!isInternalPartNumber(partNumber) && priceVal !== null) {
+      let desc = trimmed
+        .replace(partMatch[0], '')
+        .replace(priceMatch[0], '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const moq = extractMOQ(desc);
+      desc = desc.replace(PATTERNS.moqInline, '').replace(PATTERNS.moqMinimum, '').replace(/\s+/g, ' ').trim();
+      return { type: 'product', partNumber, description: desc, price: priceVal, moq };
+    }
+  }
+  
+  // Try to parse as product line: split by tabs, 2+ spaces, or |
   const parts = trimmed.split(/\t+|\s{2,}|\|/).map(p => p.trim()).filter(p => p);
   
   if (parts.length < 2) {
     return { type: 'skip', reason: 'insufficient_columns' };
   }
   
-  // Try to identify part number, description, and price
   let partNumber = '';
   let description = '';
   let price: number | null = null;
@@ -487,19 +503,16 @@ function parseLine(line: string, lineNumber: number): ParsedLine {
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
     
-    // Check if this looks like a part number
     if (!partNumber && PATTERNS.partNumber.test(part)) {
       partNumber = part.replace(/\n/g, '/');
       continue;
     }
     
-    // Check if this looks like a price
     if (!price && PATTERNS.priceStrict.test(part)) {
       price = extractPrice(part);
       continue;
     }
     
-    // Check for loose price match (if no strict match found yet)
     if (!price && parts.length - i <= 2) {
       const extracted = extractPrice(part);
       if (extracted !== null) {
@@ -508,7 +521,6 @@ function parseLine(line: string, lineNumber: number): ParsedLine {
       }
     }
     
-    // Otherwise, append to description
     if (description) {
       description += '; ' + part;
     } else {
@@ -516,34 +528,27 @@ function parseLine(line: string, lineNumber: number): ParsedLine {
     }
   }
   
-  // Also try to extract part number from within description if not found
   if (!partNumber && description) {
-    const partMatch = description.match(PATTERNS.partNumberLoose);
-    if (partMatch) {
-      partNumber = partMatch[1];
-      description = description.replace(partMatch[0], '').trim();
+    const partMatchDesc = description.match(PATTERNS.partNumberLoose);
+    if (partMatchDesc) {
+      partNumber = partMatchDesc[1];
+      description = description.replace(partMatchDesc[0], '').trim();
     }
   }
   
-  // Skip if no valid part number found
   if (!partNumber) {
     return { type: 'skip', reason: 'no_part_number' };
   }
   
-  // Skip internal part numbers
   if (isInternalPartNumber(partNumber)) {
     return { type: 'skip', reason: 'internal_part' };
   }
   
-  // Skip if no price (strict requirement)
   if (price === null) {
     return { type: 'skip', reason: 'no_price' };
   }
   
-  // Extract MOQ from description
   const moq = extractMOQ(description);
-  
-  // Clean MOQ info from description
   let cleanDesc = description
     .replace(PATTERNS.moqInline, '')
     .replace(PATTERNS.moqMinimum, '')
@@ -557,6 +562,72 @@ function parseLine(line: string, lineNumber: number): ParsedLine {
     price,
     moq,
   };
+}
+
+/**
+ * Fallback: parse when each row is split across multiple lines (part on one line, description on next, price on next).
+ * Used when single-line parsing finds no product rows.
+ */
+function parseBlocksFallback(
+  lines: string[],
+  result: ParseResult,
+  seriesDiscountMap: Map<string, number>
+): void {
+  const seenPartNumbers = new Set<string>();
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    i++;
+    if (!trimmed) continue;
+    if (isHeaderLine(trimmed)) continue;
+    // Series discount: skip, already collected in first pass
+    if (trimmed.toLowerCase().includes('series') && trimmed.includes('%')) continue;
+    // Line that is ONLY a part number (WAGO format)
+    if (!PATTERNS.partNumber.test(trimmed)) continue;
+    const partNumber = trimmed;
+    if (isInternalPartNumber(partNumber)) continue;
+    // Collect description lines until we hit a line with a price
+    const descLines: string[] = [];
+    let price: number | null = null;
+    while (i < lines.length) {
+      const nextLine = lines[i];
+      const nextTrimmed = nextLine.trim();
+      i++;
+      if (!nextTrimmed) {
+        continue;
+      }
+      const priceFromLine = extractPrice(nextTrimmed);
+      if (priceFromLine !== null) {
+        price = priceFromLine;
+        break;
+      }
+      if (PATTERNS.partNumber.test(nextTrimmed)) {
+        i--; // Back up so next iteration sees this part number
+        break;
+      }
+      descLines.push(nextTrimmed);
+    }
+    if (price === null || price <= 0) continue;
+    if (seenPartNumbers.has(partNumber)) continue;
+    seenPartNumbers.add(partNumber);
+    const description = descLines.join(' ').replace(/\s+/g, ' ').trim();
+    const moq = extractMOQ(description);
+    let cleanDesc = description.replace(PATTERNS.moqInline, '').replace(PATTERNS.moqMinimum, '').replace(/\s+/g, ' ').trim();
+    const series = getSeriesFromPart(partNumber);
+    const netPrice = calculateNetPrice(price, partNumber, seriesDiscountMap);
+    result.rows.push({
+      partNumber,
+      series,
+      description: cleanDesc,
+      price: formatPrice(price),
+      discount: series && seriesDiscountMap.has(series) ? `${seriesDiscountMap.get(series)}%` : '',
+      moq,
+      netPrice: formatPrice(netPrice),
+      lineNumber: i,
+    });
+    result.stats.productRows++;
+  }
 }
 
 // ============================================================================
@@ -707,6 +778,11 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
         }
         result.stats.skippedRows++;
       }
+    }
+    
+    // Fallback: if no product rows from line-by-line parsing, try multi-line blocks (part, then desc lines, then price)
+    if (result.stats.productRows === 0 && lines.length > 0) {
+      parseBlocksFallback(lines, result, seriesDiscountMap);
     }
     
     // Add series discount rows to output
