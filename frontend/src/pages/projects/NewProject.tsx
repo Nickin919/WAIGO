@@ -1,15 +1,14 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { projectApi } from '@/lib/api';
+import { useCreateProjectMutation } from '@/hooks/useProjectQueries';
 
 export default function NewProject() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [creating, setCreating] = useState(false);
+  const createMutation = useCreateProjectMutation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -17,18 +16,22 @@ export default function NewProject() {
       toast.error('Project name is required');
       return;
     }
-    if (creating) return;
-    setCreating(true);
     try {
-      const { data } = await projectApi.create({ name: name.trim(), description: description.trim() || undefined });
+      const data = await createMutation.mutateAsync({
+        name: name.trim(),
+        description: description.trim() || undefined,
+      });
       toast.success('Project created');
       navigate(`/projects/${data.id}`, { replace: true });
-    } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to create project');
-    } finally {
-      setCreating(false);
+    } catch (e: unknown) {
+      const msg = e && typeof e === 'object' && 'response' in e
+        ? (e as { response?: { data?: { error?: string } } }).response?.data?.error
+        : 'Failed to create project';
+      toast.error(msg || 'Failed to create project');
     }
   };
+
+  const creating = createMutation.isPending;
 
   return (
     <div className="container-custom py-6">

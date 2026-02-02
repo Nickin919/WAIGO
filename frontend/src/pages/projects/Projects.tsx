@@ -1,32 +1,13 @@
-import { useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, FolderKanban } from 'lucide-react';
-import { projectApi } from '@/lib/api';
-import { useProjectsListStore } from '@/stores/projectsListStore';
+import { useProjectsQuery } from '@/hooks/useProjectQueries';
 
 const Projects = () => {
-  const { projects, loading, setProjects, setLoading, setError } = useProjectsListStore();
-
-  const loadProjects = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data } = await projectApi.getAll();
-      setProjects(data);
-    } catch (error) {
-      console.error('Failed to load projects:', error);
-      setError('Failed to load projects');
-    } finally {
-      setLoading(false);
-    }
-  }, [setProjects, setLoading, setError]);
-
-  useEffect(() => {
-    loadProjects();
-  }, [loadProjects]);
+  const { data: projects = [], isLoading, error } = useProjectsQuery();
 
   const statusLabel = (s: string) => ({ DRAFT: 'Draft', SUBMITTED: 'Submitted', PROCESSING: 'Processing', COMPLETED: 'Completed' }[s] || s);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="w-16 h-16 border-4 border-wago-green border-t-transparent rounded-full animate-spin"></div>
@@ -43,6 +24,10 @@ const Projects = () => {
           <span>New Project</span>
         </Link>
       </div>
+
+      {error && (
+        <p className="text-red-600 mb-4">Failed to load projects.</p>
+      )}
 
       {projects.length === 0 ? (
         <div className="text-center py-12">

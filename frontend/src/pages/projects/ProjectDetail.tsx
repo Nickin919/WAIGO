@@ -1,9 +1,20 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useProjectStore, type ProjectItem } from '@/stores/projectStore';
 import { projectApi } from '@/lib/api';
 import { publicApi } from '@/lib/api';
 import toast from 'react-hot-toast';
+import {
+  useProjectQuery,
+  useSubmitProjectMutation,
+  useFinalizeProjectMutation,
+  useAddItemMutation,
+  useDeleteItemMutation,
+  useUploadBOMMutation,
+  useApplyUpgradeMutation,
+  projectKeys,
+} from '@/hooks/useProjectQueries';
 import {
   Upload,
   Search,
@@ -16,7 +27,6 @@ import {
   Send,
   CheckCircle,
   FileText,
-  RefreshCw,
 } from 'lucide-react';
 import {
   useReactTable,
@@ -25,34 +35,61 @@ import {
   createColumnHelper,
   type ColumnDef,
 } from '@tanstack/react-table';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 type TabId = 'upload' | 'finder' | 'table';
 
 const DEBOUNCE_SAVE_MS = 2500;
+const VIRTUAL_THRESHOLD = 100;
+const ROW_HEIGHT = 52;
 
 const columnHelper = createColumnHelper<ProjectItem>();
 
 export default function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
+  const queryClient = useQueryClient();
+  const projectQuery = useProjectQuery(projectId);
+  const submitMutation = useSubmitProjectMutation(projectId);
+  const finalizeMutation = useFinalizeProjectMutation(projectId);
+  const addItemMutation = useAddItemMutation(projectId);
+  const deleteItemMutation = useDeleteItemMutation(projectId);
+  const uploadBOMMutation = useUploadBOMMutation(projectId);
+  const applyUpgradeMutation = useApplyUpgradeMutation(projectId);
+
   const {
     project,
     items,
-    loading,
-    error,
     setProject,
-    setLoading,
-    setError,
-    setStatus,
     updateItem,
     addItem,
     removeItem,
     reset,
   } = useProjectStore();
 
+  const loading = projectQuery.isLoading;
+  const err = projectQuery.error as { response?: { data?: { error?: string } } } | undefined;
+  const error = projectQuery.isError ? (err?.response?.data?.error || 'Failed to load project') : null;
+
+  useEffect(() => {
+    if (projectQuery.data) setProject(projectQuery.data);
+    else if (projectQuery.isFetched && !projectQuery.data) setProject(null);
+  }, [projectQuery.data, projectQuery.isFetched, setProject]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    return () => {
+      reset();
+      if (flushTimeout.current) clearTimeout(flushTimeout.current);
+    };
+  }, [projectId, reset]);
+
+  const loadProject = useCallback(() => {
+    if (projectId) projectQuery.refetch();
+  }, [projectId, projectQuery]);
+
   const [activeTab, setActiveTab] = useState<TabId>('table');
   const [uploadReplace, setUploadReplace] = useState(true);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [finderQuery, setFinderQuery] = useState('');
   const [finderLoading, setFinderLoading] = useState(false);
   const [finderResults, setFinderResults] = useState<
@@ -66,7 +103,6 @@ export default function ProjectDetail() {
   >([]);
   const [addingPartId, setAddingPartId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const [submitting, setSubmitting] = useState(false);
   const [suggestions, setSuggestions] = useState<
     Array<{
       itemId: string;
@@ -82,7 +118,6 @@ export default function ProjectDetail() {
     }>
   >([]);
   const [applyingItemId, setApplyingItemId] = useState<string | null>(null);
-  const [finalizing, setFinalizing] = useState(false);
   const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
   const [resolveItemId, setResolveItemId] = useState<string | null>(null);
   const [resolveSearchQuery, setResolveSearchQuery] = useState('');
@@ -90,33 +125,6 @@ export default function ProjectDetail() {
   const [resolveSearching, setResolveSearching] = useState(false);
   const pendingUpdates = useRef<Record<string, { quantity?: number; panelAccessory?: 'PANEL' | 'ACCESSORY' | null }>>({});
   const flushTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const loadProject = useCallback(async () => {
-    if (!projectId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const { data } = await projectApi.getById(projectId);
-      setProject(data);
-    } catch (err: unknown) {
-      const msg = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-        : 'Failed to load project';
-      setError(msg || 'Failed to load project');
-      toast.error(msg || 'Failed to load project');
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, setProject, setLoading, setError]);
-
-  useEffect(() => {
-    if (!projectId) return;
-    loadProject();
-    return () => {
-      reset();
-      if (flushTimeout.current) clearTimeout(flushTimeout.current);
-    };
-  }, [projectId, loadProject, reset]);
 
   useEffect(() => {
     if (!projectId || project?.status !== 'SUBMITTED') return;
@@ -138,6 +146,7 @@ export default function ProjectDetail() {
       for (const [itemId, patch] of Object.entries(map)) {
         await projectApi.updateItem(projectId, itemId, patch);
       }
+      queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) });
       setSaveStatus('saved');
       toast.success('Saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
@@ -148,7 +157,7 @@ export default function ProjectDetail() {
         pendingUpdates.current[itemId] = { ...pendingUpdates.current[itemId], ...patch };
       }
     }
-  }, [projectId]);
+  }, [projectId, queryClient]);
 
   const scheduleSave = useCallback(
     (itemId: string, patch: { quantity?: number; panelAccessory?: 'PANEL' | 'ACCESSORY' | null }) => {
@@ -179,15 +188,16 @@ export default function ProjectDetail() {
   const handleRemoveItem = useCallback(
     async (itemId: string) => {
       if (!projectId) return;
+      removeItem(itemId);
       try {
-        await projectApi.deleteItem(projectId, itemId);
-        removeItem(itemId);
+        await deleteItemMutation.mutateAsync(itemId);
         toast.success('Item removed');
       } catch {
         toast.error('Failed to remove item');
+        queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) });
       }
     },
-    [projectId, removeItem]
+    [projectId, removeItem, deleteItemMutation, queryClient]
   );
 
   const handleUpload = async () => {
@@ -195,19 +205,15 @@ export default function ProjectDetail() {
       toast.error('Select a CSV file');
       return;
     }
-    setUploading(true);
     try {
-      await projectApi.uploadBOM(projectId, uploadFile, uploadReplace);
+      await uploadBOMMutation.mutateAsync({ file: uploadFile, replace: uploadReplace });
       toast.success('BOM uploaded');
       setUploadFile(null);
-      await loadProject();
     } catch (err: unknown) {
       const msg = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
         : 'Upload failed';
       toast.error(msg);
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -249,13 +255,13 @@ export default function ProjectDetail() {
     if (!projectId) return;
     setAddingPartId(r.id);
     try {
-      const { data } = await projectApi.addItem(projectId, {
+      const data = await addItemMutation.mutateAsync({
         partId: r.id,
         partNumber: r.partNumber,
         description: r.description,
         quantity: 1,
       });
-      addItem(data);
+      addItem(data as ProjectItem);
       toast.success(`Added ${r.partNumber}`);
     } catch {
       toast.error('Failed to add to BOM');
@@ -266,45 +272,38 @@ export default function ProjectDetail() {
 
   const handleSubmit = async () => {
     if (!projectId) return;
-    setSubmitting(true);
     try {
-      await projectApi.submit(projectId);
-      let data: Awaited<ReturnType<typeof projectApi.getById>>['data'];
+      await submitMutation.mutateAsync();
       for (;;) {
-        const res = await projectApi.getById(projectId);
-        data = res.data;
-        if ((data as { status?: string }).status !== 'PROCESSING') break;
+        const { data } = await projectQuery.refetch();
+        if (data && (data as { status?: string }).status !== 'PROCESSING') {
+          setProject(data);
+          break;
+        }
         await new Promise((r) => setTimeout(r, 1000));
       }
-      setProject(data);
-      setStatus((data as { status: 'DRAFT' | 'SUBMITTED' | 'PROCESSING' | 'COMPLETED' }).status);
       toast.success('Project submitted for review');
     } catch (err: unknown) {
       const msg = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
         : 'Submit failed';
       toast.error(msg);
-    } finally {
-      setSubmitting(false);
     }
   };
 
   const handleFinalize = async () => {
     if (!projectId) return;
     setShowFinalizeConfirm(false);
-    setFinalizing(true);
     try {
-      await projectApi.finalize(projectId);
-      setStatus('COMPLETED');
-      await loadProject();
+      await finalizeMutation.mutateAsync();
+      await projectQuery.refetch();
+      if (projectQuery.data) setProject(projectQuery.data);
       toast.success('Project finalized');
     } catch (err: unknown) {
       const msg = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
         : 'Finalize failed';
       toast.error(msg);
-    } finally {
-      setFinalizing(false);
     }
   };
 
@@ -312,8 +311,7 @@ export default function ProjectDetail() {
     if (!projectId) return;
     setApplyingItemId(itemId);
     try {
-      await projectApi.applyUpgrade(projectId, { itemId, wagoPartId });
-      await loadProject();
+      await applyUpgradeMutation.mutateAsync({ itemId, wagoPartId });
       setSuggestions((prev) => prev.filter((s) => s.itemId !== itemId));
       toast.success('WAGO part applied');
     } catch {
@@ -481,6 +479,16 @@ export default function ProjectDetail() {
     getCoreRowModel: getCoreRowModel(),
   });
 
+  const rows = table.getRowModel().rows;
+  const bomTableContainerRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => bomTableContainerRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 5,
+  });
+  const useVirtual = items.length > VIRTUAL_THRESHOLD;
+
   if (!projectId) {
     return (
       <div className="container-custom py-6">
@@ -548,10 +556,10 @@ export default function ProjectDetail() {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={submitting}
+              disabled={submitMutation.isPending}
               className="btn btn-primary flex items-center gap-2"
             >
-              {submitting ? (
+              {submitMutation.isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Submitting…
@@ -568,10 +576,10 @@ export default function ProjectDetail() {
             <button
               type="button"
               onClick={() => setShowFinalizeConfirm(true)}
-              disabled={finalizing}
+              disabled={finalizeMutation.isPending}
               className="btn btn-primary flex items-center gap-2"
             >
-              {finalizing ? (
+              {finalizeMutation.isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Finalizing…
@@ -760,10 +768,10 @@ export default function ProjectDetail() {
           <button
             type="button"
             onClick={handleUpload}
-            disabled={!uploadFile || uploading}
+            disabled={!uploadFile || uploadBOMMutation.isPending}
             className="btn btn-primary flex items-center gap-2"
           >
-            {uploading ? (
+            {uploadBOMMutation.isPending ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Uploading…
@@ -861,6 +869,49 @@ export default function ProjectDetail() {
               <Table2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>No items yet. Use Upload or Product Finder to add parts.</p>
             </div>
+          ) : useVirtual ? (
+            <div ref={bomTableContainerRef} className="overflow-auto max-h-[60vh] overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 sticky top-0 z-10 bg-gray-50">
+                  {table.getHeaderGroups().map((hg) => (
+                    <tr key={hg.id}>
+                      {hg.headers.map((h) => (
+                        <th key={h.id} className="px-4 py-3 text-left font-medium text-gray-700">
+                          {flexRender(h.column.columnDef.header, h.getContext())}
+                        </th>
+                      ))}
+                    </tr>
+                  ))}
+                </thead>
+                <tbody
+                  className="divide-y divide-gray-200 relative"
+                  style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+                >
+                  {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                    const row = rows[virtualRow.index];
+                    return (
+                      <tr
+                        key={row.id}
+                        className="hover:bg-gray-50 absolute left-0 w-full"
+                        style={{
+                          height: `${ROW_HEIGHT}px`,
+                          transform: `translateY(${virtualRow.start}px)`,
+                          display: 'table',
+                          tableLayout: 'fixed',
+                          width: '100%',
+                        }}
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <td key={cell.id} className="px-4 py-2">
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -876,7 +927,7 @@ export default function ProjectDetail() {
                   ))}
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {table.getRowModel().rows.map((row) => (
+                  {rows.map((row) => (
                     <tr key={row.id} className="hover:bg-gray-50">
                       {row.getVisibleCells().map((cell) => (
                         <td key={cell.id} className="px-4 py-2">

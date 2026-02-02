@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { FileText, ArrowLeft, Download, Mail, Loader2 } from 'lucide-react';
 import { projectApi } from '@/lib/api';
 import toast from 'react-hot-toast';
+import { useReportQuery } from '@/hooks/useProjectQueries';
 
 type ReportData = {
   project: { id: string; name: string; description: string | null; status: string };
@@ -22,28 +23,15 @@ type ReportData = {
 
 export default function ProjectReport() {
   const { projectId } = useParams<{ projectId: string }>();
-  const [report, setReport] = useState<ReportData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const reportQuery = useReportQuery(projectId);
+  const report = reportQuery.data as ReportData | undefined;
+  const loading = reportQuery.isLoading;
+  const error = reportQuery.isError ? (reportQuery.error as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to load report' : null;
+
   const [email, setEmail] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingExcel, setDownloadingExcel] = useState(false);
-
-  useEffect(() => {
-    if (!projectId) return;
-    setLoading(true);
-    setError(null);
-    projectApi
-      .getReport(projectId)
-      .then(({ data }) => setReport(data as ReportData))
-      .catch((err) => {
-        const msg = err?.response?.data?.error || 'Failed to load report';
-        setError(msg);
-        toast.error(msg);
-      })
-      .finally(() => setLoading(false));
-  }, [projectId]);
 
   const handleDownloadPdf = async () => {
     if (!projectId) return;
