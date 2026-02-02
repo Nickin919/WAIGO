@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Building2, UserCog } from 'lucide-react';
+import { ArrowLeft, Building2, UserCog, Building } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { assignmentsApi, catalogApi, priceContractApi, userManagementApi } from '@/lib/api';
+import { assignmentsApi, catalogApi, priceContractApi, userManagementApi, accountsApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 
@@ -35,13 +35,15 @@ const AssignmentsPage = () => {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [modal, setModal] = useState<'catalogs' | 'contracts' | 'distributor' | 'rsm' | null>(null);
+  const [modal, setModal] = useState<'catalogs' | 'contracts' | 'distributor' | 'rsm' | 'company' | null>(null);
   const [catalogs, setCatalogs] = useState<{ id: string; name: string }[]>([]);
   const [contracts, setContracts] = useState<{ id: string; name: string }[]>([]);
   const [distributors, setDistributors] = useState<TreeUser[]>([]);
   const [rsms, setRsms] = useState<TreeUser[]>([]);
+  const [accounts, setAccounts] = useState<{ id: string; name: string; type: string }[]>([]);
   const [selectedDistributorId, setSelectedDistributorId] = useState('');
   const [selectedRsmId, setSelectedRsmId] = useState('');
+  const [selectedAccountId, setSelectedAccountId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const effRole = effectiveRole(user?.role ?? '');
@@ -86,6 +88,13 @@ const AssignmentsPage = () => {
         const list = Array.isArray(res.data) ? res.data : [];
         setContracts(list.map((c: any) => ({ id: c.id, name: c.name || 'Unnamed' })));
       }).catch(() => setContracts([]));
+    }
+    if (modal === 'company') {
+      accountsApi.getList().then((res) => {
+        const list = Array.isArray(res.data) ? res.data : [];
+        setAccounts(list);
+        setSelectedAccountId(list[0]?.id ?? '');
+      }).catch(() => setAccounts([]));
     }
   }, [modal]);
 
@@ -142,6 +151,25 @@ const AssignmentsPage = () => {
         setModal(null);
         setSelectedIds(new Set());
         setSelectedRsmId('');
+        assignmentsApi.getUsers({ page, limit: 20 }).then((r) => {
+          const d = r.data as { users: UserRow[] };
+          setUsers(d.users || []);
+        });
+      })
+      .catch((err: any) => toast.error(err.response?.data?.error || 'Failed to assign'))
+      .finally(() => setSubmitting(false));
+  };
+
+  const handleAssignToCompany = () => {
+    if (!selectedAccountId || selectedIds.size === 0) return;
+    setSubmitting(true);
+    userManagementApi
+      .assignToAccount({ userIds: Array.from(selectedIds), accountId: selectedAccountId })
+      .then(() => {
+        toast.success(`Assigned ${selectedIds.size} user(s) to company`);
+        setModal(null);
+        setSelectedIds(new Set());
+        setSelectedAccountId('');
         assignmentsApi.getUsers({ page, limit: 20 }).then((r) => {
           const d = r.data as { users: UserRow[] };
           setUsers(d.users || []);
@@ -208,7 +236,7 @@ const AssignmentsPage = () => {
           <h1 className="text-2xl font-bold">User & Catalog Assignments</h1>
         </div>
         <p className="text-sm text-gray-600">
-          Select users with the checkboxes, then use Assign Catalogs, Assign Price Contracts, Assign to distributor, or Assign to RSM (Admin only).
+          Select users with the checkboxes, then use Assign Catalogs, Assign Price Contracts, Assign to company, Assign to distributor, or Assign to RSM (Admin only).
         </p>
       </div>
 
@@ -225,6 +253,13 @@ const AssignmentsPage = () => {
             <span className="text-sm text-gray-600">{selectedIds.size} selected</span>
             <button onClick={() => setModal('catalogs')} className="btn bg-gray-200">Assign Catalogs</button>
             <button onClick={() => setModal('contracts')} className="btn bg-gray-200">Assign Price Contracts</button>
+            <button
+              onClick={() => { setModal('company'); setSelectedAccountId(''); }}
+              className="btn bg-amber-100 text-amber-800 flex items-center gap-1"
+            >
+              <Building className="w-4 h-4" />
+              Assign to company
+            </button>
             <button onClick={() => setSelectedIds(new Set())} className="btn bg-gray-100 text-gray-600">Clear</button>
           </div>
         )}
@@ -410,6 +445,35 @@ const AssignmentsPage = () => {
             <div className="flex gap-2 justify-end">
               <button onClick={() => { setModal(null); setSelectedRsmId(''); }} className="btn bg-gray-200">Cancel</button>
               <button onClick={handleAssignDistributorToRsm} disabled={!selectedRsmId || submitting} className="btn btn-primary">
+                {submitting ? 'Assigning...' : 'Assign'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {modal === 'company' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+              <Building className="w-5 h-5 text-amber-600" />
+              Assign to company
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Assign {selectedIds.size} selected user(s) to the same company.
+            </p>
+            <select
+              value={selectedAccountId}
+              onChange={(e) => setSelectedAccountId(e.target.value)}
+              className="input w-full mb-4"
+            >
+              <option value="">Select company...</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>{a.name} ({a.type})</option>
+              ))}
+            </select>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => { setModal(null); setSelectedAccountId(''); }} className="btn bg-gray-200">Cancel</button>
+              <button onClick={handleAssignToCompany} disabled={!selectedAccountId || submitting} className="btn btn-primary">
                 {submitting ? 'Assigning...' : 'Assign'}
               </button>
             </div>

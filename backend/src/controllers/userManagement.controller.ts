@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { effectiveRole, isInternal } from '../lib/roles';
+import { getSubordinateUserIds } from '../lib/hierarchy';
 
 /**
  * Get users based on current user's role and permissions
@@ -62,6 +63,7 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
         companyName: true,
         role: true,
         isActive: true,
+        accountId: true,
         turnkeyTeamId: true,
         assignedToDistributorId: true,
         assignedToRsmId: true,
@@ -70,6 +72,13 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
           select: {
             id: true,
             name: true
+          }
+        },
+        account: {
+          select: {
+            id: true,
+            name: true,
+            type: true
           }
         },
         assignedToDistributor: {
@@ -181,6 +190,58 @@ export const assignDistributorToRsm = async (req: AuthRequest, res: Response): P
   } catch (error) {
     console.error('Assign distributor error:', error);
     res.status(500).json({ error: 'Failed to assign distributor' });
+  }
+};
+
+/**
+ * Assign user(s) to a company (account). Admin/RSM: any user in hierarchy; Distributor: only their managed users.
+ * Body: { userId: string, accountId: string | null } or { userIds: string[], accountId: string | null }
+ */
+export const assignUserToAccount = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user || !['ADMIN', 'RSM', 'DISTRIBUTOR_REP'].includes(effectiveRole(req.user.role))) {
+      res.status(403).json({ error: 'Insufficient permissions' });
+      return;
+    }
+
+    const { userId, userIds, accountId } = req.body;
+    const ids: string[] = userId ? [userId] : Array.isArray(userIds) ? userIds : [];
+    if (ids.length === 0) {
+      res.status(400).json({ error: 'userId or userIds array is required' });
+      return;
+    }
+
+    if (accountId !== undefined && accountId !== null) {
+      const account = await prisma.account.findUnique({
+        where: { id: accountId },
+        select: { id: true, type: true },
+      });
+      if (!account) {
+        res.status(400).json({ error: 'Invalid account' });
+        return;
+      }
+    }
+
+    const subordinateIds = await getSubordinateUserIds(req.user!.id, req.user!.role);
+    const allowed = ids.every((id) => subordinateIds.includes(id));
+    if (!allowed) {
+      res.status(403).json({ error: 'Cannot assign one or more users outside your hierarchy' });
+      return;
+    }
+
+    await prisma.user.updateMany({
+      where: { id: { in: ids } },
+      data: { accountId: accountId || null },
+    });
+
+    const updated = await prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, accountId: true, account: { select: { id: true, name: true, type: true } } },
+    });
+    res.json(updated);
+  } catch (error) {
+    console.error('Assign to account error:', error);
+    res.status(500).json({ error: 'Failed to assign to account' });
   }
 };
 

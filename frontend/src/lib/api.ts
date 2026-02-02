@@ -296,6 +296,16 @@ export const notificationApi = {
 };
 
 // ============================================================================
+// Accounts (Companies) API
+// ============================================================================
+
+export const accountsApi = {
+  getList: () => api.get('/accounts'),
+  create: (data: { name: string; type: 'DISTRIBUTOR' | 'CUSTOMER' }) =>
+    api.post('/accounts', data),
+};
+
+// ============================================================================
 // User Management API (DISTRIBUTOR, RSM, ADMIN)
 // ============================================================================
 
@@ -309,6 +319,8 @@ export const userManagementApi = {
     api.post('/user-management/assign-to-distributor', data),
   assignDistributorToRsm: (data: { distributorId: string; rsmId: string }) =>
     api.post('/user-management/assign-distributor-to-rsm', data),
+  assignToAccount: (data: { userId?: string; userIds?: string[]; accountId: string | null }) =>
+    api.post('/user-management/assign-to-account', data),
   updateUserRole: (userId: string, role: string) =>
     api.patch(`/user-management/${userId}/role`, { role }),
 };

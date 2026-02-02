@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Search, UserPlus, Building2, UserCog, X } from 'lucide-react';
+import { Users, Search, UserPlus, Building2, UserCog, X, Building } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { userManagementApi, assignmentsApi } from '@/lib/api';
+import { userManagementApi, assignmentsApi, accountsApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 
@@ -14,10 +14,19 @@ interface User {
   companyName: string | null;
   role: string;
   isActive: boolean;
+  accountId?: string | null;
+  account?: { id: string; name: string; type: string } | null;
   turnkeyTeam?: { id: string; name: string } | null;
   assignedToDistributor?: { id: string; email: string | null; companyName: string | null } | null;
   assignedToRsm?: { id: string; email: string | null; firstName?: string | null; lastName?: string | null } | null;
   createdAt: string;
+}
+
+interface AccountOption {
+  id: string;
+  name: string;
+  type: string;
+  userCount?: number;
 }
 
 interface TreeUser {
@@ -37,14 +46,20 @@ const ManagedUsersPage = () => {
   const [rsms, setRsms] = useState<TreeUser[]>([]);
   const [assignDistributorFor, setAssignDistributorFor] = useState<User | null>(null);
   const [assignRsmFor, setAssignRsmFor] = useState<User | null>(null);
+  const [assignCompanyFor, setAssignCompanyFor] = useState<User | null>(null);
+  const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [selectedDistributorId, setSelectedDistributorId] = useState('');
   const [selectedRsmId, setSelectedRsmId] = useState('');
+  const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [newCompanyName, setNewCompanyName] = useState('');
+  const [newCompanyType, setNewCompanyType] = useState<'DISTRIBUTOR' | 'CUSTOMER'>('CUSTOMER');
   const [submitting, setSubmitting] = useState(false);
 
   const effRole = effectiveRole(user?.role ?? '');
   const canManage = user?.role && ['ADMIN', 'RSM', 'DISTRIBUTOR_REP'].includes(effRole);
   const canAssignToDistributor = effRole === 'ADMIN' || effRole === 'RSM';
   const canAssignDistributorToRsm = effRole === 'ADMIN';
+  const canAssignToCompany = canManage;
 
   useEffect(() => {
     if (!canManage) return;
@@ -76,6 +91,20 @@ const ManagedUsersPage = () => {
         setRsms([]);
       });
   }, [canAssignToDistributor, canAssignDistributorToRsm]);
+
+  useEffect(() => {
+    if (!assignCompanyFor || !canAssignToCompany) return;
+    setNewCompanyName('');
+    setNewCompanyType(isDistributor(assignCompanyFor) ? 'DISTRIBUTOR' : 'CUSTOMER');
+    accountsApi
+      .getList()
+      .then((res) => {
+        const list = Array.isArray(res.data) ? res.data : [];
+        setAccounts(list);
+        setSelectedAccountId(assignCompanyFor.accountId ?? '');
+      })
+      .catch(() => setAccounts([]));
+  }, [assignCompanyFor, canAssignToCompany]);
 
   const displayName = (u: User | TreeUser) =>
     [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || '—';
@@ -119,6 +148,45 @@ const ManagedUsersPage = () => {
       .finally(() => setSubmitting(false));
   };
 
+  const handleAssignToCompany = () => {
+    if (!assignCompanyFor) return;
+    const accountId = newCompanyName.trim() ? null : (selectedAccountId || null);
+    if (!accountId && !newCompanyName.trim()) {
+      toast.error('Select a company or create a new one');
+      return;
+    }
+    setSubmitting(true);
+    const doAssign = (id: string | null) =>
+      userManagementApi.assignToAccount({ userId: assignCompanyFor.id, accountId: id });
+    if (newCompanyName.trim()) {
+      accountsApi
+        .create({ name: newCompanyName.trim(), type: newCompanyType })
+        .then((res) => {
+          const created = (res.data as { id: string }).id;
+          return doAssign(created);
+        })
+        .then(() => {
+          toast.success('Company created and user assigned');
+          setAssignCompanyFor(null);
+          setSelectedAccountId('');
+          setNewCompanyName('');
+          userManagementApi.getUsers({ search: search || undefined }).then((r) => setUsers(Array.isArray(r.data) ? r.data : []));
+        })
+        .catch((err: any) => toast.error(err.response?.data?.error || 'Failed'))
+        .finally(() => setSubmitting(false));
+    } else {
+      doAssign(accountId)
+        .then(() => {
+          toast.success('User assigned to company');
+          setAssignCompanyFor(null);
+          setSelectedAccountId('');
+          userManagementApi.getUsers({ search: search || undefined }).then((r) => setUsers(Array.isArray(r.data) ? r.data : []));
+        })
+        .catch((err: any) => toast.error(err.response?.data?.error || 'Failed'))
+        .finally(() => setSubmitting(false));
+    }
+  };
+
   if (!canManage) {
     return (
       <div className="p-6">
@@ -133,7 +201,7 @@ const ManagedUsersPage = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Managed Users</h1>
           <p className="text-gray-600 mt-1">
-            Users in your hierarchy. Assign users to a distributor (RSM/Admin), or assign distributors to an RSM (Admin). Use Assignments for catalog and price contract assignments.
+            Users in your hierarchy. Assign users to a distributor (RSM/Admin), assign distributors to an RSM (Admin), or assign users to the same company (distributors → DISTRIBUTOR company, direct/basic → CUSTOMER company). Use Assignments for catalog and price contract assignments.
           </p>
         </div>
         <Link
@@ -176,6 +244,7 @@ const ManagedUsersPage = () => {
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Name</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Email</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Role</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-700">Company</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Distributor</th>
                   {canAssignDistributorToRsm && (
                     <th className="px-4 py-3 text-left font-medium text-gray-700">RSM</th>
@@ -193,6 +262,9 @@ const ManagedUsersPage = () => {
                       <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100">
                         {u.role}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {u.account?.name || '—'}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {u.assignedToDistributor?.companyName || u.assignedToDistributor?.email || '—'}
@@ -237,6 +309,16 @@ const ManagedUsersPage = () => {
                           >
                             <UserCog className="w-4 h-4" />
                             {u.assignedToRsm ? 'Change RSM' : 'Assign to RSM'}
+                          </button>
+                        )}
+                        {canAssignToCompany && isCustomerOrAny(u) && (
+                          <button
+                            type="button"
+                            onClick={() => setAssignCompanyFor(u)}
+                            className="btn bg-amber-50 text-amber-800 border border-amber-200 text-sm py-1 px-2 flex items-center gap-1 hover:bg-amber-100"
+                          >
+                            <Building className="w-4 h-4" />
+                            {u.account ? 'Change company' : 'Assign to company'}
                           </button>
                         )}
                       </div>
@@ -315,6 +397,66 @@ const ManagedUsersPage = () => {
                 {submitting ? 'Assigning...' : 'Assign'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign to company modal */}
+      {assignCompanyFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Assign to company</h3>
+              <button type="button" onClick={() => { setAssignCompanyFor(null); setSelectedAccountId(''); setNewCompanyName(''); }} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              Assign <strong>{displayName(assignCompanyFor)}</strong> to a company. {isDistributor(assignCompanyFor) ? 'Distributors share a company (DISTRIBUTOR).' : 'Direct/Basic users share a company (CUSTOMER).'}
+            </p>
+            {(() => {
+              const accountType = isDistributor(assignCompanyFor) ? 'DISTRIBUTOR' : 'CUSTOMER';
+              const filteredAccounts = accounts.filter((a) => a.type === accountType);
+              return (
+                <>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Existing company</label>
+                  <select
+                    value={newCompanyName.trim() ? '' : selectedAccountId}
+                    onChange={(e) => { setSelectedAccountId(e.target.value); setNewCompanyName(''); }}
+                    className="input w-full mb-3"
+                  >
+                    <option value="">— Select or create new below —</option>
+                    {filteredAccounts.map((a) => (
+                      <option key={a.id} value={a.id}>{a.name} ({a.type})</option>
+                    ))}
+                  </select>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Or create new company</label>
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      type="text"
+                      placeholder="Company name"
+                      value={newCompanyName}
+                      onChange={(e) => { setNewCompanyName(e.target.value); if (e.target.value.trim()) setSelectedAccountId(''); }}
+                      className="input flex-1"
+                    />
+                    <span className="flex items-center text-sm text-gray-500">({accountType})</span>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button type="button" onClick={() => { setAssignCompanyFor(null); setSelectedAccountId(''); setNewCompanyName(''); }} className="btn btn-outline">
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAssignToCompany}
+                      disabled={(!selectedAccountId && !newCompanyName.trim()) || submitting}
+                      className="btn btn-primary"
+                    >
+                      {submitting ? 'Assigning...' : 'Assign'}
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
