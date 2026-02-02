@@ -696,17 +696,13 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
   
   try {
     // Read PDF file and parse using pdf-parse v2 API
-    console.log('[PDF Parser] Reading file:', pdfPath);
     const dataBuffer = await fs.readFile(pdfPath);
-    console.log('[PDF Parser] File size:', dataBuffer.length, 'bytes');
     
     let pdfData: { text: string };
     try {
       const parser = new PDFParse({ data: dataBuffer });
       pdfData = await parser.getText();
-      console.log('[PDF Parser] Text extracted, length:', pdfData.text?.length || 0);
     } catch (parseErr: any) {
-      console.error('[PDF Parser] pdf-parse error:', parseErr.message);
       result.errors.push(`pdf-parse error: ${parseErr.message}`);
       return result;
     }
@@ -718,9 +714,6 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
     
     // Normalize text
     const text = normalizeText(pdfData.text);
-    
-    // Debug: log first 1000 chars
-    console.log('[PDF Parser] First 1000 chars of text:\n', text.substring(0, 1000));
     
     // Extract metadata from first pages
     result.metadata = extractMetadata(text);
