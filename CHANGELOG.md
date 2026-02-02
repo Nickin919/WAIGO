@@ -2,6 +2,33 @@
 
 All notable changes to the WAIGO App will be documented in this file.
 
+## [1.2.0] - 2026-02-02
+
+### PDF Pricing Contract Import
+
+#### Features
+- **PDF Upload** – Drag-and-drop WAGO pricing quote PDFs directly onto pricing contracts
+- **Native TypeScript Parser** – Built-in PDF parsing (no Python dependencies)
+- **Multi-page Table Support** – Handles tables spanning multiple pages
+- **Series Discount Detection** – Automatically extracts series discounts (e.g., "221 Series 41.5%")
+- **Net Price Calculation** – Applies series discounts to matching parts automatically
+- **MOQ Extraction** – Captures minimum order quantity information from descriptions
+- **Quote Metadata** – Extracts quote number, date, expiration, and customer info
+- **Detailed Import Report** – Shows imported items, skipped items (with reasons), series discounts found, validation warnings, and unparsed rows
+
+#### Technical
+- `pdf-parse` v2.4.5 library for text extraction
+- Robust regex patterns for WAGO part numbers (XXX-XXXX format)
+- Fallback parsing strategies for varying PDF layouts
+- False-positive filtering (phone numbers, addresses, internal codes)
+
+#### Restore
+```bash
+git checkout v1.2.0
+```
+
+---
+
 ## [1.1.0] - 2026-02-01
 
 ### Sales Dashboard – Year filtering & trending improvements
@@ -139,6 +166,9 @@ git checkout -b hotfix/from-v1.0.0 v1.0.0
 
 | Version | Date | Description |
 |---------|------|-------------|
+| v1.2.0 | 2026-02-02 | PDF pricing contract import with native TypeScript parser |
+| v1.1.0 | 2026-02-01 | Sales dashboard: year filtering, trending threshold |
+| v1.0.3 | 2026-02-01 | POS improvements: validation, distributor tracking |
 | v1.0.2 | 2026-02-01 | Quotes system: customers, bulk import, role-based discounts, snapshot pricing |
 | v1.0.1 | 2026-01-31 | Product import: drag-and-drop, catalog selector, sample download |
 | v1.0.0 | 2026-01-31 | First production release on Railway |
