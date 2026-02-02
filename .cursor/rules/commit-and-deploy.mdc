@@ -1,0 +1,16 @@
+---
+description: Always commit and deploy when work is completed
+alwaysApply: true
+---
+
+# Commit and Deploy When Completed
+
+When you finish implementing a feature, fix, or change requested by the user:
+
+1. **Commit** all relevant changes with a clear message (e.g. "feat: add X", "fix: Y", "UI: Z").
+2. **Push** to the default branch (e.g. `git push origin main`).
+3. **Deploy** to Railway so the live app is updated:
+   - From project root: `railway up --service WAIGO` and `railway up --service happy-harmony` (or whichever services exist).
+   - If the project is not linked, run `railway link --project <project-id>` first (use `railway list` or MCP to get project ID).
+
+Do not skip commit/push/deploy unless the user explicitly asks to leave changes uncommitted or not deploy.
