@@ -202,7 +202,7 @@ export const projectApi = {
   addItem: (id: string, item: any) =>
     api.post(`/projects/${id}/items`, item),
 
-  updateItem: (projectId: string, itemId: string, data: { quantity?: number; panelAccessory?: string; notes?: string }) =>
+  updateItem: (projectId: string, itemId: string, data: { quantity?: number; panelAccessory?: string; notes?: string; partId?: string }) =>
     api.patch(`/projects/${projectId}/items/${itemId}`, data),
 
   deleteItem: (projectId: string, itemId: string) =>
@@ -218,9 +218,18 @@ export const projectApi = {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
-  
+
+  submit: (id: string) =>
+    api.post(`/projects/${id}/submit`),
+
+  finalize: (id: string) =>
+    api.post(`/projects/${id}/finalize`),
+
   suggestUpgrades: (id: string) =>
     api.get(`/projects/${id}/suggest-upgrades`),
+
+  applyUpgrade: (projectId: string, data: { itemId: string; wagoPartId: string }) =>
+    api.post(`/projects/${projectId}/apply-upgrade`, data),
   
   createRevision: (id: string, changeSummary: string) =>
     api.post(`/projects/${id}/create-revision`, { changeSummary }),

@@ -13,6 +13,10 @@ import {
   Plus,
   Trash2,
   Loader2,
+  Send,
+  CheckCircle,
+  FileText,
+  RefreshCw,
 } from 'lucide-react';
 import {
   useReactTable,
@@ -38,6 +42,7 @@ export default function ProjectDetail() {
     setProject,
     setLoading,
     setError,
+    setStatus,
     updateItem,
     addItem,
     removeItem,
@@ -61,6 +66,28 @@ export default function ProjectDetail() {
   >([]);
   const [addingPartId, setAddingPartId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [submitting, setSubmitting] = useState(false);
+  const [suggestions, setSuggestions] = useState<
+    Array<{
+      itemId: string;
+      partNumber: string;
+      manufacturer: string | null;
+      wagoEquivalents: Array<{
+        wagoPartId: string;
+        partNumber: string;
+        description: string;
+        compatibilityScore: number;
+        notes: string | null;
+      }>;
+    }>
+  >([]);
+  const [applyingItemId, setApplyingItemId] = useState<string | null>(null);
+  const [finalizing, setFinalizing] = useState(false);
+  const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
+  const [resolveItemId, setResolveItemId] = useState<string | null>(null);
+  const [resolveSearchQuery, setResolveSearchQuery] = useState('');
+  const [resolveSearchResults, setResolveSearchResults] = useState<Array<{ id: string; partNumber: string; description: string; category: string; catalogName: string }>>([]);
+  const [resolveSearching, setResolveSearching] = useState(false);
   const pendingUpdates = useRef<Record<string, { quantity?: number; panelAccessory?: 'PANEL' | 'ACCESSORY' | null }>>({});
   const flushTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -90,6 +117,14 @@ export default function ProjectDetail() {
       if (flushTimeout.current) clearTimeout(flushTimeout.current);
     };
   }, [projectId, loadProject, reset]);
+
+  useEffect(() => {
+    if (!projectId || project?.status !== 'SUBMITTED') return;
+    projectApi.suggestUpgrades(projectId).then(({ data }) => {
+      const res = data as { suggestions?: typeof suggestions };
+      setSuggestions(res.suggestions ?? []);
+    }).catch(() => setSuggestions([]));
+  }, [projectId, project?.status]);
 
   const flushPendingUpdates = useCallback(async () => {
     if (!projectId || Object.keys(pendingUpdates.current).length === 0) {
@@ -229,6 +264,101 @@ export default function ProjectDetail() {
     }
   };
 
+  const handleSubmit = async () => {
+    if (!projectId) return;
+    setSubmitting(true);
+    try {
+      await projectApi.submit(projectId);
+      let data: Awaited<ReturnType<typeof projectApi.getById>>['data'];
+      for (;;) {
+        const res = await projectApi.getById(projectId);
+        data = res.data;
+        if ((data as { status?: string }).status !== 'PROCESSING') break;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      setProject(data);
+      setStatus((data as { status: 'DRAFT' | 'SUBMITTED' | 'PROCESSING' | 'COMPLETED' }).status);
+      toast.success('Project submitted for review');
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : 'Submit failed';
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleFinalize = async () => {
+    if (!projectId) return;
+    setShowFinalizeConfirm(false);
+    setFinalizing(true);
+    try {
+      await projectApi.finalize(projectId);
+      setStatus('COMPLETED');
+      await loadProject();
+      toast.success('Project finalized');
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : 'Finalize failed';
+      toast.error(msg);
+    } finally {
+      setFinalizing(false);
+    }
+  };
+
+  const handleApplyUpgrade = async (itemId: string, wagoPartId: string) => {
+    if (!projectId) return;
+    setApplyingItemId(itemId);
+    try {
+      await projectApi.applyUpgrade(projectId, { itemId, wagoPartId });
+      await loadProject();
+      setSuggestions((prev) => prev.filter((s) => s.itemId !== itemId));
+      toast.success('WAGO part applied');
+    } catch {
+      toast.error('Failed to apply upgrade');
+    } finally {
+      setApplyingItemId(null);
+    }
+  };
+
+  const handleResolveSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = resolveSearchQuery.trim();
+    if (q.length < 2) return;
+    setResolveSearching(true);
+    try {
+      const { data } = await publicApi.searchParts(q, { limit: 20 });
+      const res = data as { results?: typeof resolveSearchResults };
+      setResolveSearchResults(res.results ?? []);
+    } catch {
+      setResolveSearchResults([]);
+    } finally {
+      setResolveSearching(false);
+    }
+  };
+
+  const handleResolvePickPart = async (part: { id: string; partNumber: string; description: string }) => {
+    if (!projectId || !resolveItemId) return;
+    try {
+      await projectApi.updateItem(projectId, resolveItemId, { partId: part.id });
+      await loadProject();
+      setResolveItemId(null);
+      setResolveSearchQuery('');
+      setResolveSearchResults([]);
+      toast.success(`Resolved with ${part.partNumber}`);
+    } catch {
+      toast.error('Failed to resolve');
+    }
+  };
+
+  const isDraft = project?.status === 'DRAFT';
+  const isSubmitted = project?.status === 'SUBMITTED';
+  const isCompleted = project?.status === 'COMPLETED';
+
+  const getSuggestionForItem = (itemId: string) => suggestions.find((s) => s.itemId === itemId);
+
   const bomColumns: ColumnDef<ProjectItem, unknown>[] = [
     columnHelper.accessor('partNumber', {
       header: 'Part #',
@@ -244,47 +374,105 @@ export default function ProjectDetail() {
     }),
     columnHelper.accessor('quantity', {
       header: 'Qty',
+      cell: ({ row }) =>
+        isDraft ? (
+          <input
+            type="number"
+            min={1}
+            value={row.original.quantity}
+            onChange={(e) => handleQtyChange(row.original.id, Number(e.target.value))}
+            className="input w-20 py-1 text-center"
+          />
+        ) : (
+          <span>{row.original.quantity}</span>
+        ),
+    }),
+    columnHelper.accessor('isWagoPart', {
+      header: 'Type',
       cell: ({ row }) => (
-        <input
-          type="number"
-          min={1}
-          value={row.original.quantity}
-          onChange={(e) => handleQtyChange(row.original.id, Number(e.target.value))}
-          className="input w-20 py-1 text-center"
-        />
+        <span className={row.original.isWagoPart ? 'text-green-600' : 'text-gray-600'}>
+          {row.original.isWagoPart ? 'WAGO' : 'Non-WAGO'}
+        </span>
       ),
     }),
     columnHelper.accessor('panelAccessory', {
       header: 'Classification',
-      cell: ({ row }) => (
-        <select
-          value={row.original.panelAccessory ?? ''}
-          onChange={(e) => {
-            const v = e.target.value;
-            handleClassificationChange(row.original.id, v === '' ? null : (v as 'PANEL' | 'ACCESSORY'));
-          }}
-          className="input py-1 text-sm"
-        >
-          <option value="">—</option>
-          <option value="PANEL">Panel</option>
-          <option value="ACCESSORY">Accessory</option>
-        </select>
-      ),
+      cell: ({ row }) =>
+        isDraft ? (
+          <select
+            value={row.original.panelAccessory ?? ''}
+            onChange={(e) => {
+              const v = e.target.value;
+              handleClassificationChange(row.original.id, v === '' ? null : (v as 'PANEL' | 'ACCESSORY'));
+            }}
+            className="input py-1 text-sm"
+          >
+            <option value="">—</option>
+            <option value="PANEL">Panel</option>
+            <option value="ACCESSORY">Accessory</option>
+          </select>
+        ) : (
+          <span>{row.original.panelAccessory ?? '—'}</span>
+        ),
     }),
-    columnHelper.display({
-      id: 'actions',
-      header: '',
-      cell: ({ row }) => (
-        <button
-          type="button"
-          onClick={() => handleRemoveItem(row.original.id)}
-          className="p-2 text-red-600 hover:bg-red-50 rounded"
-          title="Remove"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-      ),
-    }),
+    ...(isSubmitted
+      ? [
+          columnHelper.display({
+            id: 'wagoSuggestion',
+            header: 'WAGO suggestion',
+            cell: ({ row }) => {
+              const sug = getSuggestionForItem(row.original.id);
+              if (!sug || sug.wagoEquivalents.length === 0) {
+                if (!row.original.partId)
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setResolveItemId(row.original.id)}
+                      className="btn btn-secondary text-sm"
+                    >
+                      Resolve
+                    </button>
+                  );
+                return <span>—</span>;
+              }
+              const best = sug.wagoEquivalents[0];
+              const applying = applyingItemId === row.original.id;
+              return (
+                <div className="flex flex-col gap-1">
+                  <span className="text-sm text-gray-700">{best.partNumber}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyUpgrade(row.original.id, best.wagoPartId)}
+                    disabled={applying}
+                    className="btn btn-primary text-xs"
+                  >
+                    {applying ? <Loader2 className="w-3 h-3 animate-spin inline" /> : null}
+                    Apply
+                  </button>
+                </div>
+              );
+            },
+          }),
+        ]
+      : []),
+    ...(isDraft
+      ? [
+          columnHelper.display({
+            id: 'actions',
+            header: '',
+            cell: ({ row }) => (
+              <button
+                type="button"
+                onClick={() => handleRemoveItem(row.original.id)}
+                className="p-2 text-red-600 hover:bg-red-50 rounded"
+                title="Remove"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            ),
+          }),
+        ]
+      : []),
   ];
 
   const table = useReactTable({
@@ -348,16 +536,148 @@ export default function ProjectDetail() {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 text-sm text-gray-500">
+        <div className="flex items-center gap-4 flex-wrap">
           {saveStatus === 'saving' && (
-            <>
+            <span className="flex items-center gap-2 text-sm text-gray-500">
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Saving…</span>
-            </>
+              Saving…
+            </span>
           )}
-          {saveStatus === 'saved' && <span className="text-green-600">Saved</span>}
+          {saveStatus === 'saved' && <span className="text-sm text-green-600">Saved</span>}
+          {isDraft && items.length > 0 && (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="btn btn-primary flex items-center gap-2"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Submitting…
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  Submit for Review
+                </>
+              )}
+            </button>
+          )}
+          {isSubmitted && (
+            <button
+              type="button"
+              onClick={() => setShowFinalizeConfirm(true)}
+              disabled={finalizing}
+              className="btn btn-primary flex items-center gap-2"
+            >
+              {finalizing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Finalizing…
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4" />
+                  Accept & Finalize
+                </>
+              )}
+            </button>
+          )}
+          {isCompleted && (
+            <Link
+              to={`/projects/${projectId}/report`}
+              className="btn btn-secondary flex items-center gap-2"
+            >
+              <FileText className="w-4 h-4" />
+              View Report
+            </Link>
+          )}
         </div>
       </div>
+
+      {showFinalizeConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Accept & Finalize</h3>
+            <p className="text-gray-600 mb-4">
+              This will mark the project as completed. You can view the report afterward. Continue?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowFinalizeConfirm(false)}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button type="button" onClick={handleFinalize} className="btn btn-primary">
+                Finalize
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resolveItemId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Resolve unknown part</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setResolveItemId(null);
+                  setResolveSearchQuery('');
+                  setResolveSearchResults([]);
+                }}
+                className="p-2 text-gray-500 hover:bg-gray-100 rounded"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-4 border-b border-gray-200">
+              <form onSubmit={handleResolveSearch} className="flex gap-2">
+                <input
+                  type="text"
+                  value={resolveSearchQuery}
+                  onChange={(e) => setResolveSearchQuery(e.target.value)}
+                  placeholder="Search part number or description..."
+                  className="input flex-1"
+                />
+                <button type="submit" disabled={resolveSearching} className="btn btn-primary">
+                  {resolveSearching ? 'Searching…' : 'Search'}
+                </button>
+              </form>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1">
+              {resolveSearchResults.length === 0 && !resolveSearching && (
+                <p className="text-gray-500 text-sm">Search for a WAGO part to assign to this line.</p>
+              )}
+              <ul className="space-y-2">
+                {resolveSearchResults.map((part) => (
+                  <li
+                    key={part.id}
+                    className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    <div>
+                      <span className="font-medium">{part.partNumber}</span>
+                      <p className="text-sm text-gray-600">{part.description}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleResolvePickPart(part)}
+                      className="btn btn-primary text-sm"
+                    >
+                      Use this part
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="border-b border-gray-200 mb-6">
         <nav className="flex gap-1" aria-label="Tabs">
@@ -381,6 +701,10 @@ export default function ProjectDetail() {
 
       {activeTab === 'upload' && (
         <div className="card p-6 max-w-2xl">
+          {!isDraft ? (
+            <p className="text-gray-600">This project has been submitted. Upload is only available for draft projects.</p>
+          ) : (
+            <>
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Upload BOM CSV</h2>
           <p className="text-gray-600 mb-4">
             Upload a CSV with columns: manufacturer, partNumber, description, quantity (optional: unitPrice).
@@ -451,11 +775,17 @@ export default function ProjectDetail() {
               </>
             )}
           </button>
+            </>
+          )}
         </div>
       )}
 
       {activeTab === 'finder' && (
         <div className="card p-6">
+          {!isDraft ? (
+            <p className="text-gray-600">This project has been submitted. Product Finder is only available for draft projects.</p>
+          ) : (
+            <>
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Product Finder</h2>
           <p className="text-gray-600 mb-4">
             Search public catalogs and add parts to this project BOM.
@@ -514,6 +844,8 @@ export default function ProjectDetail() {
                 </tbody>
               </table>
             </div>
+          )}
+            </>
           )}
         </div>
       )}

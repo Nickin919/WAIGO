@@ -17,6 +17,7 @@ import VideoFeed from './pages/video/VideoFeed';
 import Projects from './pages/projects/Projects';
 import ProjectDetail from './pages/projects/ProjectDetail';
 import NewProject from './pages/projects/NewProject';
+import ProjectReport from './pages/projects/ProjectReport';
 import Quotes from './pages/quotes/Quotes';
 import QuoteDetail from './pages/quotes/QuoteDetail';
 import QuoteForm from './pages/quotes/QuoteForm';
@@ -101,6 +102,7 @@ function App() {
         <Route path="/video/:videoId" element={<VideoPlayer />} />
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/new" element={<NewProject />} />
+        <Route path="/projects/:projectId/report" element={<ProjectReport />} />
         <Route path="/projects/:projectId" element={<ProjectDetail />} />
         <Route path="/quotes" element={<Quotes />} />
         <Route path="/quotes/new" element={<QuoteForm />} />

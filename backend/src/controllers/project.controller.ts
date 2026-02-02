@@ -294,6 +294,15 @@ export const updateProjectItem = async (req: AuthRequest, res: Response): Promis
     if (typeof body.quantity === 'number' && body.quantity >= 1) updateData.quantity = body.quantity;
     if (body.panelAccessory === 'PANEL' || body.panelAccessory === 'ACCESSORY' || body.panelAccessory === null) updateData.panelAccessory = body.panelAccessory;
     if (typeof body.notes === 'string') updateData.notes = body.notes;
+    if (body.partId != null) {
+      const part = await prisma.part.findUnique({ where: { id: body.partId }, select: { id: true, partNumber: true, description: true } });
+      if (part) {
+        updateData.partId = part.id;
+        updateData.partNumber = part.partNumber;
+        updateData.description = part.description;
+        updateData.isWagoPart = true;
+      }
+    }
 
     const existing = await prisma.projectItem.findFirst({
       where: { id: itemId, projectId },
@@ -352,10 +361,205 @@ export const deleteProjectItem = async (req: AuthRequest, res: Response): Promis
   }
 };
 
+/** Submit project for review: PROCESSING → auto-classify + cross-reference → SUBMITTED */
+export const submitProject = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const { id } = req.params;
+
+    const project = await prisma.project.findUnique({
+      where: { id },
+      include: { items: true }
+    });
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+    if (project.userId !== req.user.id) {
+      res.status(403).json({ error: 'Not authorized' });
+      return;
+    }
+    if (project.status !== 'DRAFT') {
+      res.status(400).json({ error: 'Only draft projects can be submitted' });
+      return;
+    }
+    if (project.items.length === 0) {
+      res.status(400).json({ error: 'Add at least one item to the BOM before submitting' });
+      return;
+    }
+
+    await prisma.project.update({
+      where: { id },
+      data: { status: 'PROCESSING' }
+    });
+
+    for (const item of project.items) {
+      const partNumber = item.partNumber?.trim();
+      if (!partNumber) continue;
+
+      const wagoPart = await prisma.part.findFirst({
+        where: { partNumber },
+        select: { id: true }
+      });
+      if (wagoPart) {
+        await prisma.projectItem.update({
+          where: { id: item.id },
+          data: { partId: wagoPart.id, isWagoPart: true }
+        });
+        continue;
+      }
+
+      const manufacturer = (item.manufacturer?.trim() || 'Unknown').slice(0, 200);
+      const crossRefs = await prisma.crossReference.findMany({
+        where: {
+          originalPartNumber: { equals: partNumber, mode: 'insensitive' },
+          originalManufacturer: { equals: manufacturer, mode: 'insensitive' }
+        },
+        take: 1
+      });
+      if (crossRefs.length > 0) {
+        await prisma.projectItem.update({
+          where: { id: item.id },
+          data: { hasWagoEquivalent: true }
+        });
+      }
+    }
+
+    await prisma.project.update({
+      where: { id },
+      data: { status: 'SUBMITTED' }
+    });
+
+    const updated = await prisma.project.findUnique({
+      where: { id },
+      include: {
+        items: {
+          include: {
+            part: { select: { id: true, partNumber: true, description: true, thumbnailUrl: true } }
+          }
+        }
+      }
+    });
+    res.json(updated);
+  } catch (error) {
+    console.error('Submit project error:', error);
+    res.status(500).json({ error: 'Failed to submit project' });
+  }
+};
+
+/** Set project to COMPLETED (after user accepts & finalizes). Only when SUBMITTED. */
+export const finalizeProject = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const { id } = req.params;
+
+    const project = await prisma.project.findUnique({
+      where: { id },
+      select: { userId: true, status: true }
+    });
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+    if (project.userId !== req.user.id) {
+      res.status(403).json({ error: 'Not authorized' });
+      return;
+    }
+    if (project.status !== 'SUBMITTED') {
+      res.status(400).json({ error: 'Only submitted projects can be finalized' });
+      return;
+    }
+
+    const updated = await prisma.project.update({
+      where: { id },
+      data: { status: 'COMPLETED' }
+    });
+    res.json(updated);
+  } catch (error) {
+    console.error('Finalize project error:', error);
+    res.status(500).json({ error: 'Failed to finalize project' });
+  }
+};
+
 export const suggestWagoUpgrades = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    // TODO: Implement cross-reference suggestions
-    res.status(501).json({ error: 'Upgrade suggestions not yet implemented' });
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const { id } = req.params;
+
+    const project = await prisma.project.findUnique({
+      where: { id },
+      select: { userId: true }
+    });
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+    if (project.userId !== req.user.id) {
+      res.status(403).json({ error: 'Not authorized' });
+      return;
+    }
+
+    const items = await prisma.projectItem.findMany({
+      where: { projectId: id },
+      select: { id: true, manufacturer: true, partNumber: true, partId: true, isWagoPart: true }
+    });
+
+    const suggestions: Array<{
+      itemId: string;
+      partNumber: string;
+      manufacturer: string | null;
+      wagoEquivalents: Array<{
+        wagoPartId: string;
+        partNumber: string;
+        description: string;
+        compatibilityScore: number;
+        notes: string | null;
+      }>;
+    }> = [];
+
+    for (const item of items) {
+      if (item.isWagoPart || item.partId) continue;
+      const partNumber = item.partNumber?.trim();
+      if (!partNumber) continue;
+
+      const manufacturer = (item.manufacturer?.trim() || 'Unknown').slice(0, 200);
+      const crossRefs = await prisma.crossReference.findMany({
+        where: {
+          originalPartNumber: { equals: partNumber, mode: 'insensitive' },
+          originalManufacturer: { equals: manufacturer, mode: 'insensitive' }
+        },
+        include: {
+          wagoPart: { select: { id: true, partNumber: true, description: true } }
+        },
+        orderBy: { compatibilityScore: 'desc' }
+      });
+
+      if (crossRefs.length > 0) {
+        suggestions.push({
+          itemId: item.id,
+          partNumber: item.partNumber,
+          manufacturer: item.manufacturer,
+          wagoEquivalents: crossRefs.map((ref) => ({
+            wagoPartId: ref.wagoPart.id,
+            partNumber: ref.wagoPart.partNumber,
+            description: ref.wagoPart.description,
+            compatibilityScore: ref.compatibilityScore,
+            notes: ref.notes
+          }))
+        });
+      }
+    }
+
+    res.json({ suggestions });
   } catch (error) {
     console.error('Suggest upgrades error:', error);
     res.status(500).json({ error: 'Failed to suggest upgrades' });
@@ -364,8 +568,62 @@ export const suggestWagoUpgrades = async (req: AuthRequest, res: Response): Prom
 
 export const applyWagoUpgrade = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    // TODO: Implement applying upgrade
-    res.status(501).json({ error: 'Apply upgrade not yet implemented' });
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const { id: projectId } = req.params;
+    const { itemId, wagoPartId } = req.body;
+
+    if (!itemId || !wagoPartId) {
+      res.status(400).json({ error: 'itemId and wagoPartId are required' });
+      return;
+    }
+
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { userId: true }
+    });
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+    if (project.userId !== req.user.id) {
+      res.status(403).json({ error: 'Not authorized' });
+      return;
+    }
+
+    const wagoPart = await prisma.part.findUnique({
+      where: { id: wagoPartId },
+      select: { id: true, partNumber: true, description: true }
+    });
+    if (!wagoPart) {
+      res.status(404).json({ error: 'WAGO part not found' });
+      return;
+    }
+
+    const item = await prisma.projectItem.findFirst({
+      where: { id: itemId, projectId }
+    });
+    if (!item) {
+      res.status(404).json({ error: 'Project item not found' });
+      return;
+    }
+
+    const updated = await prisma.projectItem.update({
+      where: { id: itemId },
+      data: {
+        partId: wagoPart.id,
+        partNumber: wagoPart.partNumber,
+        description: wagoPart.description,
+        isWagoPart: true,
+        hasWagoEquivalent: true
+      },
+      include: {
+        part: { select: { id: true, partNumber: true, description: true, thumbnailUrl: true } }
+      }
+    });
+    res.json(updated);
   } catch (error) {
     console.error('Apply upgrade error:', error);
     res.status(500).json({ error: 'Failed to apply upgrade' });

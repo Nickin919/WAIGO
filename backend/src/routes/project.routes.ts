@@ -21,6 +21,10 @@ router.post('/:id/upload-bom', uploadCSV, projectController.uploadBOM);
 router.patch('/:id/items/:itemId', projectController.updateProjectItem);
 router.delete('/:id/items/:itemId', projectController.deleteProjectItem);
 
+// Submit & finalize
+router.post('/:id/submit', projectController.submitProject);
+router.post('/:id/finalize', projectController.finalizeProject);
+
 // Cross-reference suggestions
 router.get('/:id/suggest-upgrades', projectController.suggestWagoUpgrades);
 router.post('/:id/apply-upgrade', projectController.applyWagoUpgrade);
