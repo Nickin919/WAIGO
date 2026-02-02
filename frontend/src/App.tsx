@@ -19,6 +19,7 @@ import ProjectDetail from './pages/projects/ProjectDetail';
 import Quotes from './pages/quotes/Quotes';
 import QuoteDetail from './pages/quotes/QuoteDetail';
 import QuoteForm from './pages/quotes/QuoteForm';
+import ManageCustomers from './pages/customers/ManageCustomers';
 import Profile from './pages/Profile';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ProductImport from './pages/admin/ProductImport';
@@ -102,6 +103,7 @@ function App() {
         <Route path="/quotes/new" element={<QuoteForm />} />
         <Route path="/quotes/:quoteId/edit" element={<QuoteForm />} />
         <Route path="/quotes/:quoteId" element={<QuoteDetail />} />
+        <Route path="/customers" element={<ManageCustomers />} />
         <Route path="/catalog-list" element={<CatalogList />} />
         <Route path="/catalog-creator/new" element={<CatalogCreator />} />
         <Route path="/catalog-creator/:id" element={<CatalogCreator />} />

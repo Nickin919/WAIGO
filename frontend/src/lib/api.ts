@@ -275,6 +275,7 @@ export const customerApi = {
   getAll: (params?: { search?: string }) => api.get('/customers', { params }),
   create: (data: { name: string; company?: string; email?: string; phone?: string; address?: string; city?: string; state?: string; zipCode?: string }) =>
     api.post('/customers', data),
+  delete: (id: string) => api.delete(`/customers/${id}`),
 };
 
 // ============================================================================

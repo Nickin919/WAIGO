@@ -76,6 +76,7 @@ const QuoteForm = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [showCustomerPicker, setShowCustomerPicker] = useState(false);
   const [showNewCustomer, setShowNewCustomer] = useState(false);
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
 
   const [productSearch, setProductSearch] = useState('');
   const [products, setProducts] = useState<Part[]>([]);
@@ -85,6 +86,7 @@ const QuoteForm = () => {
 
   const [bulkInput, setBulkInput] = useState('');
   const [showBulkImport, setShowBulkImport] = useState(false);
+  const [bulkImporting, setBulkImporting] = useState(false);
   const [notFoundParts, setNotFoundParts] = useState<string[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -334,6 +336,8 @@ const QuoteForm = () => {
       toast.error('Enter part numbers and select a catalog');
       return;
     }
+    if (bulkImporting) return;
+    setBulkImporting(true);
     partApi.lookupBulk(catalogId, parts).then((res) => {
       const data = res.data as { found: Part[]; notFound: string[] };
       const partCounts = new Map<string, number>();
@@ -386,7 +390,7 @@ const QuoteForm = () => {
       if ((data.notFound || []).length > 0) {
         toast.error(`${data.notFound.length} part(s) not found`);
       }
-    }).catch(() => toast.error('Bulk lookup failed'));
+    }).catch(() => toast.error('Bulk lookup failed')).finally(() => setBulkImporting(false));
   };
 
   const handleCsvDrop = (e: React.DragEvent) => {
@@ -431,14 +435,20 @@ const QuoteForm = () => {
       toast.error('Customer name required');
       return;
     }
-    customerApi.create(newCustomer).then((res) => {
-      const c = res.data as Customer;
-      setCustomerId(c.id);
-      setCustomerName(c.company ? `${c.name} (${c.company})` : c.name);
-      setShowNewCustomer(false);
-      setNewCustomer({ name: '', company: '', email: '', phone: '', address: '', city: '', state: '', zipCode: '' });
-      toast.success('Customer created');
-    }).catch(() => toast.error('Failed to create customer'));
+    if (creatingCustomer) return;
+    setCreatingCustomer(true);
+    customerApi
+      .create(newCustomer)
+      .then((res) => {
+        const c = res.data as Customer;
+        setCustomerId(c.id);
+        setCustomerName(c.company ? `${c.name} (${c.company})` : c.name);
+        setShowNewCustomer(false);
+        setNewCustomer({ name: '', company: '', email: '', phone: '', address: '', city: '', state: '', zipCode: '' });
+        toast.success('Customer created');
+      })
+      .catch(() => toast.error('Failed to create customer'))
+      .finally(() => setCreatingCustomer(false));
   };
 
   const updateItem = (index: number, updates: Partial<LineItem>) => {
@@ -623,8 +633,10 @@ const QuoteForm = () => {
                 <input type="text" placeholder="Address" value={newCustomer.address} onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })} className="input" />
               </div>
               <div className="flex gap-2 mt-4">
-                <button type="button" onClick={() => setShowNewCustomer(false)} className="btn bg-gray-200">Cancel</button>
-                <button type="button" onClick={createCustomer} className="btn btn-primary">Create</button>
+                <button type="button" onClick={() => setShowNewCustomer(false)} disabled={creatingCustomer} className="btn bg-gray-200">Cancel</button>
+                <button type="button" onClick={createCustomer} disabled={creatingCustomer} className="btn btn-primary">
+                  {creatingCustomer ? 'Creating...' : 'Create'}
+                </button>
               </div>
             </div>
           </div>
@@ -688,7 +700,9 @@ const QuoteForm = () => {
               <input ref={fileInputRef} type="file" accept=".csv" onChange={handleCsvSelect} className="hidden" />
               <p className="text-sm text-gray-600 mb-2">Drop CSV here or click to browse. Paste part numbers below:</p>
               <textarea value={bulkInput} onChange={(e) => setBulkInput(e.target.value)} placeholder="Part numbers (comma or newline separated)" className="input h-24 w-full" />
-              <button type="button" onClick={handleBulkImport} className="btn btn-primary mt-2">Import</button>
+              <button type="button" onClick={handleBulkImport} disabled={bulkImporting} className="btn btn-primary mt-2">
+                {bulkImporting ? 'Importing...' : 'Import'}
+              </button>
               {notFoundParts.length > 0 && <p className="text-amber-600 text-sm mt-2">Not found: {notFoundParts.join(', ')}</p>}
             </div>
           )}

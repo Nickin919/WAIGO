@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Grid3x3, PlayCircle, FolderKanban, DollarSign, Users, Calculator, Settings, BarChart3, Building2, Search, Link2, TrendingUp } from 'lucide-react';
+import { Home, Grid3x3, PlayCircle, FolderKanban, DollarSign, Users, Calculator, Settings, BarChart3, Building2, Search, Link2, TrendingUp, UserCircle } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 import clsx from 'clsx';
@@ -22,6 +22,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     { path: '/videos', icon: PlayCircle, label: 'Video Academy', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
     { path: '/projects', icon: FolderKanban, label: 'Projects', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
     { path: '/quotes', icon: DollarSign, label: 'Quotes', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
+    { path: '/customers', icon: UserCircle, label: 'Manage Customers', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
     { path: '/my-price-contracts', icon: Calculator, label: 'My Price Contracts', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
   ];
 

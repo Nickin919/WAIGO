@@ -6,5 +6,6 @@ const router = Router();
 
 router.get('/', authenticate, authorize('ADMIN', 'RSM', 'DISTRIBUTOR', 'TURNKEY', 'BASIC'), customerController.getCustomers);
 router.post('/', authenticate, authorize('ADMIN', 'RSM', 'DISTRIBUTOR', 'TURNKEY', 'BASIC'), customerController.createCustomer);
+router.delete('/:id', authenticate, authorize('ADMIN', 'RSM', 'DISTRIBUTOR', 'TURNKEY', 'BASIC'), customerController.deleteCustomer);
 
 export default router;

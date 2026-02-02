@@ -8,6 +8,7 @@ const Projects = () => {
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creatingProject, setCreatingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
 
@@ -28,7 +29,8 @@ const Projects = () => {
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    if (creatingProject) return;
+    setCreatingProject(true);
     try {
       await projectApi.create({
         name: newProjectName,
@@ -41,6 +43,8 @@ const Projects = () => {
       loadProjects();
     } catch (error) {
       toast.error('Failed to create project');
+    } finally {
+      setCreatingProject(false);
     }
   };
 
@@ -150,8 +154,8 @@ const Projects = () => {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary flex-1">
-                  Create
+                <button type="submit" disabled={creatingProject} className="btn btn-primary flex-1">
+                  {creatingProject ? 'Creating...' : 'Create'}
                 </button>
               </div>
             </form>

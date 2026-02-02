@@ -8,6 +8,7 @@ const QuoteDetail = () => {
   const { quoteId } = useParams();
   const [quote, setQuote] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (quoteId && quoteId !== 'new') {
@@ -17,10 +18,15 @@ const QuoteDetail = () => {
 
   const handleDelete = () => {
     if (!quoteId || !window.confirm('Delete this quote?')) return;
+    if (deleting) return;
+    setDeleting(true);
     quoteApi.delete(quoteId).then(() => {
       toast.success('Quote deleted');
       window.location.href = '/quotes';
-    }).catch(() => toast.error('Failed to delete'));
+    }).catch(() => {
+      toast.error('Failed to delete');
+      setDeleting(false);
+    });
   };
 
   const handleDownload = () => {
@@ -67,8 +73,15 @@ const QuoteDetail = () => {
           <button onClick={handleDownload} className="btn bg-gray-200 flex items-center gap-2">
             <Download className="w-4 h-4" /> CSV
           </button>
-          <button onClick={handleDelete} className="btn bg-red-50 text-red-600 hover:bg-red-100 flex items-center gap-2">
-            <Trash2 className="w-4 h-4" /> Delete
+          <button onClick={handleDelete} disabled={deleting} className="btn bg-red-50 text-red-600 hover:bg-red-100 flex items-center gap-2 disabled:opacity-60">
+            {deleting ? (
+              <>
+                <span className="inline-block w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              <><Trash2 className="w-4 h-4" /> Delete</>
+            )}
           </button>
         </div>
       </div>

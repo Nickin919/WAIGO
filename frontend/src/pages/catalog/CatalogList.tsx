@@ -17,6 +17,7 @@ interface Catalog {
 const CatalogList = () => {
   const [catalogs, setCatalogs] = useState<Catalog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingCatalogId, setDeletingCatalogId] = useState<string | null>(null);
 
   useEffect(() => {
     loadCatalogs();
@@ -36,7 +37,7 @@ const CatalogList = () => {
 
   const handleDelete = async (catalogId: string) => {
     if (!confirm('Are you sure you want to delete this catalog?')) return;
-
+    setDeletingCatalogId(catalogId);
     try {
       await axios.delete(`/api/catalog-creator/delete/${catalogId}`);
       toast.success('Catalog deleted successfully');
@@ -44,6 +45,8 @@ const CatalogList = () => {
     } catch (error: any) {
       console.error('Delete error:', error);
       toast.error(error.response?.data?.error || 'Failed to delete catalog');
+    } finally {
+      setDeletingCatalogId(null);
     }
   };
 
@@ -129,9 +132,14 @@ const CatalogList = () => {
                 </Link>
                 <button
                   onClick={() => handleDelete(catalog.id)}
-                  className="btn bg-red-50 text-red-600 hover:bg-red-100 text-sm"
+                  disabled={deletingCatalogId === catalog.id}
+                  className="btn bg-red-50 text-red-600 hover:bg-red-100 text-sm disabled:opacity-60"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  {deletingCatalogId === catalog.id ? (
+                    <span className="inline-block w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
                 </button>
               </div>
             </div>
