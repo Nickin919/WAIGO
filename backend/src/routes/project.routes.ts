@@ -1,9 +1,26 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import * as projectController from '../controllers/project.controller';
 import { authenticate } from '../middleware/auth';
 import { uploadCSV } from '../middleware/upload';
 
 const router = Router();
+
+// Stricter rate limits for heavy operations (per IP, 15 min window)
+const uploadRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_UPLOAD_MAX ?? '10', 10),
+  message: { error: 'Too many BOM uploads. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+const submitRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_SUBMIT_MAX ?? '10', 10),
+  message: { error: 'Too many project submissions. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // All routes require authentication
 router.use(authenticate);
@@ -17,12 +34,12 @@ router.delete('/:id', projectController.deleteProject);
 
 // BOM management
 router.post('/:id/items', projectController.addProjectItem);
-router.post('/:id/upload-bom', uploadCSV, projectController.uploadBOM);
+router.post('/:id/upload-bom', uploadRateLimit, uploadCSV, projectController.uploadBOM);
 router.patch('/:id/items/:itemId', projectController.updateProjectItem);
 router.delete('/:id/items/:itemId', projectController.deleteProjectItem);
 
 // Submit & finalize
-router.post('/:id/submit', projectController.submitProject);
+router.post('/:id/submit', submitRateLimit, projectController.submitProject);
 router.post('/:id/finalize', projectController.finalizeProject);
 
 // Cross-reference suggestions

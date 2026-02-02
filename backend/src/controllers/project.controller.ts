@@ -10,6 +10,10 @@ import { addProjectItemSchema, parseBomCsvRow } from '../lib/validation/bomSchem
 
 const BOM_SAMPLE = 'manufacturer,partNumber,description,quantity,unitPrice\nWAGO,221-413,PCB terminal block 2.5mm,10,0.85\nPhoenix Contact,1234567,Competitor terminal,5,\n';
 
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
+
 export const getProjects = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
@@ -17,22 +21,37 @@ export const getProjects = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const projects = await prisma.project.findMany({
-      where: { userId: req.user.id },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        status: true,
-        currentRevision: true,
-        updatedAt: true,
-        createdAt: true,
-        _count: { select: { items: true } }
-      },
-      orderBy: { updatedAt: 'desc' }
-    });
+    const page = Math.max(1, parseInt(String(req.query.page), 10) || DEFAULT_PAGE);
+    const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(String(req.query.limit), 10) || DEFAULT_LIMIT));
+    const skip = (page - 1) * limit;
 
-    res.json(projects);
+    const [projects, total] = await Promise.all([
+      prisma.project.findMany({
+        where: { userId: req.user.id },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          status: true,
+          currentRevision: true,
+          updatedAt: true,
+          createdAt: true,
+          _count: { select: { items: true } }
+        },
+        orderBy: { updatedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.project.count({ where: { userId: req.user.id } }),
+    ]);
+
+    res.json({
+      projects,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    });
   } catch (error) {
     console.error('Get projects error:', error);
     res.status(500).json({ error: 'Failed to fetch projects' });

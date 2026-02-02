@@ -1,9 +1,17 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, FolderKanban } from 'lucide-react';
+import { Plus, FolderKanban, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useProjectsQuery } from '@/hooks/useProjectQueries';
 
+const PAGE_SIZES = [10, 20, 50];
+
 const Projects = () => {
-  const { data: projects = [], isLoading, error } = useProjectsQuery();
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const { data, isLoading, error } = useProjectsQuery({ page, limit });
+  const projects = data?.projects ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
 
   const statusLabel = (s: string) => ({ DRAFT: 'Draft', SUBMITTED: 'Submitted', PROCESSING: 'Processing', COMPLETED: 'Completed' }[s] || s);
 
@@ -68,6 +76,51 @@ const Projects = () => {
               </div>
             </Link>
           ))}
+        </div>
+      )}
+
+      {total > 0 && (
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-gray-200 pt-4">
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-600">
+              {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}
+            </span>
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              Per page
+              <select
+                value={limit}
+                onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+                className="rounded border border-gray-300 px-2 py-1 text-gray-900"
+              >
+                {PAGE_SIZES.map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="btn btn-secondary flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Previous
+            </button>
+            <span className="text-sm text-gray-600 px-2">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="btn btn-secondary flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
     </div>

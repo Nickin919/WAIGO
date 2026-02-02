@@ -179,6 +179,22 @@ This document compares the original flow plan with the new recommendation, then 
 
 ---
 
+### Phase 7 – Polish & production readiness
+
+**Goal:** Paginate project list, apply stricter rate limits on heavy operations.
+
+**7.1 Backend**
+- **GET /projects**: support query params `page` (default 1) and `limit` (default 20, max 100); return `{ projects, total, page, limit, totalPages }`.
+- **Rate limits**: apply stricter limits to POST `/:id/upload-bom` and POST `/:id/submit` (e.g. 10 per 15 min per IP; configurable via `RATE_LIMIT_UPLOAD_MAX`, `RATE_LIMIT_SUBMIT_MAX`).
+
+**7.2 Frontend**
+- **Projects list**: use paginated GET with `page` and `limit`; add pagination UI (Prev/Next, “X–Y of total”, per-page selector 10/20/50).
+- **Query invalidation**: after create project, invalidate all list queries (`projectKeys.all`) so every page refetches.
+
+**Deliverables (Phase 7):** Paginated project list API and UI; stricter rate limits for BOM upload and project submit.
+
+---
+
 ## 4. Summary – Phased order
 
 1. **Phase 1** – Routing (`/projects`, `/projects/new`, `/projects/:id`); Project status; useProjectStore + useProjectsListStore; Projects list; New project page; Project editor (tabs: Upload, Product Finder, BOM Table); BOM CSV upload + sample; Product Finder → add to BOM; Tanstack Table + debounced auto-save; API upload + security.
@@ -186,6 +202,8 @@ This document compares the original flow plan with the new recommendation, then 
 3. **Phase 3** – GET report; report generation; View Report UI; Download PDF/Excel; Email report.
 4. **Phase 4** – Guest flow (optional).
 5. **Phase 5** – Tanstack Query, BullMQ, WebSockets, virtualization, shared Zod, feature flags (optional).
+6. **Phase 6** – Zod validation (BOM CSV/addItem), feature flags (env-based, sidebar).
+7. **Phase 7** – Project list pagination; stricter rate limits for upload and submit.
 
 ---
 

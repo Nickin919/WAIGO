@@ -186,8 +186,8 @@ export const commentApi = {
 // ============================================================================
 
 export const projectApi = {
-  getAll: () =>
-    api.get('/projects'),
+  getAll: (params?: { page?: number; limit?: number }) =>
+    api.get<{ projects: any[]; total: number; page: number; limit: number; totalPages: number }>('/projects', { params }),
   
   getById: (id: string) =>
     api.get(`/projects/${id}`),

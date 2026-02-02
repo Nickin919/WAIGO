@@ -3,16 +3,26 @@ import { projectApi } from '@/lib/api';
 
 export const projectKeys = {
   all: ['projects'] as const,
-  list: () => [...projectKeys.all, 'list'] as const,
+  list: (page?: number, limit?: number) => [...projectKeys.all, 'list', page, limit] as const,
   detail: (id: string) => [...projectKeys.all, 'detail', id] as const,
   report: (id: string) => [...projectKeys.all, 'report', id] as const,
 };
 
-export function useProjectsQuery() {
+export type ProjectsListResponse = {
+  projects: Array<{ id: string; name: string; description?: string; status: string; currentRevision: number; updatedAt: string; createdAt: string; _count?: { items: number } }>;
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
+export function useProjectsQuery(options?: { page?: number; limit?: number }) {
+  const page = options?.page ?? 1;
+  const limit = options?.limit ?? 20;
   return useQuery({
-    queryKey: projectKeys.list(),
+    queryKey: projectKeys.list(page, limit),
     queryFn: async () => {
-      const { data } = await projectApi.getAll();
+      const { data } = await projectApi.getAll({ page, limit });
       return data;
     },
   });
@@ -50,7 +60,7 @@ export function useCreateProjectMutation() {
       return data as { id: string };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: projectKeys.list() });
+      queryClient.invalidateQueries({ queryKey: projectKeys.all });
     },
   });
 }
