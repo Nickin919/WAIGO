@@ -35,6 +35,7 @@ import PricingContractsPage from './pages/management/PricingContractsPage';
 import ActivityPage from './pages/management/ActivityPage';
 import ProductFinder from './pages/public/ProductFinder';
 import BomCrossReference from './pages/public/BomCrossReference';
+import BomAnalyzer from './pages/public/BomAnalyzer';
 import SalesDashboard from './pages/sales/SalesDashboard';
 import NotFound from './pages/NotFound';
 
@@ -48,7 +49,7 @@ const GuestOrDashboardRedirect = () => {
 };
 
 // Paths allowed for guest (limited access without login)
-const GUEST_ALLOWED_PATHS = ['/catalog', '/product-finder', '/bom-cross-reference'];
+const GUEST_ALLOWED_PATHS = ['/catalog', '/product-finder', '/bom-cross-reference', '/bom-analyzer'];
 
 // Protect restricted routes from guest users
 const GuestRouteGuard = ({ children }: { children: React.ReactNode }) => {
@@ -120,6 +121,7 @@ function App() {
         <Route path="/activity" element={<ActivityPage />} />
         <Route path="/product-finder" element={<ProductFinder />} />
         <Route path="/bom-cross-reference" element={<BomCrossReference />} />
+        <Route path="/bom-analyzer" element={<BomAnalyzer />} />
         <Route path="/sales" element={<SalesDashboard />} />
         <Route path="/my-price-contracts" element={<MyPriceContractsPage />} />
         <Route path="/profile" element={<Profile />} />

@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Grid3x3, PlayCircle, FolderKanban, DollarSign, Users, Calculator, Settings, BarChart3, Building2, Search, Link2, TrendingUp, UserCircle } from 'lucide-react';
+import { Home, Grid3x3, PlayCircle, FolderKanban, DollarSign, Users, Calculator, Settings, BarChart3, Building2, Search, Link2, TrendingUp, UserCircle, ClipboardList } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 import clsx from 'clsx';
@@ -19,6 +19,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     { path: '/catalog-list', icon: FolderKanban, label: 'My Catalogs', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
     { path: '/product-finder', icon: Search, label: 'Product Finder', roles: ['FREE'] },
     { path: '/bom-cross-reference', icon: Link2, label: 'BOM Cross-Reference', roles: ['FREE'] },
+    { path: '/bom-analyzer', icon: ClipboardList, label: 'BOM Analyzer', roles: ['FREE'] },
     { path: '/videos', icon: PlayCircle, label: 'Video Academy', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
     { path: '/projects', icon: FolderKanban, label: 'Projects', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
     { path: '/quotes', icon: DollarSign, label: 'Quotes', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
