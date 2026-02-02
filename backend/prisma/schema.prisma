@@ -634,11 +634,19 @@ model UserPriceContractAssignment {
 // PROJECTS & BOMs
 // ============================================================================
 
+enum ProjectStatus {
+  DRAFT        // Building BOM, not yet submitted
+  SUBMITTED    // Submitted for review
+  PROCESSING   // Auto-classify / cross-reference in progress
+  COMPLETED    // Report generated, final
+}
+
 model Project {
   id            String    @id @default(uuid())
   userId        String    @map("user_id")
   name          String
   description   String?   @db.Text
+  status        ProjectStatus @default(DRAFT)
   currentRevision Int     @default(1) @map("current_revision")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
@@ -649,7 +657,13 @@ model Project {
   revisions     ProjectRevision[]
 
   @@index([userId])
+  @@index([status])
   @@map("projects")
+}
+
+enum PanelAccessory {
+  PANEL
+  ACCESSORY
 }
 
 model ProjectItem {
@@ -664,6 +678,7 @@ model ProjectItem {
   unitPrice         Float?    @map("unit_price")
   isWagoPart        Boolean   @default(false) @map("is_wago_part")
   hasWagoEquivalent Boolean   @default(false) @map("has_wago_equivalent")
+  panelAccessory    PanelAccessory? @map("panel_accessory") // Panel vs Accessory for BOM classification
   notes             String?   @db.Text
   createdAt         DateTime  @default(now()) @map("created_at")
 
@@ -692,7 +707,26 @@ model ProjectRevision {
 }
 
 // ============================================================================
-// CROSS-REFERENCES
+// NON-WAGO PRODUCT DATABASE (admin-maintained catalog of competitor parts)
+// ============================================================================
+
+model NonWagoProduct {
+  id          String   @id @default(uuid())
+  manufacturer String
+  partNumber  String   @map("part_number")
+  description String?  @db.Text
+  category    String?  // Optional category for grouping
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([manufacturer, partNumber])
+  @@index([manufacturer])
+  @@index([partNumber])
+  @@map("non_wago_products")
+}
+
+// ============================================================================
+// CROSS-REFERENCES (maps non-WAGO manufacturer+partNumber to WAGO Part)
 // ============================================================================
 
 model CrossReference {

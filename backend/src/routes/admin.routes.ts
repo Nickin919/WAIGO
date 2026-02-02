@@ -15,6 +15,11 @@ router.delete('/users/:id', adminController.deleteUser);
 
 // Bulk operations
 router.post('/bulk-approve-videos', adminController.bulkApproveVideos);
-router.post('/import-cross-references', uploadCSV, adminController.importCrossReferences);
+
+// BOM Data Management (cross-references, non-WAGO products)
+router.get('/cross-references/sample', adminController.getCrossReferencesSample);
+router.post('/cross-references/import', uploadCSV, adminController.importCrossReferences);
+router.get('/non-wago-products/sample', adminController.getNonWagoProductsSample);
+router.post('/non-wago-products/import', uploadCSV, adminController.importNonWagoProducts);
 
 export default router;

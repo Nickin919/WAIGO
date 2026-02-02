@@ -16,6 +16,7 @@ import VideoPlayer from './pages/video/VideoPlayer';
 import VideoFeed from './pages/video/VideoFeed';
 import Projects from './pages/projects/Projects';
 import ProjectDetail from './pages/projects/ProjectDetail';
+import NewProject from './pages/projects/NewProject';
 import Quotes from './pages/quotes/Quotes';
 import QuoteDetail from './pages/quotes/QuoteDetail';
 import QuoteForm from './pages/quotes/QuoteForm';
@@ -23,6 +24,7 @@ import ManageCustomers from './pages/customers/ManageCustomers';
 import Profile from './pages/Profile';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ProductImport from './pages/admin/ProductImport';
+import DataManagement from './pages/admin/DataManagement';
 import CatalogList from './pages/catalog/CatalogList';
 import CatalogCreator from './pages/catalog/CatalogCreator';
 import AssignmentsPage from './pages/assignments/AssignmentsPage';
@@ -98,6 +100,7 @@ function App() {
         <Route path="/videos" element={<VideoFeed />} />
         <Route path="/video/:videoId" element={<VideoPlayer />} />
         <Route path="/projects" element={<Projects />} />
+        <Route path="/projects/new" element={<NewProject />} />
         <Route path="/projects/:projectId" element={<ProjectDetail />} />
         <Route path="/quotes" element={<Quotes />} />
         <Route path="/quotes/new" element={<QuoteForm />} />
@@ -124,6 +127,7 @@ function App() {
       <Route element={<AdminRoute><MainLayout /></AdminRoute>}>
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/import-products" element={<ProductImport />} />
+        <Route path="/admin/data-management" element={<DataManagement />} />
       </Route>
 
       {/* 404 */}

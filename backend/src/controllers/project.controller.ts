@@ -1,6 +1,10 @@
 import { Response } from 'express';
+import fs from 'fs';
+import Papa from 'papaparse';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+
+const BOM_SAMPLE = 'manufacturer,partNumber,description,quantity,unitPrice\nWAGO,221-413,PCB terminal block 2.5mm,10,0.85\nPhoenix Contact,1234567,Competitor terminal,5,\n';
 
 export const getProjects = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -11,10 +15,15 @@ export const getProjects = async (req: AuthRequest, res: Response): Promise<void
 
     const projects = await prisma.project.findMany({
       where: { userId: req.user.id },
-      include: {
-        _count: {
-          select: { items: true }
-        }
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        status: true,
+        currentRevision: true,
+        updatedAt: true,
+        createdAt: true,
+        _count: { select: { items: true } }
       },
       orderBy: { updatedAt: 'desc' }
     });
@@ -92,7 +101,8 @@ export const createProject = async (req: AuthRequest, res: Response): Promise<vo
       data: {
         userId: req.user.id,
         name,
-        description
+        description,
+        status: 'DRAFT'
       }
     });
 
@@ -150,11 +160,15 @@ export const addProjectItem = async (req: AuthRequest, res: Response): Promise<v
 
     const project = await prisma.project.findUnique({
       where: { id },
-      select: { currentRevision: true }
+      select: { currentRevision: true, userId: true }
     });
 
     if (!project) {
       res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+    if (project.userId !== req.user.id) {
+      res.status(403).json({ error: 'Not authorized' });
       return;
     }
 
@@ -180,10 +194,88 @@ export const addProjectItem = async (req: AuthRequest, res: Response): Promise<v
   }
 };
 
+export const getBOMSample = (_req: AuthRequest, res: Response): void => {
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="bom-sample.csv"');
+  res.send(BOM_SAMPLE);
+};
+
 export const uploadBOM = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    // TODO: Implement BOM CSV upload
-    res.status(501).json({ error: 'BOM upload not yet implemented' });
+    const { id } = req.params;
+    const file = (req as any).file;
+    if (!file?.path) {
+      res.status(400).json({ error: 'No CSV file uploaded' });
+      return;
+    }
+    const replace = req.query.replace === 'true' || req.query.replace === '1';
+
+    const project = await prisma.project.findUnique({
+      where: { id },
+      select: { id: true, userId: true, currentRevision: true, status: true }
+    });
+    if (!project) {
+      fs.unlinkSync(file.path);
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+    if (project.userId !== req.user!.id) {
+      fs.unlinkSync(file.path);
+      res.status(403).json({ error: 'Not authorized' });
+      return;
+    }
+    if (project.status !== 'DRAFT') {
+      fs.unlinkSync(file.path);
+      res.status(400).json({ error: 'Only draft projects can have BOM updated via upload' });
+      return;
+    }
+
+    const raw = fs.readFileSync(file.path, 'utf-8');
+    fs.unlinkSync(file.path);
+
+    const parsed = Papa.parse<Record<string, string>>(raw, { header: true, skipEmptyLines: true });
+    const rows = parsed.data?.filter((r) => r.partNumber?.trim()) || [];
+    if (rows.length === 0) {
+      res.status(400).json({ error: 'No valid rows. Required: partNumber; optional: manufacturer, description, quantity, unitPrice' });
+      return;
+    }
+
+    if (replace) {
+      await prisma.projectItem.deleteMany({
+        where: { projectId: id, revisionNumber: project.currentRevision }
+      });
+    }
+
+    let created = 0;
+    for (const row of rows) {
+      const partNumber = row.partNumber.trim();
+      const manufacturer = row.manufacturer?.trim() || null;
+      const description = row.description?.trim() || partNumber;
+      const quantity = Math.max(1, parseInt(row.quantity, 10) || 1);
+      const unitPrice = row.unitPrice?.trim() ? parseFloat(row.unitPrice) : null;
+
+      const wagoPart = await prisma.part.findFirst({
+        where: { partNumber },
+        select: { id: true }
+      });
+
+      await prisma.projectItem.create({
+        data: {
+          projectId: id,
+          revisionNumber: project.currentRevision,
+          partId: wagoPart?.id ?? null,
+          manufacturer,
+          partNumber,
+          description,
+          quantity,
+          unitPrice,
+          isWagoPart: !!wagoPart
+        }
+      });
+      created++;
+    }
+
+    res.json({ created, totalRows: rows.length });
   } catch (error) {
     console.error('Upload BOM error:', error);
     res.status(500).json({ error: 'Failed to upload BOM' });
@@ -192,8 +284,29 @@ export const uploadBOM = async (req: AuthRequest, res: Response): Promise<void> 
 
 export const updateProjectItem = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { itemId } = req.params;
-    const updateData = req.body;
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const { id: projectId, itemId } = req.params;
+    const body = req.body;
+    const updateData: Record<string, unknown> = {};
+    if (typeof body.quantity === 'number' && body.quantity >= 1) updateData.quantity = body.quantity;
+    if (body.panelAccessory === 'PANEL' || body.panelAccessory === 'ACCESSORY' || body.panelAccessory === null) updateData.panelAccessory = body.panelAccessory;
+    if (typeof body.notes === 'string') updateData.notes = body.notes;
+
+    const existing = await prisma.projectItem.findFirst({
+      where: { id: itemId, projectId },
+      include: { project: { select: { userId: true } } }
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Project item not found' });
+      return;
+    }
+    if (existing.project.userId !== req.user.id) {
+      res.status(403).json({ error: 'Not authorized' });
+      return;
+    }
 
     const item = await prisma.projectItem.update({
       where: { id: itemId },
@@ -209,7 +322,24 @@ export const updateProjectItem = async (req: AuthRequest, res: Response): Promis
 
 export const deleteProjectItem = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { itemId } = req.params;
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const { id: projectId, itemId } = req.params;
+
+    const existing = await prisma.projectItem.findFirst({
+      where: { id: itemId, projectId },
+      include: { project: { select: { userId: true } } }
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Project item not found' });
+      return;
+    }
+    if (existing.project.userId !== req.user.id) {
+      res.status(403).json({ error: 'Not authorized' });
+      return;
+    }
 
     await prisma.projectItem.delete({
       where: { id: itemId }

@@ -10,6 +10,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@tanstack/react-table": "^8.21.3",
     "axios": "^1.6.5",
     "clsx": "^2.1.0",
     "framer-motion": "^10.18.0",

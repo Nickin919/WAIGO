@@ -201,11 +201,20 @@ export const projectApi = {
   
   addItem: (id: string, item: any) =>
     api.post(`/projects/${id}/items`, item),
-  
-  uploadBOM: (id: string, file: File) => {
+
+  updateItem: (projectId: string, itemId: string, data: { quantity?: number; panelAccessory?: string; notes?: string }) =>
+    api.patch(`/projects/${projectId}/items/${itemId}`, data),
+
+  deleteItem: (projectId: string, itemId: string) =>
+    api.delete(`/projects/${projectId}/items/${itemId}`),
+
+  getBOMSample: () =>
+    api.get('/projects/sample-bom', { responseType: 'blob' }),
+
+  uploadBOM: (id: string, file: File, replace: boolean) => {
     const formData = new FormData();
     formData.append('csv', file);
-    return api.post(`/projects/${id}/upload-bom`, formData, {
+    return api.post(`/projects/${id}/upload-bom?replace=${replace}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
@@ -385,4 +394,24 @@ export const adminApi = {
   
   bulkApproveVideos: (videoIds: string[]) =>
     api.post('/admin/bulk-approve-videos', { videoIds }),
+
+  // BOM Data Management
+  getCrossReferencesSample: () =>
+    api.get('/admin/cross-references/sample', { responseType: 'blob' }),
+  importCrossReferences: (file: File, replace: boolean) => {
+    const form = new FormData();
+    form.append('csv', file);
+    return api.post(`/admin/cross-references/import?replace=${replace}`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  getNonWagoProductsSample: () =>
+    api.get('/admin/non-wago-products/sample', { responseType: 'blob' }),
+  importNonWagoProducts: (file: File, replace: boolean) => {
+    const form = new FormData();
+    form.append('csv', file);
+    return api.post(`/admin/non-wago-products/import?replace=${replace}`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
 };

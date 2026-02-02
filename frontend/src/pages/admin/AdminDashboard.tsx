@@ -79,7 +79,7 @@ const AdminDashboard = () => {
 
       <div className="card p-6">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <button
             onClick={() => navigate('/managed-users')}
             className="btn btn-primary flex items-center justify-center space-x-2"
@@ -107,6 +107,13 @@ const AdminDashboard = () => {
           >
             <Upload className="w-5 h-5" />
             <span>Import Products</span>
+          </button>
+          <button
+            onClick={() => navigate('/admin/data-management')}
+            className="btn btn-primary flex items-center justify-center space-x-2"
+          >
+            <FolderKanban className="w-5 h-5" />
+            <span>BOM Data</span>
           </button>
         </div>
       </div>
