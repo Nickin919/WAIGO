@@ -1,50 +1,39 @@
 declare module 'pdf-parse' {
-  interface PDFInfo {
-    PDFFormatVersion?: string;
-    IsAcroFormPresent?: boolean;
-    IsXFAPresent?: boolean;
-    Title?: string;
-    Author?: string;
-    Subject?: string;
-    Keywords?: string;
-    Creator?: string;
-    Producer?: string;
-    CreationDate?: string;
-    ModDate?: string;
-    [key: string]: any;
+  interface PDFParseOptions {
+    /** URL to PDF file */
+    url?: string;
+    /** Local file path (may not work in all versions) */
+    file?: string;
+    /** PDF data as Buffer or Uint8Array */
+    data?: Buffer | Uint8Array;
   }
 
-  interface PDFMetadata {
-    _metadata?: {
-      [key: string]: string;
-    };
-  }
-
-  interface PDFData {
-    /** Number of pages in the PDF */
-    numpages: number;
-    /** Number of rendered pages */
-    numrender: number;
-    /** PDF info object */
-    info: PDFInfo;
-    /** PDF metadata */
-    metadata: PDFMetadata | null;
-    /** PDF version */
-    version: string;
+  interface GetTextResult {
     /** Extracted text content */
     text: string;
+    /** Number of pages */
+    pages?: Array<{ text: string }>;
   }
 
-  interface PDFOptions {
-    /** First page to parse (default: 1) */
-    pagerender?: (pageData: any) => Promise<string>;
-    /** Maximum number of pages to parse */
-    max?: number;
-    /** PDF version */
-    version?: string;
+  interface GetInfoResult {
+    info?: {
+      Title?: string;
+      Author?: string;
+      Subject?: string;
+      Keywords?: string;
+      Creator?: string;
+      Producer?: string;
+      CreationDate?: string;
+      ModDate?: string;
+      [key: string]: any;
+    };
+    metadata?: any;
   }
 
-  function pdf(dataBuffer: Buffer, options?: PDFOptions): Promise<PDFData>;
-  
-  export = pdf;
+  export class PDFParse {
+    constructor(options: PDFParseOptions);
+    getText(): Promise<GetTextResult>;
+    getInfo(): Promise<GetInfoResult>;
+    getTable(): Promise<any>;
+  }
 }

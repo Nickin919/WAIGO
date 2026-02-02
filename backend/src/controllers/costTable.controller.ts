@@ -427,7 +427,15 @@ export const uploadPdf = async (req: AuthRequest, res: Response): Promise<void> 
     const pdfPath = path.isAbsolute(req.file.path) ? req.file.path : path.resolve(req.file.path);
 
     // Parse PDF using native TypeScript parser
+    console.log('[PDF Upload] Parsing PDF at:', pdfPath);
     const parseResult = await parseWagoPDF(pdfPath);
+    console.log('[PDF Upload] Parse result:', JSON.stringify({
+      success: parseResult.success,
+      rowCount: parseResult.rows.length,
+      errors: parseResult.errors,
+      stats: parseResult.stats,
+      firstUnparsed: parseResult.unparsedRows.slice(0, 5),
+    }, null, 2));
 
     // Clean up uploaded PDF
     try {

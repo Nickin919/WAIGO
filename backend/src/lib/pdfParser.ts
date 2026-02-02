@@ -6,7 +6,7 @@
  */
 
 import * as fs from 'fs/promises';
-import pdf from 'pdf-parse';
+import { PDFParse } from 'pdf-parse';
 
 // ============================================================================
 // Types
@@ -248,6 +248,9 @@ const PATTERNS = {
 
   // Internal/alternate part numbers (to skip)
   internalPart: /^\d{8,}$/,  // 8+ digit internal codes
+  
+  // False positives to skip (phone numbers, zip codes in addresses, etc.)
+  falsePositive: /\d{3,4}-\d{3,4}-\d{4}|N\d+\s*W\d+|PO Box|Corporation|Telephone|Fax/i,
 };
 
 // ============================================================================
@@ -471,13 +474,18 @@ function parseLine(line: string, lineNumber: number): ParsedLine {
     }
   }
   
-  // Try single-line: part number and price on same line (with optional description between)
+  // Try single-line: price and part number on same line (WAGO format: "$5.0441	207-1331")
+  // Or: part number and price on same line with description between
   const partMatch = trimmed.match(PATTERNS.partNumberLoose);
   const priceMatch = trimmed.match(PATTERNS.price);
   if (partMatch && priceMatch) {
     const partNumber = partMatch[1];
     const priceVal = extractPrice(priceMatch[0]);
-    if (!isInternalPartNumber(partNumber) && priceVal !== null) {
+    // Skip false positives (phone numbers, addresses, etc.)
+    if (PATTERNS.falsePositive.test(trimmed)) {
+      return { type: 'skip', reason: 'false_positive' };
+    }
+    if (!isInternalPartNumber(partNumber) && priceVal !== null && priceVal > 0) {
       let desc = trimmed
         .replace(partMatch[0], '')
         .replace(priceMatch[0], '')
@@ -565,7 +573,11 @@ function parseLine(line: string, lineNumber: number): ParsedLine {
 }
 
 /**
- * Fallback: parse when each row is split across multiple lines (part on one line, description on next, price on next).
+ * Fallback: parse WAGO quote format where lines are like:
+ *   "$5.0441	207-1331"  (price + part number on same line)
+ *   "60493338"            (internal number - skip)
+ *   "Gelbox for 221..."   (description on following lines)
+ * 
  * Used when single-line parsing finds no product rows.
  */
 function parseBlocksFallback(
@@ -575,47 +587,75 @@ function parseBlocksFallback(
 ): void {
   const seenPartNumbers = new Set<string>();
   let i = 0;
+  
   while (i < lines.length) {
     const line = lines[i];
     const trimmed = line.trim();
     i++;
+    
     if (!trimmed) continue;
     if (isHeaderLine(trimmed)) continue;
-    // Series discount: skip, already collected in first pass
     if (trimmed.toLowerCase().includes('series') && trimmed.includes('%')) continue;
-    // Line that is ONLY a part number (WAGO format)
-    if (!PATTERNS.partNumber.test(trimmed)) continue;
-    const partNumber = trimmed;
-    if (isInternalPartNumber(partNumber)) continue;
-    // Collect description lines until we hit a line with a price
-    const descLines: string[] = [];
-    let price: number | null = null;
+    
+    // Look for WAGO format: "$price  partNumber" or "partNumber  $price" on same line
+    const partMatch = trimmed.match(PATTERNS.partNumberLoose);
+    const priceMatch = trimmed.match(PATTERNS.price);
+    
+    if (!partMatch || !priceMatch) continue;
+    
+    const partNumber = partMatch[1];
+    const price = extractPrice(priceMatch[0]);
+    
+    if (!partNumber || isInternalPartNumber(partNumber)) continue;
+    // Skip false positives (phone numbers, addresses with WAGO Corporation, etc.)
+    if (PATTERNS.falsePositive.test(trimmed)) continue;
+    if (price === null || price <= 0) continue;
+    if (seenPartNumbers.has(partNumber)) continue;
+    
+    // Get description from text after price+part on same line
+    let desc = trimmed
+      .replace(partMatch[0], '')
+      .replace(priceMatch[0], '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    // Collect additional description lines until we hit another price+part line or header
     while (i < lines.length) {
       const nextLine = lines[i];
       const nextTrimmed = nextLine.trim();
-      i++;
+      
       if (!nextTrimmed) {
+        i++;
         continue;
       }
-      const priceFromLine = extractPrice(nextTrimmed);
-      if (priceFromLine !== null) {
-        price = priceFromLine;
-        break;
+      
+      // Stop if we see another price+part combo (next product)
+      const nextPartMatch = nextTrimmed.match(PATTERNS.partNumberLoose);
+      const nextPriceMatch = nextTrimmed.match(PATTERNS.price);
+      if (nextPartMatch && nextPriceMatch) break;
+      
+      // Stop at headers or page markers
+      if (isHeaderLine(nextTrimmed)) break;
+      if (nextTrimmed.startsWith('--') && nextTrimmed.endsWith('--')) break;
+      if (nextTrimmed.includes('WAGO Corporation')) break;
+      
+      // Skip internal part numbers (8+ digits)
+      if (PATTERNS.internalPart.test(nextTrimmed)) {
+        i++;
+        continue;
       }
-      if (PATTERNS.partNumber.test(nextTrimmed)) {
-        i--; // Back up so next iteration sees this part number
-        break;
-      }
-      descLines.push(nextTrimmed);
+      
+      // Append to description
+      desc = desc ? desc + ' ' + nextTrimmed : nextTrimmed;
+      i++;
     }
-    if (price === null || price <= 0) continue;
-    if (seenPartNumbers.has(partNumber)) continue;
+    
     seenPartNumbers.add(partNumber);
-    const description = descLines.join(' ').replace(/\s+/g, ' ').trim();
-    const moq = extractMOQ(description);
-    let cleanDesc = description.replace(PATTERNS.moqInline, '').replace(PATTERNS.moqMinimum, '').replace(/\s+/g, ' ').trim();
+    const moq = extractMOQ(desc);
+    let cleanDesc = desc.replace(PATTERNS.moqInline, '').replace(PATTERNS.moqMinimum, '').replace(/\s+/g, ' ').trim();
     const series = getSeriesFromPart(partNumber);
     const netPrice = calculateNetPrice(price, partNumber, seriesDiscountMap);
+    
     result.rows.push({
       partNumber,
       series,
@@ -655,11 +695,21 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
   };
   
   try {
-    // Read PDF file
+    // Read PDF file and parse using pdf-parse v2 API
+    console.log('[PDF Parser] Reading file:', pdfPath);
     const dataBuffer = await fs.readFile(pdfPath);
+    console.log('[PDF Parser] File size:', dataBuffer.length, 'bytes');
     
-    // Parse PDF
-    const pdfData = await pdf(dataBuffer);
+    let pdfData: { text: string };
+    try {
+      const parser = new PDFParse({ data: dataBuffer });
+      pdfData = await parser.getText();
+      console.log('[PDF Parser] Text extracted, length:', pdfData.text?.length || 0);
+    } catch (parseErr: any) {
+      console.error('[PDF Parser] pdf-parse error:', parseErr.message);
+      result.errors.push(`pdf-parse error: ${parseErr.message}`);
+      return result;
+    }
     
     if (!pdfData.text) {
       result.errors.push('PDF contains no extractable text (may be scanned/image-based)');
@@ -668,6 +718,9 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
     
     // Normalize text
     const text = normalizeText(pdfData.text);
+    
+    // Debug: log first 1000 chars
+    console.log('[PDF Parser] First 1000 chars of text:\n', text.substring(0, 1000));
     
     // Extract metadata from first pages
     result.metadata = extractMetadata(text);
