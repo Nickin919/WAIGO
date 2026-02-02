@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { getSubordinateUserIds } from '../lib/hierarchy';
+import { isInternal } from '../lib/roles';
 import { parseWagoPDF } from '../lib/pdfParser';
 import * as fs from 'fs/promises';
 
@@ -16,7 +17,7 @@ export const list = async (req: AuthRequest, res: Response): Promise<void> => {
     }
     const role = req.user.role;
 
-    if (['ADMIN', 'RSM'].includes(role)) {
+    if (isInternal(role)) {
       const contracts = await prisma.priceContract.findMany({
         include: {
           createdBy: { select: { id: true, firstName: true, lastName: true, email: true } },
@@ -53,7 +54,7 @@ export const create = async (req: AuthRequest, res: Response): Promise<void> => 
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
-    if (!['ADMIN', 'RSM'].includes(req.user.role)) {
+    if (!isInternal(req.user.role)) {
       res.status(403).json({ error: 'Admin or RSM only' });
       return;
     }
@@ -101,7 +102,7 @@ export const getById = async (req: AuthRequest, res: Response): Promise<void> =>
       res.status(404).json({ error: 'Contract not found' });
       return;
     }
-    if (!['ADMIN', 'RSM'].includes(req.user.role)) {
+    if (!isInternal(req.user.role)) {
       const assigned = await prisma.userPriceContractAssignment.findUnique({
         where: { userId_contractId: { userId: req.user.id, contractId: id } },
       });
@@ -122,7 +123,7 @@ export const getById = async (req: AuthRequest, res: Response): Promise<void> =>
  */
 export const update = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || !['ADMIN', 'RSM'].includes(req.user.role)) {
+    if (!req.user || !isInternal(req.user.role)) {
       res.status(403).json({ error: 'Admin or RSM only' });
       return;
     }
@@ -149,7 +150,7 @@ export const update = async (req: AuthRequest, res: Response): Promise<void> => 
  */
 export const remove = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || !['ADMIN', 'RSM'].includes(req.user.role)) {
+    if (!req.user || !isInternal(req.user.role)) {
       res.status(403).json({ error: 'Admin or RSM only' });
       return;
     }
@@ -213,7 +214,7 @@ export const updateMyContractItems = async (req: AuthRequest, res: Response): Pr
  */
 export const addItems = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || !['ADMIN', 'RSM'].includes(req.user.role)) {
+    if (!req.user || !isInternal(req.user.role)) {
       res.status(403).json({ error: 'Admin or RSM only' });
       return;
     }
@@ -265,7 +266,7 @@ export const addItems = async (req: AuthRequest, res: Response): Promise<void> =
  */
 export const uploadPDF = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || !['ADMIN', 'RSM'].includes(req.user.role)) {
+    if (!req.user || !isInternal(req.user.role)) {
       res.status(403).json({ error: 'Admin or RSM only' });
       return;
     }

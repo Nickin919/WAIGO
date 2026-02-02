@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { Home, Grid3x3, PlayCircle, FolderKanban, DollarSign, Users, Calculator, Settings, BarChart3, Building2, Search, Link2, TrendingUp } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { effectiveRole } from '@/lib/quoteConstants';
 import clsx from 'clsx';
 
 interface SidebarProps {
@@ -12,27 +13,27 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const { user } = useAuthStore();
 
   const navItems = [
-    { path: '/dashboard', icon: Home, label: 'Dashboard', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
+    { path: '/dashboard', icon: Home, label: 'Dashboard', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
     { path: '/sales', icon: TrendingUp, label: 'Sales Dashboard', roles: ['RSM', 'ADMIN'] },
-    { path: '/catalog', icon: Grid3x3, label: 'Catalog', roles: ['FREE', 'BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
-    { path: '/catalog-list', icon: FolderKanban, label: 'My Catalogs', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
+    { path: '/catalog', icon: Grid3x3, label: 'Catalog', roles: ['FREE', 'BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
+    { path: '/catalog-list', icon: FolderKanban, label: 'My Catalogs', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
     { path: '/product-finder', icon: Search, label: 'Product Finder', roles: ['FREE'] },
     { path: '/bom-cross-reference', icon: Link2, label: 'BOM Cross-Reference', roles: ['FREE'] },
-    { path: '/videos', icon: PlayCircle, label: 'Video Academy', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
-    { path: '/projects', icon: FolderKanban, label: 'Projects', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
-    { path: '/quotes', icon: DollarSign, label: 'Quotes', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
-    { path: '/my-price-contracts', icon: Calculator, label: 'My Price Contracts', roles: ['BASIC', 'TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
+    { path: '/videos', icon: PlayCircle, label: 'Video Academy', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
+    { path: '/projects', icon: FolderKanban, label: 'Projects', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
+    { path: '/quotes', icon: DollarSign, label: 'Quotes', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
+    { path: '/my-price-contracts', icon: Calculator, label: 'My Price Contracts', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
   ];
 
   const teamItems = [
-    { path: '/team', icon: Users, label: 'My Team', roles: ['TURNKEY'] },
+    { path: '/team', icon: Users, label: 'My Team', roles: ['DIRECT_USER'] },
   ];
 
   const managementItems = [
-    { path: '/managed-users', icon: Building2, label: 'Managed Users', roles: ['DISTRIBUTOR', 'RSM', 'ADMIN'] },
-    { path: '/assignments', icon: Users, label: 'Assignments', roles: ['DISTRIBUTOR', 'RSM', 'ADMIN'] },
-    { path: '/pricing-contracts', icon: Calculator, label: 'Pricing Contracts', roles: ['TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'] },
-    { path: '/activity', icon: BarChart3, label: 'Activity Dashboard', roles: ['DISTRIBUTOR', 'RSM', 'ADMIN'] },
+    { path: '/managed-users', icon: Building2, label: 'Managed Users', roles: ['DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
+    { path: '/assignments', icon: Users, label: 'Assignments', roles: ['DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
+    { path: '/pricing-contracts', icon: Calculator, label: 'Pricing Contracts', roles: ['DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
+    { path: '/activity', icon: BarChart3, label: 'Activity Dashboard', roles: ['DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
   ];
 
   const adminItems = [
@@ -40,7 +41,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   ];
 
   const shouldShowNav = (navRoles: string[]) => {
-    return user && navRoles.includes(user.role);
+    return user && navRoles.includes(effectiveRole(user.role));
   };
 
   const filteredTeamItems = teamItems.filter(item => shouldShowNav(item.roles));

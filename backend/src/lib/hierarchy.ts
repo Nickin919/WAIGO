@@ -1,13 +1,16 @@
 import { prisma } from './prisma';
+import { effectiveRole } from './roles';
 
 /**
  * Get subordinate user IDs based on role hierarchy.
  * Used for scoping: catalogs, quotes, assignments, price contracts.
+ * Supports legacy roles (TURNKEY→DIRECT_USER, BASIC→BASIC_USER, DISTRIBUTOR→DISTRIBUTOR_REP).
  */
 export async function getSubordinateUserIds(userId: string, userRole: string): Promise<string[]> {
   const ids = [userId];
+  const role = effectiveRole(userRole);
 
-  switch (userRole) {
+  switch (role) {
     case 'ADMIN': {
       const all = await prisma.user.findMany({ select: { id: true } });
       return all.map((u) => u.id);
@@ -24,14 +27,14 @@ export async function getSubordinateUserIds(userId: string, userRole: string): P
       });
       return [...ids, ...distIds, ...under.map((u) => u.id)];
     }
-    case 'DISTRIBUTOR': {
+    case 'DISTRIBUTOR_REP': {
       const assigned = await prisma.user.findMany({
         where: { assignedToDistributorId: userId },
         select: { id: true },
       });
       return [...ids, ...assigned.map((u) => u.id)];
     }
-    case 'TURNKEY': {
+    case 'DIRECT_USER': {
       const u = await prisma.user.findUnique({
         where: { id: userId },
         select: { turnkeyTeamId: true },

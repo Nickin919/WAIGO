@@ -1,7 +1,16 @@
 import { useNavigate } from 'react-router-dom';
 import { LogOut, User, Mail } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { effectiveRole } from '@/lib/quoteConstants';
 import toast from 'react-hot-toast';
+
+const roleLabel = (role: string): string => {
+  const r = effectiveRole(role);
+  if (r === 'DISTRIBUTOR_REP') return 'Distributor';
+  if (r === 'DIRECT_USER') return 'Direct';
+  if (r === 'BASIC_USER') return 'Basic';
+  return r.toLowerCase().replace(/_/g, ' ');
+};
 
 const Profile = () => {
   const { user, logout } = useAuthStore();
@@ -44,7 +53,7 @@ const Profile = () => {
               <User className="w-5 h-5 text-gray-600" />
               <div>
                 <div className="text-sm text-gray-600">Role</div>
-                <div className="font-medium capitalize">{user?.role.toLowerCase()}</div>
+                <div className="font-medium capitalize">{user?.role ? roleLabel(user.role) : ''}</div>
               </div>
             </div>
           </div>

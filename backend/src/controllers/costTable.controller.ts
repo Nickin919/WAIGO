@@ -2,6 +2,7 @@ import { Response } from 'express';
 import path from 'path';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { canAccessCostTables, effectiveRole, requiresLogin } from '../lib/roles';
 import Papa from 'papaparse';
 import fs from 'fs';
 import { parseWagoPDF } from '../lib/pdfParser';
@@ -11,20 +12,20 @@ import { parseWagoPDF } from '../lib/pdfParser';
  */
 export const getCostTables = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || !['TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'].includes(req.user.role)) {
+    if (!req.user || !canAccessCostTables(req.user.role)) {
       res.status(403).json({ error: 'Insufficient permissions' });
       return;
     }
 
     let where: any = {};
 
-    if (req.user.role === 'TURNKEY') {
+    if (effectiveRole(req.user.role) === 'DIRECT_USER') {
       // TurnKey users see their own and their team's tables
       where.OR = [
         { userId: req.user.id },
         ...(req.user.turnkeyTeamId ? [{ turnkeyTeamId: req.user.turnkeyTeamId }] : [])
       ];
-    } else if (req.user.role === 'DISTRIBUTOR') {
+    } else if (effectiveRole(req.user.role) === 'DISTRIBUTOR_REP') {
       // Distributors see tables of their assigned users
       where.user = {
         assignedToDistributorId: req.user.id
@@ -107,11 +108,11 @@ export const getCostTableById = async (req: AuthRequest, res: Response): Promise
 
     // Check access permissions
     const hasAccess = 
-      req.user.role === 'ADMIN' ||
-      req.user.role === 'RSM' ||
+      effectiveRole(req.user.role) === 'ADMIN' ||
+      effectiveRole(req.user.role) === 'RSM' ||
       costTable.userId === req.user.id ||
       (costTable.turnkeyTeamId && costTable.turnkeyTeamId === req.user.turnkeyTeamId) ||
-      (req.user.role === 'DISTRIBUTOR' && costTable.user?.assignedToDistributorId === req.user.id);
+      (effectiveRole(req.user.role) === 'DISTRIBUTOR_REP' && costTable.user?.assignedToDistributorId === req.user.id);
 
     if (!hasAccess) {
       res.status(403).json({ error: 'Access denied' });
@@ -130,7 +131,7 @@ export const getCostTableById = async (req: AuthRequest, res: Response): Promise
  */
 export const createCostTable = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || !['TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'].includes(req.user.role)) {
+    if (!req.user || !canAccessCostTables(req.user.role)) {
       res.status(403).json({ error: 'Insufficient permissions' });
       return;
     }
@@ -199,7 +200,7 @@ export const uploadCostTableCSV = async (req: AuthRequest, res: Response): Promi
     const hasAccess = 
       costTable.userId === req.user.id ||
       (costTable.turnkeyTeamId && costTable.turnkeyTeamId === req.user.turnkeyTeamId) ||
-      ['ADMIN', 'RSM'].includes(req.user.role);
+      (effectiveRole(req.user.role) === 'ADMIN' || effectiveRole(req.user.role) === 'RSM');
 
     if (!hasAccess) {
       res.status(403).json({ error: 'Access denied' });
@@ -349,7 +350,7 @@ export const deleteCostTable = async (req: AuthRequest, res: Response): Promise<
  */
 export const getPartCustomCost = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || req.user.role === 'FREE') {
+    if (!req.user || !requiresLogin(req.user.role)) {
       res.status(403).json({ error: 'Login required' });
       return;
     }
@@ -406,7 +407,7 @@ export const getPartCustomCost = async (req: AuthRequest, res: Response): Promis
  */
 export const uploadPdf = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || !['TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'].includes(req.user.role)) {
+    if (!req.user || !canAccessCostTables(req.user.role)) {
       res.status(403).json({ error: 'Insufficient permissions' });
       return;
     }

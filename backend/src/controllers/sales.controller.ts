@@ -3,6 +3,7 @@ import ExcelJS from 'exceljs';
 import fs from 'fs';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { canAccessSales, effectiveRole } from '../lib/roles';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -10,12 +11,12 @@ const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'Ju
  * Get RSM filter: RSM sees own data, Admin sees all or optional ?rsmId=
  */
 function getRsmFilter(req: AuthRequest): { rsmId?: string } | undefined {
-  if (req.user?.role === 'ADMIN') {
+  if (effectiveRole(req.user?.role ?? '') === 'ADMIN') {
     const rsmId = req.query.rsmId as string | undefined;
     if (rsmId) return { rsmId };
     return undefined; // Admin with no filter = all data
   }
-  if (req.user?.role === 'RSM') {
+  if (effectiveRole(req.user?.role ?? '') === 'RSM' && req.user?.id) {
     return { rsmId: req.user.id };
   }
   return undefined;
@@ -117,16 +118,16 @@ export const uploadSales = async (req: AuthRequest, res: Response): Promise<void
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
-    if (req.user.role !== 'RSM' && req.user.role !== 'ADMIN') {
+    if (!canAccessSales(req.user.role)) {
       res.status(403).json({ error: 'Only RSM or Admin can upload sales data' });
       return;
     }
 
     const effectiveRsmId =
-      req.user.role === 'RSM' ? req.user.id : (req.body?.rsmId as string | undefined);
+      effectiveRole(req.user.role) === 'RSM' ? req.user.id : (req.body?.rsmId as string | undefined);
     if (!effectiveRsmId) {
       res.status(400).json({
-        error: req.user.role === 'ADMIN'
+        error: effectiveRole(req.user.role) === 'ADMIN'
           ? 'Select an RSM to upload data on their behalf'
           : 'Unable to determine RSM',
       });
@@ -450,7 +451,7 @@ export const getSalesSummary = async (req: AuthRequest, res: Response): Promise<
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
-    if (req.user.role !== 'RSM' && req.user.role !== 'ADMIN') {
+    if (!canAccessSales(req.user.role)) {
       res.status(403).json({ error: 'Only RSM or Admin can view sales dashboard' });
       return;
     }
@@ -518,12 +519,12 @@ export const clearSalesByPeriod = async (req: AuthRequest, res: Response): Promi
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
-    if (req.user.role !== 'RSM' && req.user.role !== 'ADMIN') {
+    if (!canAccessSales(req.user.role)) {
       res.status(403).json({ error: 'Only RSM or Admin can clear sales data' });
       return;
     }
     const effectiveRsmId =
-      req.user.role === 'RSM' ? req.user.id : (req.body?.rsmId ?? req.query?.rsmId as string | undefined);
+      effectiveRole(req.user.role) === 'RSM' ? req.user.id : (req.body?.rsmId ?? req.query?.rsmId as string | undefined);
     if (!effectiveRsmId) {
       res.status(400).json({ error: 'Select an RSM to clear data for (Admin)' });
       return;
@@ -565,13 +566,13 @@ export const clearSalesByPeriod = async (req: AuthRequest, res: Response): Promi
  */
 export const getRsms = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || req.user.role !== 'ADMIN') {
+    if (!req.user || effectiveRole(req.user.role) !== 'ADMIN') {
       res.status(403).json({ error: 'Admin only' });
       return;
     }
 
     const rsms = await prisma.user.findMany({
-      where: { role: 'RSM', isActive: true },
+      where: { role: { in: ['RSM'] }, isActive: true },
       select: {
         id: true,
         email: true,

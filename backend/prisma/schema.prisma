@@ -9,16 +9,64 @@ datasource db {
 }
 
 // ============================================================================
+// ACCOUNTS (B2B hierarchy: Manufacturer → Distributors / Direct → Customers)
+// ============================================================================
+
+enum AccountType {
+  MANUFACTURER  // Internal (Admin/RSM)
+  DISTRIBUTOR   // Reseller organizations
+  CUSTOMER      // Direct (RSM-served) or Basic (distributor-served)
+}
+
+model Account {
+  id        String      @id @default(uuid())
+  name      String
+  type      AccountType
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  usersAsAccount    User[]              @relation("UserAccount")
+  managedBy         AccountAssignment[] @relation("AccountAsManager")
+  managedAsCustomer AccountAssignment[] @relation("AccountAsManaged")
+
+  @@map("accounts")
+}
+
+// Direct vs Basic: manager_account_id = NULL → Direct (RSM-managed); else → Basic (distributor-managed)
+model AccountAssignment {
+  id                 String    @id @default(uuid())
+  managerAccountId   String?   @map("manager_account_id")   // Distributor account; NULL for Direct
+  managedAccountId   String    @unique @map("managed_account_id") // Customer account only
+  rsmId              String    @map("rsm_id")
+  assignedById       String?   @map("assigned_by_id")
+  assignedAt         DateTime  @default(now()) @map("assigned_at")
+
+  // Relations
+  managerAccount     Account?  @relation("AccountAsManager", fields: [managerAccountId], references: [id], onDelete: SetNull)
+  managedAccount     Account   @relation("AccountAsManaged", fields: [managedAccountId], references: [id], onDelete: Cascade)
+  rsm                User      @relation("AccountAssignmentRsm", fields: [rsmId], references: [id], onDelete: Cascade)
+  assignedBy         User?     @relation("AccountAssignmentAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@index([managerAccountId])
+  @@index([rsmId])
+  @@map("account_assignments")
+}
+
+// ============================================================================
 // AUTHENTICATION & USERS
 // ============================================================================
 
 enum UserRole {
-  FREE          // No login - BOM Cross, Product Finder only
-  BASIC         // Login required - Save projects, quotes, catalogs
-  TURNKEY       // Teams, custom cost tables
-  DISTRIBUTOR   // Manages Basic/TurnKey users, builds catalogs
-  RSM           // Regional Sales Manager - assigns to distributors
-  ADMIN         // Full access
+  FREE             // No login - BOM Cross, Product Finder only
+  BASIC            // @deprecated use BASIC_USER
+  TURNKEY          // @deprecated use DIRECT_USER
+  DISTRIBUTOR      // @deprecated use DISTRIBUTOR_REP
+  RSM              // Regional Sales Manager - Direct + Distributors
+  ADMIN            // Full access
+  DISTRIBUTOR_REP  // Reseller org; manages Basic accounts
+  DIRECT_USER      // Customer buying direct from manufacturer (RSM-served)
+  BASIC_USER       // Customer buying through distributor
 }
 
 model User {
@@ -32,11 +80,14 @@ model User {
   catalogId       String?   @map("catalog_id")
   isActive        Boolean   @default(true) @map("is_active")
   
-  // Hierarchical relationships
-  assignedToDistributorId String? @map("assigned_to_distributor_id") // Basic/TurnKey users assigned to Distributor
+  // Account (company) – required for DISTRIBUTOR_REP, DIRECT_USER, BASIC_USER
+  accountId       String?   @map("account_id")
+  
+  // Hierarchical relationships (legacy; hierarchy can use AccountAssignment)
+  assignedToDistributorId String? @map("assigned_to_distributor_id") // Basic/Direct assigned to Distributor
   assignedToRsmId         String? @map("assigned_to_rsm_id") // Distributor assigned to RSM
   
-  // TurnKey Team
+  // TurnKey Team (legacy; Direct users may use account-based grouping)
   turnkeyTeamId   String?   @map("turnkey_team_id")
   
   // Distributor settings
@@ -50,6 +101,7 @@ model User {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   // Relations
+  account         Account?  @relation("UserAccount", fields: [accountId], references: [id], onDelete: SetNull)
   catalog         Catalog?  @relation(fields: [catalogId], references: [id])
   turnkeyTeam     TurnkeyTeam? @relation(fields: [turnkeyTeamId], references: [id])
   
@@ -59,6 +111,9 @@ model User {
   
   assignedToRsm         User? @relation("RsmAssignments", fields: [assignedToRsmId], references: [id])
   managedByRsm          User[] @relation("RsmAssignments")
+  
+  accountAssignmentsAsRsm AccountAssignment[] @relation("AccountAssignmentRsm")
+  accountAssignmentsAssignedBy AccountAssignment[] @relation("AccountAssignmentAssignedBy")
   
   // Content relations
   customersCreated Customer[] @relation("CustomerCreator")

@@ -3,6 +3,7 @@ import { Plus, FolderOpen, Download, Trash2, Upload, FileSpreadsheet, FileText, 
 import toast from 'react-hot-toast';
 import { costTableApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
+import { effectiveRole } from '@/lib/quoteConstants';
 
 // Sample CSV for download (matches backend expected format)
 const SAMPLE_CSV = `Part Number,Description,Custom Cost,Notes
@@ -44,7 +45,7 @@ const PricingContractsPage = () => {
     stats?: { totalLinesProcessed: number; productRows: number; discountRows: number };
   } | null>(null);
 
-  const canManage = user?.role && ['TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'].includes(user.role);
+  const canManage = user?.role && ['DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'].includes(effectiveRole(user.role));
 
   const loadContracts = useCallback(() => {
     if (!canManage) return;

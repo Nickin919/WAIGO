@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { effectiveRole, isInternal } from '../lib/roles';
 
 /**
  * Get users based on current user's role and permissions
@@ -15,8 +16,9 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
     const { role, search, assignedOnly } = req.query;
     let where: any = {};
 
-    // Filter based on user role
-    switch (req.user.role) {
+    // Filter based on user role (effective role supports legacy names)
+    const userRole = effectiveRole(req.user.role);
+    switch (userRole) {
       case 'ADMIN':
         // Admin sees all users
         if (role) where.role = role;
@@ -30,7 +32,7 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
         ];
         break;
 
-      case 'DISTRIBUTOR':
+      case 'DISTRIBUTOR_REP':
         // Distributor sees only their assigned users
         where.assignedToDistributorId = req.user.id;
         break;
@@ -101,7 +103,7 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
  */
 export const assignUserToDistributor = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || !['RSM', 'ADMIN'].includes(req.user.role)) {
+    if (!req.user || !isInternal(req.user.role)) {
       res.status(403).json({ error: 'Insufficient permissions' });
       return;
     }
@@ -125,7 +127,7 @@ export const assignUserToDistributor = async (req: AuthRequest, res: Response): 
     }
 
     // RSM can only assign to their own distributors
-    if (req.user.role === 'RSM' && distributor.assignedToRsmId !== req.user.id) {
+    if (effectiveRole(req.user.role) === 'RSM' && distributor.assignedToRsmId !== req.user.id) {
       res.status(403).json({ error: 'Cannot assign to distributors not in your region' });
       return;
     }
@@ -147,7 +149,7 @@ export const assignUserToDistributor = async (req: AuthRequest, res: Response): 
  */
 export const assignDistributorToRsm = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || req.user.role !== 'ADMIN') {
+    if (!req.user || effectiveRole(req.user.role) !== 'ADMIN') {
       res.status(403).json({ error: 'Admin access required' });
       return;
     }
@@ -261,7 +263,7 @@ export const getUserHierarchy = async (req: AuthRequest, res: Response): Promise
  */
 export const updateUserRole = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || req.user.role !== 'ADMIN') {
+    if (!req.user || effectiveRole(req.user.role) !== 'ADMIN') {
       res.status(403).json({ error: 'Admin access required' });
       return;
     }
@@ -292,18 +294,18 @@ export const updateUserRole = async (req: AuthRequest, res: Response): Promise<v
  */
 export const getManagedUsersActivity = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || !['DISTRIBUTOR', 'RSM', 'ADMIN'].includes(req.user.role)) {
+    if (!req.user || !['DISTRIBUTOR_REP', 'RSM', 'ADMIN'].includes(effectiveRole(req.user.role))) {
       res.status(403).json({ error: 'Insufficient permissions' });
       return;
     }
 
     let userIds: string[] = [];
 
-    if (req.user.role === 'ADMIN') {
+    if (effectiveRole(req.user.role) === 'ADMIN') {
       // Admin sees all activity
       const allUsers = await prisma.user.findMany({ select: { id: true } });
       userIds = allUsers.map(u => u.id);
-    } else if (req.user.role === 'RSM') {
+    } else if (effectiveRole(req.user.role) === 'RSM') {
       // RSM sees their distributors and all users under them
       const distributors = await prisma.user.findMany({
         where: { assignedToRsmId: req.user.id },
@@ -317,7 +319,7 @@ export const getManagedUsersActivity = async (req: AuthRequest, res: Response): 
       });
       
       userIds = [...distributorIds, ...users.map(u => u.id)];
-    } else if (req.user.role === 'DISTRIBUTOR') {
+    } else if (effectiveRole(req.user.role) === 'DISTRIBUTOR_REP') {
       // Distributor sees their assigned users
       const users = await prisma.user.findMany({
         where: { assignedToDistributorId: req.user.id },

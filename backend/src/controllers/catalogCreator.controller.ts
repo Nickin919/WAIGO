@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { getSubordinateUserIds } from '../lib/hierarchy';
 
 interface CreateCatalogData {
   name: string;
@@ -393,65 +394,6 @@ export const getProductsForCatalog = async (req: AuthRequest, res: Response): Pr
     res.status(500).json({ error: 'Failed to fetch products' });
   }
 };
-
-/**
- * Helper: Get subordinate user IDs based on role hierarchy
- */
-async function getSubordinateUserIds(userId: string, userRole: string): Promise<string[]> {
-  const ids = [userId]; // Always include self
-
-  switch (userRole) {
-    case 'ADMIN':
-      // Admin sees all catalogs
-      const allUsers = await prisma.user.findMany({ select: { id: true } });
-      return allUsers.map(u => u.id);
-
-    case 'RSM':
-      // RSM sees their distributors and all users under them
-      const distributors = await prisma.user.findMany({
-        where: { assignedToRsmId: userId },
-        select: { id: true }
-      });
-      const distributorIds = distributors.map(d => d.id);
-
-      const usersUnderDistributors = await prisma.user.findMany({
-        where: { assignedToDistributorId: { in: distributorIds } },
-        select: { id: true }
-      });
-
-      return [...ids, ...distributorIds, ...usersUnderDistributors.map(u => u.id)];
-
-    case 'DISTRIBUTOR':
-      // Distributor sees their assigned users
-      const assignedUsers = await prisma.user.findMany({
-        where: { assignedToDistributorId: userId },
-        select: { id: true }
-      });
-
-      return [...ids, ...assignedUsers.map(u => u.id)];
-
-    case 'TURNKEY':
-      // TurnKey users see team members' catalogs
-      const currentUser = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { turnkeyTeamId: true }
-      });
-
-      if (currentUser?.turnkeyTeamId) {
-        const teamMembers = await prisma.user.findMany({
-          where: { turnkeyTeamId: currentUser.turnkeyTeamId },
-          select: { id: true }
-        });
-        return teamMembers.map(u => u.id);
-      }
-
-      return ids;
-
-    default:
-      // BASIC and FREE users see only their own
-      return ids;
-  }
-}
 
 /**
  * Helper: Check if user can access catalog

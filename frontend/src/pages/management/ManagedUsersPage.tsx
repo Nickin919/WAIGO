@@ -4,6 +4,7 @@ import { Users, Search, UserPlus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { userManagementApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
+import { effectiveRole } from '@/lib/quoteConstants';
 
 interface User {
   id: string;
@@ -25,7 +26,7 @@ const ManagedUsersPage = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  const canManage = user?.role && ['ADMIN', 'RSM', 'DISTRIBUTOR'].includes(user.role);
+  const canManage = user?.role && ['ADMIN', 'RSM', 'DISTRIBUTOR_REP'].includes(effectiveRole(user.role));
 
   useEffect(() => {
     if (!canManage) return;

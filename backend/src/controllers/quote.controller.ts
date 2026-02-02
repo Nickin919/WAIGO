@@ -1,52 +1,9 @@
 import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { getSubordinateUserIds } from '../lib/hierarchy';
+import { effectiveRole, isInternal } from '../lib/roles';
 import { ROLE_MAX_DISCOUNT } from '../lib/quoteConstants';
-
-/**
- * Get subordinate user IDs for hierarchical quote visibility
- */
-async function getSubordinateUserIds(userId: string, userRole: string): Promise<string[]> {
-  const ids = [userId];
-
-  switch (userRole) {
-    case 'ADMIN':
-      const allUsers = await prisma.user.findMany({ select: { id: true } });
-      return allUsers.map((u) => u.id);
-    case 'RSM':
-      const distributors = await prisma.user.findMany({
-        where: { assignedToRsmId: userId },
-        select: { id: true },
-      });
-      const distIds = distributors.map((d) => d.id);
-      const underDist = await prisma.user.findMany({
-        where: { assignedToDistributorId: { in: distIds } },
-        select: { id: true },
-      });
-      return [...ids, ...distIds, ...underDist.map((u) => u.id)];
-    case 'DISTRIBUTOR':
-      const assigned = await prisma.user.findMany({
-        where: { assignedToDistributorId: userId },
-        select: { id: true },
-      });
-      return [...ids, ...assigned.map((u) => u.id)];
-    case 'TURNKEY':
-      const u = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { turnkeyTeamId: true },
-      });
-      if (u?.turnkeyTeamId) {
-        const team = await prisma.user.findMany({
-          where: { turnkeyTeamId: u.turnkeyTeamId },
-          select: { id: true },
-        });
-        return team.map((t) => t.id);
-      }
-      return ids;
-    default:
-      return ids;
-  }
-}
 
 async function canAccessQuote(userId: string, userRole: string, quoteUserId: string): Promise<boolean> {
   const subordinateIds = await getSubordinateUserIds(userId, userRole);
@@ -55,7 +12,7 @@ async function canAccessQuote(userId: string, userRole: string, quoteUserId: str
 
 /** Check if user may use a price contract (ADMIN/RSM or assigned) */
 async function canUsePriceContract(userId: string, userRole: string, contractId: string): Promise<boolean> {
-  if (['ADMIN', 'RSM'].includes(userRole)) return true;
+  if (isInternal(userRole)) return true;
   const assignment = await prisma.userPriceContractAssignment.findUnique({
     where: { userId_contractId: { userId, contractId } },
   });
@@ -164,7 +121,7 @@ export const createQuote = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const maxDiscount = ROLE_MAX_DISCOUNT[req.user.role] ?? 10;
+    const maxDiscount = ROLE_MAX_DISCOUNT[effectiveRole(req.user.role)] ?? 10;
     for (const item of items) {
       const discount = Number(item.discountPct) || 0;
       if (discount > maxDiscount) {
@@ -317,7 +274,7 @@ export const updateQuote = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const maxDiscount = ROLE_MAX_DISCOUNT[req.user.role] ?? 10;
+    const maxDiscount = ROLE_MAX_DISCOUNT[effectiveRole(req.user.role)] ?? 10;
     for (const item of items) {
       const discount = Number(item.discountPct) || 0;
       if (discount > maxDiscount) {

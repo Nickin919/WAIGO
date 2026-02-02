@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, CheckCircle, DollarSign, Package, FolderKanban, Video, FileText, Library } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { effectiveRole } from '@/lib/quoteConstants';
 import { catalogApi, projectApi, quoteApi } from '@/lib/api';
 
 interface CatalogStats {
@@ -242,7 +243,7 @@ const Dashboard = () => {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
               <Link
-                to={user?.role && ['DISTRIBUTOR', 'RSM', 'ADMIN'].includes(user.role) ? '/activity' : '/projects'}
+                to={user?.role && ['DISTRIBUTOR_REP', 'RSM', 'ADMIN'].includes(effectiveRole(user.role)) ? '/activity' : '/projects'}
                 className="text-sm text-green-600 font-medium hover:underline"
               >
                 View All
@@ -288,7 +289,7 @@ const Dashboard = () => {
       </div>
 
       {/* Team Activity (TurnKey Users) */}
-      {user?.role === 'TURNKEY' && user?.turnkeyTeamId && (
+      {effectiveRole(user?.role ?? '') === 'DIRECT_USER' && user?.turnkeyTeamId && (
         <div className="mt-6">
           <div className="card p-6">
             <div className="flex items-center justify-between mb-4">

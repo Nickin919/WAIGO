@@ -3,6 +3,7 @@ import { BarChart3, FileText, DollarSign, FolderKanban } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { userManagementApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
+import { effectiveRole } from '@/lib/quoteConstants';
 
 interface ActivityData {
   recentProjects?: Array<{ id: string; name: string; user?: { firstName: string | null; lastName: string | null; email: string | null } }>;
@@ -15,7 +16,7 @@ const ActivityPage = () => {
   const [activity, setActivity] = useState<ActivityData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const canView = user?.role && ['DISTRIBUTOR', 'RSM', 'ADMIN'].includes(user.role);
+  const canView = user?.role && ['DISTRIBUTOR_REP', 'RSM', 'ADMIN'].includes(effectiveRole(user.role));
 
   useEffect(() => {
     if (!canView) return;

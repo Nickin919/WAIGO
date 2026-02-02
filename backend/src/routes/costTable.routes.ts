@@ -15,13 +15,13 @@ router.get('/', costTableController.getCostTables);
 router.get('/:id', costTableController.getCostTableById);
 
 // Create cost table (TurnKey+)
-router.post('/', authorize('TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'), costTableController.createCostTable);
+router.post('/', authorize('DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'), costTableController.createCostTable);
 
 // Upload cost table from CSV
-router.post('/upload', authorize('TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'), uploadCSV, costTableController.uploadCostTableCSV);
+router.post('/upload', authorize('DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'), uploadCSV, costTableController.uploadCostTableCSV);
 
 // Upload cost table from PDF (WAGO quote)
-router.post('/:id/upload-pdf', authorize('TURNKEY', 'DISTRIBUTOR', 'RSM', 'ADMIN'), uploadPDF, costTableController.uploadPdf);
+router.post('/:id/upload-pdf', authorize('DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'), uploadPDF, costTableController.uploadPdf);
 
 // Download cost table as CSV
 router.get('/:id/download', costTableController.downloadCostTableCSV);

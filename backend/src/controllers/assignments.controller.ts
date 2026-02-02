@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { getSubordinateUserIds } from '../lib/hierarchy';
+import { canManageHierarchy, effectiveRole } from '../lib/roles';
 
 /**
  * GET /api/assignments/tree – hierarchical users visible to caller (ADMIN/RSM/DISTRIBUTOR)
@@ -13,26 +14,27 @@ export const getTree = async (req: AuthRequest, res: Response): Promise<void> =>
       return;
     }
     const role = req.user.role;
-    if (!['ADMIN', 'RSM', 'DISTRIBUTOR'].includes(role)) {
+    if (!canManageHierarchy(role)) {
       res.status(403).json({ error: 'Access denied' });
       return;
     }
 
     const subordinateIds = await getSubordinateUserIds(req.user.id, role);
+    const effRole = effectiveRole(role);
 
-    if (role === 'ADMIN') {
+    if (effRole === 'ADMIN') {
       const rsms = await prisma.user.findMany({
         where: { role: 'RSM', id: { in: subordinateIds } },
         select: { id: true, firstName: true, lastName: true, email: true, role: true },
         orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
       });
       const distributors = await prisma.user.findMany({
-        where: { role: 'DISTRIBUTOR', id: { in: subordinateIds } },
+        where: { role: { in: ['DISTRIBUTOR', 'DISTRIBUTOR_REP'] }, id: { in: subordinateIds } },
         select: { id: true, firstName: true, lastName: true, email: true, role: true, assignedToRsmId: true },
         orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
       });
       const basicTurnkey = await prisma.user.findMany({
-        where: { role: { in: ['BASIC', 'TURNKEY'] }, id: { in: subordinateIds } },
+        where: { role: { in: ['BASIC', 'BASIC_USER', 'TURNKEY', 'DIRECT_USER'] }, id: { in: subordinateIds } },
         select: { id: true, firstName: true, lastName: true, email: true, role: true, assignedToDistributorId: true, turnkeyTeamId: true },
         orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
       });
@@ -47,15 +49,15 @@ export const getTree = async (req: AuthRequest, res: Response): Promise<void> =>
       return;
     }
 
-    if (role === 'RSM') {
+    if (effRole === 'RSM') {
       const distributors = await prisma.user.findMany({
-        where: { role: 'DISTRIBUTOR', assignedToRsmId: req.user.id },
+        where: { role: { in: ['DISTRIBUTOR', 'DISTRIBUTOR_REP'] }, assignedToRsmId: req.user.id },
         select: { id: true, firstName: true, lastName: true, email: true, role: true },
         orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
       });
       const basicTurnkey = await prisma.user.findMany({
         where: {
-          role: { in: ['BASIC', 'TURNKEY'] },
+          role: { in: ['BASIC', 'BASIC_USER', 'TURNKEY', 'DIRECT_USER'] },
           assignedToDistributorId: { in: distributors.map((d) => d.id) },
         },
         select: { id: true, firstName: true, lastName: true, email: true, role: true, assignedToDistributorId: true, turnkeyTeamId: true },
@@ -95,7 +97,7 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
     const role = req.user.role;
-    if (!['ADMIN', 'RSM', 'DISTRIBUTOR'].includes(role)) {
+    if (!canManageHierarchy(role)) {
       res.status(403).json({ error: 'Access denied' });
       return;
     }
@@ -170,7 +172,7 @@ export const assignCatalogs = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
     const role = req.user.role;
-    if (!['ADMIN', 'RSM', 'DISTRIBUTOR'].includes(role)) {
+    if (!canManageHierarchy(role)) {
       res.status(403).json({ error: 'Access denied' });
       return;
     }
@@ -228,7 +230,7 @@ export const assignContracts = async (req: AuthRequest, res: Response): Promise<
       return;
     }
     const role = req.user.role;
-    if (!['ADMIN', 'RSM', 'DISTRIBUTOR'].includes(role)) {
+    if (!canManageHierarchy(role)) {
       res.status(403).json({ error: 'Access denied' });
       return;
     }

@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { effectiveRole, isInternal } from '../lib/roles';
 
 /**
  * Get teams (filtered by user role)
@@ -14,13 +15,14 @@ export const getTeams = async (req: AuthRequest, res: Response): Promise<void> =
 
     let where: any = {};
 
-    switch (req.user.role) {
+    const role = effectiveRole(req.user.role);
+    switch (role) {
       case 'ADMIN':
       case 'RSM':
         // Can see all teams
         break;
 
-      case 'DISTRIBUTOR':
+      case 'DISTRIBUTOR_REP':
         // Can see teams of assigned users
         where.members = {
           some: {
@@ -29,7 +31,7 @@ export const getTeams = async (req: AuthRequest, res: Response): Promise<void> =
         };
         break;
 
-      case 'TURNKEY':
+      case 'DIRECT_USER':
         // Can only see own team
         if (req.user.turnkeyTeamId) {
           where.id = req.user.turnkeyTeamId;
@@ -115,8 +117,8 @@ export const getTeamById = async (req: AuthRequest, res: Response): Promise<void
 
     // Check permissions
     const isMember = team.members.some(m => m.id === req.user!.id);
-    const canView = ['ADMIN', 'RSM'].includes(req.user.role) || 
-                    (req.user.role === 'DISTRIBUTOR' && team.members.some(m => m.id === req.user!.id)) ||
+    const canView = isInternal(req.user.role) || 
+                    (effectiveRole(req.user.role) === 'DISTRIBUTOR_REP' && team.members.some(m => m.id === req.user!.id)) ||
                     isMember;
 
     if (!canView) {
@@ -136,7 +138,7 @@ export const getTeamById = async (req: AuthRequest, res: Response): Promise<void
  */
 export const createTeam = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || !['RSM', 'ADMIN'].includes(req.user.role)) {
+    if (!req.user || !isInternal(req.user.role)) {
       res.status(403).json({ error: 'Insufficient permissions' });
       return;
     }
@@ -168,7 +170,7 @@ export const createTeam = async (req: AuthRequest, res: Response): Promise<void>
  */
 export const addTeamMember = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || !['RSM', 'ADMIN'].includes(req.user.role)) {
+    if (!req.user || !isInternal(req.user.role)) {
       res.status(403).json({ error: 'Insufficient permissions' });
       return;
     }
@@ -186,8 +188,8 @@ export const addTeamMember = async (req: AuthRequest, res: Response): Promise<vo
       select: { role: true }
     });
 
-    if (!user || user.role !== 'TURNKEY') {
-      res.status(400).json({ error: 'User must have TURNKEY role' });
+    if (!user || effectiveRole(user.role) !== 'DIRECT_USER') {
+      res.status(400).json({ error: 'User must have Direct (formerly TurnKey) role' });
       return;
     }
 
@@ -208,7 +210,7 @@ export const addTeamMember = async (req: AuthRequest, res: Response): Promise<vo
  */
 export const removeTeamMember = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || !['RSM', 'ADMIN'].includes(req.user.role)) {
+    if (!req.user || !isInternal(req.user.role)) {
       res.status(403).json({ error: 'Insufficient permissions' });
       return;
     }
@@ -232,7 +234,7 @@ export const removeTeamMember = async (req: AuthRequest, res: Response): Promise
  */
 export const updateTeam = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || !['RSM', 'ADMIN'].includes(req.user.role)) {
+    if (!req.user || !isInternal(req.user.role)) {
       res.status(403).json({ error: 'Insufficient permissions' });
       return;
     }
@@ -260,7 +262,7 @@ export const updateTeam = async (req: AuthRequest, res: Response): Promise<void>
  */
 export const deleteTeam = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user || req.user.role !== 'ADMIN') {
+    if (!req.user || effectiveRole(req.user.role) !== 'ADMIN') {
       res.status(403).json({ error: 'Admin access required' });
       return;
     }

@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { quoteApi, catalogApi, customerApi, partApi, assignmentsApi, priceContractApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
-import { ROLE_MAX_DISCOUNT } from '@/lib/quoteConstants';
+import { ROLE_MAX_DISCOUNT, effectiveRole } from '@/lib/quoteConstants';
 
 interface LineItem {
   partId: string;
@@ -107,12 +107,12 @@ const QuoteForm = () => {
   const [bulkMarginValue, setBulkMarginValue] = useState('');
   const [bulkDiscountValue, setBulkDiscountValue] = useState('');
 
-  const maxDiscount = ROLE_MAX_DISCOUNT[user?.role || 'BASIC'] ?? 10;
+  const maxDiscount = ROLE_MAX_DISCOUNT[effectiveRole(user?.role || 'BASIC')] ?? 10;
   const allMarginSelected = items.length > 0 && items.every((i) => i.marginSelected);
   const allDiscountSelected = items.length > 0 && items.every((i) => i.discountSelected);
   const someMarginSelected = items.some((i) => i.marginSelected);
   const someDiscountSelected = items.some((i) => i.discountSelected);
-  const isDistributorOrHigher = ['ADMIN', 'RSM', 'DISTRIBUTOR'].includes(user?.role || '');
+  const isDistributorOrHigher = ['ADMIN', 'RSM', 'DISTRIBUTOR', 'DISTRIBUTOR_REP'].includes(effectiveRole(user?.role || ''));
 
   // Load assigned catalogs and price contracts (for proposal wizard); fallback to all catalogs if no assignments
   useEffect(() => {

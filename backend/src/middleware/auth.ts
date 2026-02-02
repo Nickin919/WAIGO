@@ -1,12 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma';
+import { effectiveRole } from '../lib/roles';
 
 export interface AuthRequest extends Request {
   user?: {
     id: string;
     email: string;
     role: string;
+    accountId?: string | null;
     catalogId?: string | null;
     turnkeyTeamId?: string | null;
     assignedToDistributorId?: string | null;
@@ -50,6 +52,7 @@ export const authenticate = async (
         id: true,
         email: true,
         role: true,
+        accountId: true,
         catalogId: true,
         turnkeyTeamId: true,
         assignedToDistributorId: true,
@@ -66,6 +69,7 @@ export const authenticate = async (
       id: user.id,
       email: user.email ?? '',
       role: user.role,
+      accountId: user.accountId ?? null,
       catalogId: user.catalogId,
       turnkeyTeamId: user.turnkeyTeamId,
       assignedToDistributorId: user.assignedToDistributorId
@@ -86,20 +90,20 @@ export const authenticate = async (
 };
 
 /**
- * Middleware to check if user has required role
+ * Middleware to check if user has required role.
+ * Uses effective role so legacy (TURNKEY, BASIC, DISTRIBUTOR) and new (DIRECT_USER, BASIC_USER, DISTRIBUTOR_REP) both work.
  */
-export const authorize = (...roles: string[]) => {
+export const authorize = (...allowedRoles: string[]) => {
+  const allowedSet = new Set(allowedRoles.map((r) => effectiveRole(r)));
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
-
-    if (!roles.includes(req.user.role)) {
+    if (!allowedSet.has(effectiveRole(req.user.role))) {
       res.status(403).json({ error: 'Insufficient permissions' });
       return;
     }
-
     next();
   };
 };
@@ -139,6 +143,7 @@ export const optionalAuth = async (
         id: true,
         email: true,
         role: true,
+        accountId: true,
         catalogId: true,
         turnkeyTeamId: true,
         assignedToDistributorId: true,
@@ -151,6 +156,7 @@ export const optionalAuth = async (
         id: user.id,
         email: user.email ?? '',
         role: user.role,
+        accountId: user.accountId ?? null,
         catalogId: user.catalogId,
         turnkeyTeamId: user.turnkeyTeamId,
         assignedToDistributorId: user.assignedToDistributorId

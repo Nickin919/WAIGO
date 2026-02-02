@@ -16,6 +16,7 @@ import { Upload, TrendingUp, TrendingDown, Users, Calendar, Trash2, BarChart3 } 
 import toast from 'react-hot-toast';
 import { salesApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
+import { effectiveRole } from '@/lib/quoteConstants';
 
 interface MonthlyData {
   month: number;
@@ -95,7 +96,7 @@ const SalesDashboard = () => {
   const [clearEntireYear, setClearEntireYear] = useState(false);
   const [clearing, setClearing] = useState(false);
 
-  const isAdmin = user?.role === 'ADMIN';
+  const isAdmin = effectiveRole(user?.role ?? '') === 'ADMIN';
 
   const fetchSummary = (rsmId?: string, year?: number | 'all') => {
     setLoading(true);
@@ -223,7 +224,8 @@ const SalesDashboard = () => {
           value: c.total,
         }));
 
-  if (!user || (user.role !== 'RSM' && user.role !== 'ADMIN')) {
+  const effRole = effectiveRole(user?.role ?? '');
+  if (!user || (effRole !== 'RSM' && effRole !== 'ADMIN')) {
     return (
       <div className="p-6">
         <p className="text-gray-600">You do not have access to the sales dashboard.</p>
