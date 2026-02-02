@@ -33,4 +33,8 @@ router.post('/:id/apply-upgrade', projectController.applyWagoUpgrade);
 router.post('/:id/create-revision', projectController.createRevision);
 router.get('/:id/revisions', projectController.getRevisions);
 
+// Report (Phase 3)
+router.get('/:id/report', projectController.getProjectReport);
+router.post('/:id/report/email', projectController.emailProjectReport);
+
 export default router;

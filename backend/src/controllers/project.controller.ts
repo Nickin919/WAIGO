@@ -1,6 +1,9 @@
 import { Response } from 'express';
 import fs from 'fs';
 import Papa from 'papaparse';
+import PDFDocument from 'pdfkit';
+import ExcelJS from 'exceljs';
+import nodemailer from 'nodemailer';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 
@@ -685,5 +688,246 @@ export const getRevisions = async (req: AuthRequest, res: Response): Promise<voi
   } catch (error) {
     console.error('Get revisions error:', error);
     res.status(500).json({ error: 'Failed to fetch revisions' });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Report (Phase 3)
+// ---------------------------------------------------------------------------
+
+type ReportData = {
+  project: { id: string; name: string; description: string | null; status: string };
+  summary: { itemCount: number; wagoCount: number; nonWagoCount: number };
+  items: Array<{
+    partNumber: string;
+    manufacturer: string | null;
+    description: string;
+    quantity: number;
+    unitPrice: number | null;
+    isWagoPart: boolean;
+    panelAccessory: string | null;
+  }>;
+  costSummary: { totalEstimated: number; lineCountWithPrice: number };
+  advantages: string[];
+};
+
+async function getReportData(projectId: string, userId: string): Promise<ReportData | null> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: {
+      items: { orderBy: { createdAt: 'asc' } }
+    }
+  });
+  if (!project || project.userId !== userId) return null;
+  if (project.status !== 'COMPLETED') return null;
+
+  const items = project.items;
+  const wagoCount = items.filter((i) => i.isWagoPart).length;
+  let totalEstimated = 0;
+  let lineCountWithPrice = 0;
+  for (const i of items) {
+    if (i.unitPrice != null) {
+      totalEstimated += i.quantity * i.unitPrice;
+      lineCountWithPrice += 1;
+    }
+  }
+
+  return {
+    project: {
+      id: project.id,
+      name: project.name,
+      description: project.description,
+      status: project.status
+    },
+    summary: {
+      itemCount: items.length,
+      wagoCount,
+      nonWagoCount: items.length - wagoCount
+    },
+    items: items.map((i) => ({
+      partNumber: i.partNumber,
+      manufacturer: i.manufacturer,
+      description: i.description,
+      quantity: i.quantity,
+      unitPrice: i.unitPrice,
+      isWagoPart: i.isWagoPart,
+      panelAccessory: i.panelAccessory
+    })),
+    costSummary: { totalEstimated, lineCountWithPrice },
+    advantages: [
+      'Single source supply – WAGO as one partner for connectivity',
+      'Proven quality and reliability in industrial applications',
+      'Global availability and technical support',
+      'Consistent product performance and compatibility'
+    ]
+  };
+}
+
+export const getProjectReport = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const { id } = req.params;
+    const format = (req.query.format as string)?.toLowerCase();
+
+    const report = await getReportData(id, req.user.id);
+    if (!report) {
+      res.status(404).json({ error: 'Project not found or report only available for completed projects' });
+      return;
+    }
+
+    if (format === 'pdf') {
+      const doc = new PDFDocument({ margin: 50 });
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="project-report-${id.slice(0, 8)}.pdf"`);
+      doc.pipe(res);
+      doc.fontSize(18).text(report.project.name, { align: 'center' });
+      doc.moveDown();
+      doc.fontSize(10).text(`Items: ${report.summary.itemCount} | WAGO: ${report.summary.wagoCount} | Non-WAGO: ${report.summary.nonWagoCount}`);
+      doc.text(`Estimated total: ${report.costSummary.totalEstimated.toFixed(2)} (${report.costSummary.lineCountWithPrice} lines with price)`);
+      doc.moveDown();
+      doc.fontSize(12).text('BOM', { underline: true });
+      doc.moveDown(0.5);
+      let y = doc.y;
+      const rowHeight = 18;
+      doc.fontSize(9);
+      doc.text('Part #', 50, y); doc.text('Manufacturer', 120, y); doc.text('Description', 200, y);
+      doc.text('Qty', 380, y); doc.text('Price', 420, y); doc.text('Type', 480, y);
+      y += rowHeight;
+      for (const row of report.items) {
+        if (y > 700) { doc.addPage(); y = 50; doc.text('Part #', 50, y); doc.text('Manufacturer', 120, y); doc.text('Description', 200, y); doc.text('Qty', 380, y); doc.text('Price', 420, y); doc.text('Type', 480, y); y += rowHeight; }
+        doc.text((row.partNumber || '').slice(0, 12), 50, y);
+        doc.text((row.manufacturer || '').slice(0, 10), 120, y);
+        doc.text((row.description || '').slice(0, 28), 200, y);
+        doc.text(String(row.quantity), 380, y);
+        doc.text(row.unitPrice != null ? row.unitPrice.toFixed(2) : '—', 420, y);
+        doc.text(row.isWagoPart ? 'WAGO' : 'Other', 480, y);
+        y += rowHeight;
+      }
+      doc.moveDown();
+      doc.fontSize(11).text('Advantages', { underline: true });
+      doc.fontSize(9);
+      report.advantages.forEach((a) => { doc.text(`• ${a}`); });
+      doc.end();
+      return;
+    }
+
+    if (format === 'xlsx') {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'WAGO Project Hub';
+      const sheet = workbook.addWorksheet('BOM', { headerFooter: { firstHeader: report.project.name } });
+      sheet.columns = [
+        { header: 'Part #', key: 'partNumber', width: 16 },
+        { header: 'Manufacturer', key: 'manufacturer', width: 14 },
+        { header: 'Description', key: 'description', width: 36 },
+        { header: 'Qty', key: 'quantity', width: 6 },
+        { header: 'Unit Price', key: 'unitPrice', width: 10 },
+        { header: 'Type', key: 'type', width: 10 }
+      ];
+      sheet.getRow(1).font = { bold: true };
+      for (const row of report.items) {
+        sheet.addRow({
+          partNumber: row.partNumber,
+          manufacturer: row.manufacturer ?? '',
+          description: row.description,
+          quantity: row.quantity,
+          unitPrice: row.unitPrice ?? '',
+          type: row.isWagoPart ? 'WAGO' : 'Other'
+        });
+      }
+      const summarySheet = workbook.addWorksheet('Summary');
+      summarySheet.addRow(['Project', report.project.name]);
+      summarySheet.addRow(['Item count', report.summary.itemCount]);
+      summarySheet.addRow(['WAGO items', report.summary.wagoCount]);
+      summarySheet.addRow(['Non-WAGO items', report.summary.nonWagoCount]);
+      summarySheet.addRow(['Estimated total', report.costSummary.totalEstimated]);
+      summarySheet.addRow([]);
+      summarySheet.addRow(['Advantages']);
+      report.advantages.forEach((a) => summarySheet.addRow([a]));
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="project-report-${id.slice(0, 8)}.xlsx"`);
+      await workbook.xlsx.write(res);
+      return;
+    }
+
+    res.json(report);
+  } catch (error) {
+    console.error('Get project report error:', error);
+    res.status(500).json({ error: 'Failed to get report' });
+  }
+};
+
+export const emailProjectReport = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const { id } = req.params;
+    const { email } = req.body;
+    if (!email || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      res.status(400).json({ error: 'Valid email address is required' });
+      return;
+    }
+
+    const report = await getReportData(id, req.user.id);
+    if (!report) {
+      res.status(404).json({ error: 'Project not found or report not available' });
+      return;
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.ethereal.email',
+      port: parseInt(process.env.SMTP_PORT || '587', 10),
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: process.env.SMTP_USER
+        ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS || '' }
+        : undefined
+    });
+
+    const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      const doc = new PDFDocument({ margin: 50 });
+      doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+      doc.fontSize(18).text(report.project.name, { align: 'center' });
+      doc.moveDown();
+      doc.fontSize(10).text(`Items: ${report.summary.itemCount} | WAGO: ${report.summary.wagoCount} | Non-WAGO: ${report.summary.nonWagoCount}`);
+      doc.text(`Estimated total: ${report.costSummary.totalEstimated.toFixed(2)}`);
+      doc.moveDown();
+      doc.fontSize(12).text('BOM', { underline: true });
+      doc.moveDown(0.5);
+      let y = doc.y;
+      const rowHeight = 18;
+      doc.fontSize(9);
+      doc.text('Part #', 50, y); doc.text('Description', 150, y); doc.text('Qty', 350, y); doc.text('Type', 400, y);
+      y += rowHeight;
+      for (const row of report.items) {
+        if (y > 700) { doc.addPage(); y = 50; doc.text('Part #', 50, y); doc.text('Description', 150, y); doc.text('Qty', 350, y); doc.text('Type', 400, y); y += rowHeight; }
+        doc.text((row.partNumber || '').slice(0, 20), 50, y);
+        doc.text((row.description || '').slice(0, 35), 150, y);
+        doc.text(String(row.quantity), 350, y);
+        doc.text(row.isWagoPart ? 'WAGO' : 'Other', 400, y);
+        y += rowHeight;
+      }
+      doc.end();
+    });
+    const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@wago-project-hub.local';
+
+    await transporter.sendMail({
+      from: fromEmail,
+      to: email.trim(),
+      subject: `Project Report: ${report.project.name}`,
+      text: `Your project report "${report.project.name}" is attached.\n\nSummary: ${report.summary.itemCount} items (${report.summary.wagoCount} WAGO, ${report.summary.nonWagoCount} other). Estimated total: ${report.costSummary.totalEstimated.toFixed(2)}.`,
+      attachments: [{ filename: `project-report-${id.slice(0, 8)}.pdf`, content: pdfBuffer }]
+    });
+
+    res.json({ message: 'Report sent to ' + email.trim() });
+  } catch (error) {
+    console.error('Email report error:', error);
+    res.status(500).json({ error: 'Failed to send report email' });
   }
 };

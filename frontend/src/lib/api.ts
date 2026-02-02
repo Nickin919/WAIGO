@@ -230,6 +230,18 @@ export const projectApi = {
 
   applyUpgrade: (projectId: string, data: { itemId: string; wagoPartId: string }) =>
     api.post(`/projects/${projectId}/apply-upgrade`, data),
+
+  getReport: (projectId: string) =>
+    api.get(`/projects/${projectId}/report`),
+
+  getReportPdf: (projectId: string) =>
+    api.get(`/projects/${projectId}/report`, { params: { format: 'pdf' }, responseType: 'blob' }),
+
+  getReportExcel: (projectId: string) =>
+    api.get(`/projects/${projectId}/report`, { params: { format: 'xlsx' }, responseType: 'blob' }),
+
+  emailReport: (projectId: string, email: string) =>
+    api.post(`/projects/${projectId}/report/email`, { email }),
   
   createRevision: (id: string, changeSummary: string) =>
     api.post(`/projects/${id}/create-revision`, { changeSummary }),
