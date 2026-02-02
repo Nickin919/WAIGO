@@ -6,6 +6,7 @@ import ExcelJS from 'exceljs';
 import nodemailer from 'nodemailer';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { addProjectItemSchema, parseBomCsvRow } from '../lib/validation/bomSchemas';
 
 const BOM_SAMPLE = 'manufacturer,partNumber,description,quantity,unitPrice\nWAGO,221-413,PCB terminal block 2.5mm,10,0.85\nPhoenix Contact,1234567,Competitor terminal,5,\n';
 
@@ -159,7 +160,13 @@ export const addProjectItem = async (req: AuthRequest, res: Response): Promise<v
     }
 
     const { id } = req.params;
-    const { partId, manufacturer, partNumber, description, quantity, unitPrice, notes } = req.body;
+    const parsed = addProjectItemSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const msg = parsed.error.issues.map((e: { message: string }) => e.message).join('; ') || 'Invalid request body';
+      res.status(400).json({ error: msg });
+      return;
+    }
+    const { partId, manufacturer, partNumber, description, quantity, unitPrice, notes } = parsed.data;
 
     const project = await prisma.project.findUnique({
       where: { id },
@@ -179,14 +186,14 @@ export const addProjectItem = async (req: AuthRequest, res: Response): Promise<v
       data: {
         projectId: id,
         revisionNumber: project.currentRevision,
-        partId,
-        manufacturer,
+        partId: partId ?? undefined,
+        manufacturer: manufacturer ?? undefined,
         partNumber,
         description,
-        quantity: quantity || 1,
-        unitPrice,
+        quantity: quantity ?? 1,
+        unitPrice: unitPrice ?? undefined,
         isWagoPart: !!partId,
-        notes
+        notes: notes ?? undefined
       }
     });
 
@@ -237,9 +244,19 @@ export const uploadBOM = async (req: AuthRequest, res: Response): Promise<void> 
     fs.unlinkSync(file.path);
 
     const parsed = Papa.parse<Record<string, string>>(raw, { header: true, skipEmptyLines: true });
-    const rows = parsed.data?.filter((r) => r.partNumber?.trim()) || [];
+    const rawRows = parsed.data || [];
+    const rows: Array<{ partNumber: string; manufacturer: string | null; description: string; quantity: number; unitPrice: number | null }> = [];
+    const validationErrors: string[] = [];
+    for (let i = 0; i < rawRows.length; i++) {
+      const normalized = parseBomCsvRow(rawRows[i] as Record<string, unknown>);
+      if (normalized) rows.push(normalized);
+      else if (validationErrors.length < 5) validationErrors.push(`Row ${i + 2}: missing or invalid partNumber`);
+    }
     if (rows.length === 0) {
-      res.status(400).json({ error: 'No valid rows. Required: partNumber; optional: manufacturer, description, quantity, unitPrice' });
+      const msg = validationErrors.length > 0
+        ? `No valid rows. ${validationErrors.join(' ')} Required: partNumber; optional: manufacturer, description, quantity, unitPrice`
+        : 'No valid rows. Required: partNumber; optional: manufacturer, description, quantity, unitPrice';
+      res.status(400).json({ error: msg });
       return;
     }
 
@@ -251,14 +268,8 @@ export const uploadBOM = async (req: AuthRequest, res: Response): Promise<void> 
 
     let created = 0;
     for (const row of rows) {
-      const partNumber = row.partNumber.trim();
-      const manufacturer = row.manufacturer?.trim() || null;
-      const description = row.description?.trim() || partNumber;
-      const quantity = Math.max(1, parseInt(row.quantity, 10) || 1);
-      const unitPrice = row.unitPrice?.trim() ? parseFloat(row.unitPrice) : null;
-
       const wagoPart = await prisma.part.findFirst({
-        where: { partNumber },
+        where: { partNumber: row.partNumber },
         select: { id: true }
       });
 
@@ -267,18 +278,18 @@ export const uploadBOM = async (req: AuthRequest, res: Response): Promise<void> 
           projectId: id,
           revisionNumber: project.currentRevision,
           partId: wagoPart?.id ?? null,
-          manufacturer,
-          partNumber,
-          description,
-          quantity,
-          unitPrice,
+          manufacturer: row.manufacturer,
+          partNumber: row.partNumber,
+          description: row.description,
+          quantity: row.quantity,
+          unitPrice: row.unitPrice,
           isWagoPart: !!wagoPart
         }
       });
       created++;
     }
 
-    res.json({ created, totalRows: rows.length });
+    res.json({ created, totalRows: rows.length, skipped: rawRows.length - rows.length });
   } catch (error) {
     console.error('Upload BOM error:', error);
     res.status(500).json({ error: 'Failed to upload BOM' });

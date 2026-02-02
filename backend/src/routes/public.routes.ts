@@ -5,6 +5,17 @@ import { randomUUID } from 'crypto';
 const router = Router();
 
 /**
+ * Feature flags (env-based). Default all true if not set.
+ * Set FEATURE_BOM_ANALYZER=false or FEATURE_PROJECTS=false to disable.
+ */
+router.get('/feature-flags', (_req: Request, res: Response): void => {
+  res.json({
+    bomAnalyzer: process.env.FEATURE_BOM_ANALYZER !== 'false',
+    projects: process.env.FEATURE_PROJECTS !== 'false',
+  });
+});
+
+/**
  * Product Finder - Search products (FREE user access)
  */
 router.get('/parts/search', async (req: Request, res: Response): Promise<void> => {

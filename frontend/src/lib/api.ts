@@ -50,6 +50,8 @@ export default api;
 
 export const publicApi = {
   getCatalogs: () => api.get('/public/catalogs'),
+  getFeatureFlags: () =>
+    api.get<{ bomAnalyzer: boolean; projects: boolean }>('/public/feature-flags'),
   searchParts: (q: string, params?: { category?: string; limit?: number }) =>
     api.get('/public/parts/search', { params: { q, ...params } }),
   crossReference: (manufacturer: string, partNumber: string) =>

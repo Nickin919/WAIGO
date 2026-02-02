@@ -1,7 +1,9 @@
 import { NavLink } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Home, Grid3x3, PlayCircle, FolderKanban, DollarSign, Users, Calculator, Settings, BarChart3, Building2, Search, Link2, TrendingUp, UserCircle, ClipboardList } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
+import { publicApi } from '@/lib/api';
 import clsx from 'clsx';
 
 interface SidebarProps {
@@ -11,6 +13,14 @@ interface SidebarProps {
 
 const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const { user } = useAuthStore();
+  const { data: featureFlags } = useQuery({
+    queryKey: ['feature-flags'],
+    queryFn: async () => {
+      const { data } = await publicApi.getFeatureFlags();
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
   const navItems = [
     { path: '/dashboard', icon: Home, label: 'Dashboard', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
@@ -42,6 +52,13 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     return user && navRoles.includes(effectiveRole(user.role));
   };
 
+  const showByFeatureFlag = (path: string) => {
+    if (path === '/bom-analyzer' && featureFlags?.bomAnalyzer === false) return false;
+    if (path === '/projects' && featureFlags?.projects === false) return false;
+    return true;
+  };
+
+  const filteredNavItems = navItems.filter(item => shouldShowNav(item.roles) && showByFeatureFlag(item.path));
   const filteredManagementItems = managementItems.filter(item => shouldShowNav(item.roles));
   const filteredAdminItems = adminItems.filter(item => shouldShowNav(item.roles));
 
@@ -66,7 +83,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
         <nav className="p-4 border-b border-gray-200">
           <div className="text-xs font-semibold text-gray-500 uppercase mb-3">Main</div>
           <div className="space-y-1">
-            {navItems.filter(item => shouldShowNav(item.roles)).map((item) => (
+            {filteredNavItems.map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}
