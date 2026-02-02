@@ -121,7 +121,7 @@ export const assignUserToDistributor = async (req: AuthRequest, res: Response): 
       select: { role: true, assignedToRsmId: true }
     });
 
-    if (!distributor || distributor.role !== 'DISTRIBUTOR') {
+    if (!distributor || effectiveRole(distributor.role) !== 'DISTRIBUTOR_REP') {
       res.status(400).json({ error: 'Invalid distributor' });
       return;
     }

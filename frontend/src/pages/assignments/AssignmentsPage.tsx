@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Building2, UserCog } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { assignmentsApi, catalogApi, priceContractApi } from '@/lib/api';
+import { assignmentsApi, catalogApi, priceContractApi, userManagementApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 
@@ -18,6 +18,14 @@ interface UserRow {
   turnkeyTeam?: { id: string; name: string } | null;
 }
 
+interface TreeUser {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  role?: string;
+}
+
 const AssignmentsPage = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -27,12 +35,19 @@ const AssignmentsPage = () => {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [modal, setModal] = useState<'catalogs' | 'contracts' | null>(null);
+  const [modal, setModal] = useState<'catalogs' | 'contracts' | 'distributor' | 'rsm' | null>(null);
   const [catalogs, setCatalogs] = useState<{ id: string; name: string }[]>([]);
   const [contracts, setContracts] = useState<{ id: string; name: string }[]>([]);
+  const [distributors, setDistributors] = useState<TreeUser[]>([]);
+  const [rsms, setRsms] = useState<TreeUser[]>([]);
+  const [selectedDistributorId, setSelectedDistributorId] = useState('');
+  const [selectedRsmId, setSelectedRsmId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const canManage = user?.role && ['ADMIN', 'RSM', 'DISTRIBUTOR_REP'].includes(effectiveRole(user.role));
+  const effRole = effectiveRole(user?.role ?? '');
+  const canManage = user?.role && ['ADMIN', 'RSM', 'DISTRIBUTOR_REP'].includes(effRole);
+  const canAssignToDistributor = effRole === 'ADMIN' || effRole === 'RSM';
+  const canAssignDistributorToRsm = effRole === 'ADMIN';
 
   useEffect(() => {
     if (!canManage) return;
@@ -46,6 +61,18 @@ const AssignmentsPage = () => {
       setUsers([]);
     }).finally(() => setLoading(false));
   }, [canManage, search, page]);
+
+  useEffect(() => {
+    if (!canAssignToDistributor && !canAssignDistributorToRsm) return;
+    assignmentsApi.getTree().then((res) => {
+      const data = res.data as { rsms?: TreeUser[]; distributors?: TreeUser[] };
+      setDistributors(data.distributors ?? []);
+      setRsms(data.rsms ?? []);
+    }).catch(() => {
+      setDistributors([]);
+      setRsms([]);
+    });
+  }, [canAssignToDistributor, canAssignDistributorToRsm]);
 
   useEffect(() => {
     if (modal === 'catalogs') {
@@ -74,6 +101,54 @@ const AssignmentsPage = () => {
   const toggleSelectAll = () => {
     if (selectedIds.size === users.length) setSelectedIds(new Set());
     else setSelectedIds(new Set(users.map((u) => u.id)));
+  };
+
+  const selectedUsers = users.filter((u) => selectedIds.has(u.id));
+  const selectedCustomers = selectedUsers.filter((u) => !['ADMIN', 'RSM'].includes(effectiveRole(u.role)));
+  const selectedDistributors = selectedUsers.filter((u) => ['DISTRIBUTOR_REP', 'DISTRIBUTOR'].includes(effectiveRole(u.role)));
+  const showAssignToDistributor = canAssignToDistributor && selectedCustomers.length > 0;
+  const showAssignToRsm = canAssignDistributorToRsm && selectedDistributors.length > 0;
+
+  const handleAssignToDistributor = () => {
+    if (!selectedDistributorId || selectedCustomers.length === 0) return;
+    setSubmitting(true);
+    const promises = selectedCustomers.map((u) =>
+      userManagementApi.assignToDistributor({ userId: u.id, distributorId: selectedDistributorId })
+    );
+    Promise.all(promises)
+      .then(() => {
+        toast.success(`Assigned ${selectedCustomers.length} user(s) to distributor`);
+        setModal(null);
+        setSelectedIds(new Set());
+        setSelectedDistributorId('');
+        assignmentsApi.getUsers({ page, limit: 20 }).then((r) => {
+          const d = r.data as { users: UserRow[] };
+          setUsers(d.users || []);
+        });
+      })
+      .catch((err: any) => toast.error(err.response?.data?.error || 'Failed to assign'))
+      .finally(() => setSubmitting(false));
+  };
+
+  const handleAssignDistributorToRsm = () => {
+    if (!selectedRsmId || selectedDistributors.length === 0) return;
+    setSubmitting(true);
+    const promises = selectedDistributors.map((u) =>
+      userManagementApi.assignDistributorToRsm({ distributorId: u.id, rsmId: selectedRsmId })
+    );
+    Promise.all(promises)
+      .then(() => {
+        toast.success(`Assigned ${selectedDistributors.length} distributor(s) to RSM`);
+        setModal(null);
+        setSelectedIds(new Set());
+        setSelectedRsmId('');
+        assignmentsApi.getUsers({ page, limit: 20 }).then((r) => {
+          const d = r.data as { users: UserRow[] };
+          setUsers(d.users || []);
+        });
+      })
+      .catch((err: any) => toast.error(err.response?.data?.error || 'Failed to assign'))
+      .finally(() => setSubmitting(false));
   };
 
   const handleAssignCatalogs = (catalogIds: string[], primaryCatalogId?: string) => {
@@ -125,11 +200,16 @@ const AssignmentsPage = () => {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center gap-4 mb-6">
-        <button onClick={() => navigate(-1)} className="text-green-600 hover:underline flex items-center gap-1">
-          <ArrowLeft className="w-5 h-5" /> Back
-        </button>
-        <h1 className="text-2xl font-bold">User & Catalog Assignments</h1>
+      <div className="mb-6">
+        <div className="flex items-center gap-4 mb-2">
+          <button onClick={() => navigate(-1)} className="text-green-600 hover:underline flex items-center gap-1">
+            <ArrowLeft className="w-5 h-5" /> Back
+          </button>
+          <h1 className="text-2xl font-bold">User & Catalog Assignments</h1>
+        </div>
+        <p className="text-sm text-gray-600">
+          Select users with the checkboxes, then use Assign Catalogs, Assign Price Contracts, Assign to distributor, or Assign to RSM (Admin only).
+        </p>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-4">
@@ -141,10 +221,22 @@ const AssignmentsPage = () => {
           className="input max-w-xs"
         />
         {selectedIds.size > 0 && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-gray-600">{selectedIds.size} selected</span>
             <button onClick={() => setModal('catalogs')} className="btn bg-gray-200">Assign Catalogs</button>
             <button onClick={() => setModal('contracts')} className="btn bg-gray-200">Assign Price Contracts</button>
+            {showAssignToDistributor && (
+              <button onClick={() => { setModal('distributor'); setSelectedDistributorId(''); }} className="btn bg-blue-100 text-blue-800 flex items-center gap-1">
+                <Building2 className="w-4 h-4" />
+                Assign to distributor
+              </button>
+            )}
+            {showAssignToRsm && (
+              <button onClick={() => { setModal('rsm'); setSelectedRsmId(''); }} className="btn bg-indigo-100 text-indigo-800 flex items-center gap-1">
+                <UserCog className="w-4 h-4" />
+                Assign to RSM
+              </button>
+            )}
             <button onClick={() => setSelectedIds(new Set())} className="btn bg-gray-100 text-gray-600">Clear</button>
           </div>
         )}
@@ -228,6 +320,70 @@ const AssignmentsPage = () => {
           onClose={() => setModal(null)}
           submitting={submitting}
         />
+      )}
+      {modal === 'distributor' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-blue-600" />
+              Assign to distributor
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Assign {selectedCustomers.length} selected user(s) to a distributor.
+            </p>
+            <select
+              value={selectedDistributorId}
+              onChange={(e) => setSelectedDistributorId(e.target.value)}
+              className="input w-full mb-4"
+            >
+              <option value="">Select distributor...</option>
+              {distributors.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {[d.firstName, d.lastName].filter(Boolean).join(' ') || d.email || d.id}
+                  {d.email ? ` (${d.email})` : ''}
+                </option>
+              ))}
+            </select>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => { setModal(null); setSelectedDistributorId(''); }} className="btn bg-gray-200">Cancel</button>
+              <button onClick={handleAssignToDistributor} disabled={!selectedDistributorId || submitting} className="btn btn-primary">
+                {submitting ? 'Assigning...' : 'Assign'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {modal === 'rsm' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+              <UserCog className="w-5 h-5 text-indigo-600" />
+              Assign distributor(s) to RSM
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Assign {selectedDistributors.length} selected distributor(s) to an RSM.
+            </p>
+            <select
+              value={selectedRsmId}
+              onChange={(e) => setSelectedRsmId(e.target.value)}
+              className="input w-full mb-4"
+            >
+              <option value="">Select RSM...</option>
+              {rsms.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {[r.firstName, r.lastName].filter(Boolean).join(' ') || r.email || r.id}
+                  {r.email ? ` (${r.email})` : ''}
+                </option>
+              ))}
+            </select>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => { setModal(null); setSelectedRsmId(''); }} className="btn bg-gray-200">Cancel</button>
+              <button onClick={handleAssignDistributorToRsm} disabled={!selectedRsmId || submitting} className="btn btn-primary">
+                {submitting ? 'Assigning...' : 'Assign'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

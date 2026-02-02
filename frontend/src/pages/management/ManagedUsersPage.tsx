@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Search, UserPlus } from 'lucide-react';
+import { Users, Search, UserPlus, Building2, UserCog, X } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { userManagementApi } from '@/lib/api';
+import { userManagementApi, assignmentsApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 
@@ -16,8 +16,16 @@ interface User {
   isActive: boolean;
   turnkeyTeam?: { id: string; name: string } | null;
   assignedToDistributor?: { id: string; email: string | null; companyName: string | null } | null;
-  assignedToRsm?: { id: string; email: string | null } | null;
+  assignedToRsm?: { id: string; email: string | null; firstName?: string | null; lastName?: string | null } | null;
   createdAt: string;
+}
+
+interface TreeUser {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  role?: string;
 }
 
 const ManagedUsersPage = () => {
@@ -25,8 +33,18 @@ const ManagedUsersPage = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [distributors, setDistributors] = useState<TreeUser[]>([]);
+  const [rsms, setRsms] = useState<TreeUser[]>([]);
+  const [assignDistributorFor, setAssignDistributorFor] = useState<User | null>(null);
+  const [assignRsmFor, setAssignRsmFor] = useState<User | null>(null);
+  const [selectedDistributorId, setSelectedDistributorId] = useState('');
+  const [selectedRsmId, setSelectedRsmId] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const canManage = user?.role && ['ADMIN', 'RSM', 'DISTRIBUTOR_REP'].includes(effectiveRole(user.role));
+  const effRole = effectiveRole(user?.role ?? '');
+  const canManage = user?.role && ['ADMIN', 'RSM', 'DISTRIBUTOR_REP'].includes(effRole);
+  const canAssignToDistributor = effRole === 'ADMIN' || effRole === 'RSM';
+  const canAssignDistributorToRsm = effRole === 'ADMIN';
 
   useEffect(() => {
     if (!canManage) return;
@@ -44,6 +62,63 @@ const ManagedUsersPage = () => {
       .finally(() => setLoading(false));
   }, [canManage, search]);
 
+  useEffect(() => {
+    if (!canAssignToDistributor && !canAssignDistributorToRsm) return;
+    assignmentsApi
+      .getTree()
+      .then((res) => {
+        const data = res.data as { rsms?: TreeUser[]; distributors?: TreeUser[] };
+        setDistributors(data.distributors ?? []);
+        setRsms(data.rsms ?? []);
+      })
+      .catch(() => {
+        setDistributors([]);
+        setRsms([]);
+      });
+  }, [canAssignToDistributor, canAssignDistributorToRsm]);
+
+  const displayName = (u: User | TreeUser) =>
+    [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || '—';
+
+  const isDistributor = (u: User) =>
+    ['DISTRIBUTOR', 'DISTRIBUTOR_REP'].includes(effectiveRole(u.role));
+  const isCustomerOrAny = (u: User) =>
+    !['ADMIN', 'RSM'].includes(effectiveRole(u.role));
+
+  const handleAssignToDistributor = () => {
+    if (!assignDistributorFor || !selectedDistributorId) return;
+    setSubmitting(true);
+    userManagementApi
+      .assignToDistributor({ userId: assignDistributorFor.id, distributorId: selectedDistributorId })
+      .then(() => {
+        toast.success('User assigned to distributor');
+        setAssignDistributorFor(null);
+        setSelectedDistributorId('');
+        userManagementApi.getUsers({ search: search || undefined }).then((res) => {
+          setUsers(Array.isArray(res.data) ? res.data : []);
+        });
+      })
+      .catch((err: any) => toast.error(err.response?.data?.error || 'Failed to assign'))
+      .finally(() => setSubmitting(false));
+  };
+
+  const handleAssignDistributorToRsm = () => {
+    if (!assignRsmFor || !selectedRsmId) return;
+    setSubmitting(true);
+    userManagementApi
+      .assignDistributorToRsm({ distributorId: assignRsmFor.id, rsmId: selectedRsmId })
+      .then(() => {
+        toast.success('Distributor assigned to RSM');
+        setAssignRsmFor(null);
+        setSelectedRsmId('');
+        userManagementApi.getUsers({ search: search || undefined }).then((res) => {
+          setUsers(Array.isArray(res.data) ? res.data : []);
+        });
+      })
+      .catch((err: any) => toast.error(err.response?.data?.error || 'Failed to assign'))
+      .finally(() => setSubmitting(false));
+  };
+
   if (!canManage) {
     return (
       <div className="p-6">
@@ -52,16 +127,13 @@ const ManagedUsersPage = () => {
     );
   }
 
-  const displayName = (u: User) =>
-    [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || '—';
-
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Managed Users</h1>
           <p className="text-gray-600 mt-1">
-            Users in your hierarchy. Use Assignments for catalog and price contract assignments.
+            Users in your hierarchy. Assign users to a distributor (RSM/Admin), or assign distributors to an RSM (Admin). Use Assignments for catalog and price contract assignments.
           </p>
         </div>
         <Link
@@ -105,6 +177,9 @@ const ManagedUsersPage = () => {
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Email</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Role</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Distributor</th>
+                  {canAssignDistributorToRsm && (
+                    <th className="px-4 py-3 text-left font-medium text-gray-700">RSM</th>
+                  )}
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Team</th>
                   <th className="px-4 py-3 text-right font-medium text-gray-700">Actions</th>
                 </tr>
@@ -122,16 +197,49 @@ const ManagedUsersPage = () => {
                     <td className="px-4 py-3 text-gray-600">
                       {u.assignedToDistributor?.companyName || u.assignedToDistributor?.email || '—'}
                     </td>
+                    {canAssignDistributorToRsm && (
+                      <td className="px-4 py-3 text-gray-600">
+                        {u.assignedToRsm ? [u.assignedToRsm.firstName, u.assignedToRsm.lastName].filter(Boolean).join(' ') || u.assignedToRsm.email : '—'}
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-gray-600">
                       {u.turnkeyTeam?.name || '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Link
-                        to={`/assignments?userId=${u.id}`}
-                        className="text-green-600 hover:underline text-sm"
-                      >
-                        Assignments
-                      </Link>
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <Link
+                          to={`/assignments?userId=${u.id}`}
+                          className="text-green-600 hover:underline text-sm"
+                        >
+                          Catalog & Contracts
+                        </Link>
+                        {canAssignToDistributor && isCustomerOrAny(u) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAssignDistributorFor(u);
+                              setSelectedDistributorId(u.assignedToDistributor?.id ?? '');
+                            }}
+                            className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                          >
+                            <Building2 className="w-4 h-4" />
+                            {u.assignedToDistributor ? 'Change distributor' : 'Assign to distributor'}
+                          </button>
+                        )}
+                        {canAssignDistributorToRsm && isDistributor(u) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAssignRsmFor(u);
+                              setSelectedRsmId(u.assignedToRsm?.id ?? '');
+                            }}
+                            className="text-sm text-indigo-600 hover:underline flex items-center gap-1"
+                          >
+                            <UserCog className="w-4 h-4" />
+                            {u.assignedToRsm ? 'Change RSM' : 'Assign to RSM'}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -140,6 +248,76 @@ const ManagedUsersPage = () => {
           </div>
         )}
       </div>
+
+      {/* Assign user to distributor modal */}
+      {assignDistributorFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Assign to distributor</h3>
+              <button type="button" onClick={() => { setAssignDistributorFor(null); setSelectedDistributorId(''); }} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              Assign <strong>{displayName(assignDistributorFor)}</strong> to a distributor.
+            </p>
+            <select
+              value={selectedDistributorId}
+              onChange={(e) => setSelectedDistributorId(e.target.value)}
+              className="input w-full mb-4"
+            >
+              <option value="">Select distributor...</option>
+              {distributors.map((d) => (
+                <option key={d.id} value={d.id}>{displayName(d)} {d.email ? `(${d.email})` : ''}</option>
+              ))}
+            </select>
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => { setAssignDistributorFor(null); setSelectedDistributorId(''); }} className="btn btn-outline">
+                Cancel
+              </button>
+              <button type="button" onClick={handleAssignToDistributor} disabled={!selectedDistributorId || submitting} className="btn btn-primary">
+                {submitting ? 'Assigning...' : 'Assign'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign distributor to RSM modal (Admin only) */}
+      {assignRsmFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Assign distributor to RSM</h3>
+              <button type="button" onClick={() => { setAssignRsmFor(null); setSelectedRsmId(''); }} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              Assign distributor <strong>{displayName(assignRsmFor)}</strong> to an RSM.
+            </p>
+            <select
+              value={selectedRsmId}
+              onChange={(e) => setSelectedRsmId(e.target.value)}
+              className="input w-full mb-4"
+            >
+              <option value="">Select RSM...</option>
+              {rsms.map((r) => (
+                <option key={r.id} value={r.id}>{displayName(r)} {r.email ? `(${r.email})` : ''}</option>
+              ))}
+            </select>
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => { setAssignRsmFor(null); setSelectedRsmId(''); }} className="btn btn-outline">
+                Cancel
+              </button>
+              <button type="button" onClick={handleAssignDistributorToRsm} disabled={!selectedRsmId || submitting} className="btn btn-primary">
+                {submitting ? 'Assigning...' : 'Assign'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
