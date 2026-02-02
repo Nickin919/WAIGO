@@ -25,10 +25,6 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     { path: '/my-price-contracts', icon: Calculator, label: 'My Price Contracts', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
   ];
 
-  const teamItems = [
-    { path: '/team', icon: Users, label: 'My Team', roles: ['DIRECT_USER'] },
-  ];
-
   const managementItems = [
     { path: '/managed-users', icon: Building2, label: 'Managed Users', roles: ['DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
     { path: '/assignments', icon: Users, label: 'Assignments', roles: ['DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
@@ -44,7 +40,6 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     return user && navRoles.includes(effectiveRole(user.role));
   };
 
-  const filteredTeamItems = teamItems.filter(item => shouldShowNav(item.roles));
   const filteredManagementItems = managementItems.filter(item => shouldShowNav(item.roles));
   const filteredAdminItems = adminItems.filter(item => shouldShowNav(item.roles));
 
@@ -89,33 +84,6 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             ))}
           </div>
         </nav>
-
-        {/* Team Section (TurnKey Users) */}
-        {filteredTeamItems.length > 0 && (
-          <nav className="p-4 border-b border-gray-200">
-            <div className="text-xs font-semibold text-gray-500 uppercase mb-3">Team</div>
-            <div className="space-y-1">
-              {filteredTeamItems.map((item) => (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  onClick={onClose}
-                  className={({ isActive }) =>
-                    clsx(
-                      'flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors',
-                      isActive
-                        ? 'bg-green-600 text-white'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    )
-                  }
-                >
-                  <item.icon className="w-5 h-5" />
-                  <span className="font-medium">{item.label}</span>
-                </NavLink>
-              ))}
-            </div>
-          </nav>
-        )}
 
         {/* Management Section (Distributor, RSM, Admin) */}
         {filteredManagementItems.length > 0 && (

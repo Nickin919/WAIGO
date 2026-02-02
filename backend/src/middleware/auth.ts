@@ -10,7 +10,6 @@ export interface AuthRequest extends Request {
     role: string;
     accountId?: string | null;
     catalogId?: string | null;
-    turnkeyTeamId?: string | null;
     assignedToDistributorId?: string | null;
   };
 }
@@ -54,7 +53,6 @@ export const authenticate = async (
         role: true,
         accountId: true,
         catalogId: true,
-        turnkeyTeamId: true,
         assignedToDistributorId: true,
         isActive: true
       }
@@ -71,7 +69,6 @@ export const authenticate = async (
       role: user.role,
       accountId: user.accountId ?? null,
       catalogId: user.catalogId,
-      turnkeyTeamId: user.turnkeyTeamId,
       assignedToDistributorId: user.assignedToDistributorId
     };
 
@@ -145,7 +142,6 @@ export const optionalAuth = async (
         role: true,
         accountId: true,
         catalogId: true,
-        turnkeyTeamId: true,
         assignedToDistributorId: true,
         isActive: true
       }
@@ -158,7 +154,6 @@ export const optionalAuth = async (
         role: user.role,
         accountId: user.accountId ?? null,
         catalogId: user.catalogId,
-        turnkeyTeamId: user.turnkeyTeamId,
         assignedToDistributorId: user.assignedToDistributorId
       };
     }

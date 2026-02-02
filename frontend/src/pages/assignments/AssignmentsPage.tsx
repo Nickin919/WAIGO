@@ -15,7 +15,6 @@ interface UserRow {
   primaryCatalog: { id: string; name: string } | null;
   assignedCatalogs: { id: string; name: string }[];
   assignedContracts: { id: string; name: string }[];
-  turnkeyTeam?: { id: string; name: string } | null;
 }
 
 interface TreeUser {
@@ -317,7 +316,6 @@ const AssignmentsPage = () => {
               </th>
               <th className="px-4 py-2 text-left">Name</th>
               <th className="px-4 py-2 text-left">Role</th>
-              <th className="px-4 py-2 text-left">Team</th>
               <th className="px-4 py-2 text-left">Primary Catalog</th>
               <th className="px-4 py-2 text-left">Assigned Catalogs</th>
               <th className="px-4 py-2 text-left">Price Contracts</th>
@@ -325,9 +323,9 @@ const AssignmentsPage = () => {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
             ) : users.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">No users in your scope.</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">No users in your scope.</td></tr>
             ) : (
               users.map((u) => (
                 <tr key={u.id} className="border-t hover:bg-gray-50">
@@ -336,7 +334,6 @@ const AssignmentsPage = () => {
                   </td>
                   <td className="px-4 py-2 font-medium">{[u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || u.id}</td>
                   <td className="px-4 py-2">{u.role}</td>
-                  <td className="px-4 py-2">{u.turnkeyTeam?.name ?? '—'}</td>
                   <td className="px-4 py-2">{u.primaryCatalog?.name ?? '—'}</td>
                   <td className="px-4 py-2">
                     <div className="flex flex-wrap gap-1">

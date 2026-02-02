@@ -32,7 +32,6 @@ import crossReferenceRoutes from './routes/crossReference.routes';
 import adminRoutes from './routes/admin.routes';
 import notificationRoutes from './routes/notification.routes';
 import userManagementRoutes from './routes/userManagement.routes';
-import teamRoutes from './routes/team.routes';
 import costTableRoutes from './routes/costTable.routes';
 import customerRoutes from './routes/customer.routes';
 import productImportRoutes from './routes/productImport.routes';
@@ -108,7 +107,6 @@ app.use('/api/notifications', notificationRoutes);
 
 // New user hierarchy routes
 app.use('/api/user-management', userManagementRoutes);
-app.use('/api/teams', teamRoutes);
 app.use('/api/cost-tables', costTableRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/catalog-creator', catalogCreatorRoutes);

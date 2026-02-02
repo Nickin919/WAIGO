@@ -35,7 +35,7 @@ export const getTree = async (req: AuthRequest, res: Response): Promise<void> =>
       });
       const basicTurnkey = await prisma.user.findMany({
         where: { role: { in: ['BASIC', 'BASIC_USER', 'TURNKEY', 'DIRECT_USER'] }, id: { in: subordinateIds } },
-        select: { id: true, firstName: true, lastName: true, email: true, role: true, assignedToDistributorId: true, turnkeyTeamId: true },
+        select: { id: true, firstName: true, lastName: true, email: true, role: true, assignedToDistributorId: true },
         orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
       });
       res.json({
@@ -60,7 +60,7 @@ export const getTree = async (req: AuthRequest, res: Response): Promise<void> =>
           role: { in: ['BASIC', 'BASIC_USER', 'TURNKEY', 'DIRECT_USER'] },
           assignedToDistributorId: { in: distributors.map((d) => d.id) },
         },
-        select: { id: true, firstName: true, lastName: true, email: true, role: true, assignedToDistributorId: true, turnkeyTeamId: true },
+        select: { id: true, firstName: true, lastName: true, email: true, role: true, assignedToDistributorId: true },
         orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
       });
       res.json({
@@ -76,7 +76,7 @@ export const getTree = async (req: AuthRequest, res: Response): Promise<void> =>
     // DISTRIBUTOR
     const users = await prisma.user.findMany({
       where: { assignedToDistributorId: req.user.id },
-      select: { id: true, firstName: true, lastName: true, email: true, role: true, turnkeyTeamId: true },
+      select: { id: true, firstName: true, lastName: true, email: true, role: true },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     });
     res.json({ users });
@@ -127,9 +127,7 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
           email: true,
           role: true,
           catalogId: true,
-          turnkeyTeamId: true,
           catalog: { select: { id: true, name: true } },
-          turnkeyTeam: { select: { id: true, name: true } },
           catalogAssignments: {
             include: { catalog: { select: { id: true, name: true } } },
           },

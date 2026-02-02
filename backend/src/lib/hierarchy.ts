@@ -34,20 +34,8 @@ export async function getSubordinateUserIds(userId: string, userRole: string): P
       });
       return [...ids, ...assigned.map((u) => u.id)];
     }
-    case 'DIRECT_USER': {
-      const u = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { turnkeyTeamId: true },
-      });
-      if (u?.turnkeyTeamId) {
-        const team = await prisma.user.findMany({
-          where: { turnkeyTeamId: u.turnkeyTeamId },
-          select: { id: true },
-        });
-        return team.map((t) => t.id);
-      }
+    case 'DIRECT_USER':
       return ids;
-    }
     default:
       return ids;
   }

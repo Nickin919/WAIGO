@@ -20,11 +20,7 @@ export const getCostTables = async (req: AuthRequest, res: Response): Promise<vo
     let where: any = {};
 
     if (effectiveRole(req.user.role) === 'DIRECT_USER') {
-      // TurnKey users see their own and their team's tables
-      where.OR = [
-        { userId: req.user.id },
-        ...(req.user.turnkeyTeamId ? [{ turnkeyTeamId: req.user.turnkeyTeamId }] : [])
-      ];
+      where.userId = req.user.id;
     } else if (effectiveRole(req.user.role) === 'DISTRIBUTOR_REP') {
       // Distributors see tables of their assigned users
       where.user = {
@@ -43,12 +39,6 @@ export const getCostTables = async (req: AuthRequest, res: Response): Promise<vo
             firstName: true,
             lastName: true,
             assignedToDistributorId: true
-          }
-        },
-        turnkeyTeam: {
-          select: {
-            id: true,
-            name: true
           }
         },
         _count: {
@@ -89,12 +79,6 @@ export const getCostTableById = async (req: AuthRequest, res: Response): Promise
             assignedToDistributorId: true
           }
         },
-        turnkeyTeam: {
-          select: {
-            id: true,
-            name: true
-          }
-        },
         items: {
           orderBy: { partNumber: 'asc' }
         }
@@ -111,7 +95,6 @@ export const getCostTableById = async (req: AuthRequest, res: Response): Promise
       effectiveRole(req.user.role) === 'ADMIN' ||
       effectiveRole(req.user.role) === 'RSM' ||
       costTable.userId === req.user.id ||
-      (costTable.turnkeyTeamId && costTable.turnkeyTeamId === req.user.turnkeyTeamId) ||
       (effectiveRole(req.user.role) === 'DISTRIBUTOR_REP' && costTable.user?.assignedToDistributorId === req.user.id);
 
     if (!hasAccess) {
@@ -136,7 +119,7 @@ export const createCostTable = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
-    const { name, description, isTeamTable } = req.body;
+    const { name, description } = req.body;
 
     if (!name) {
       res.status(400).json({ error: 'Name is required' });
@@ -145,15 +128,9 @@ export const createCostTable = async (req: AuthRequest, res: Response): Promise<
 
     const data: any = {
       name,
-      description
+      description,
+      userId: req.user.id
     };
-
-    // Determine ownership
-    if (isTeamTable && req.user.turnkeyTeamId) {
-      data.turnkeyTeamId = req.user.turnkeyTeamId;
-    } else {
-      data.userId = req.user.id;
-    }
 
     const costTable = await prisma.costTable.create({
       data,
@@ -189,7 +166,7 @@ export const uploadCostTableCSV = async (req: AuthRequest, res: Response): Promi
     // Verify ownership
     const costTable = await prisma.costTable.findUnique({
       where: { id: costTableId },
-      select: { userId: true, turnkeyTeamId: true }
+      select: { userId: true }
     });
 
     if (!costTable) {
@@ -199,7 +176,6 @@ export const uploadCostTableCSV = async (req: AuthRequest, res: Response): Promi
 
     const hasAccess = 
       costTable.userId === req.user.id ||
-      (costTable.turnkeyTeamId && costTable.turnkeyTeamId === req.user.turnkeyTeamId) ||
       (effectiveRole(req.user.role) === 'ADMIN' || effectiveRole(req.user.role) === 'RSM');
 
     if (!hasAccess) {
@@ -361,10 +337,7 @@ export const getPartCustomCost = async (req: AuthRequest, res: Response): Promis
     const costTables = await prisma.costTable.findMany({
       where: {
         isActive: true,
-        OR: [
-          { userId: req.user.id },
-          ...(req.user.turnkeyTeamId ? [{ turnkeyTeamId: req.user.turnkeyTeamId }] : [])
-        ]
+        userId: req.user.id
       },
       include: {
         items: {

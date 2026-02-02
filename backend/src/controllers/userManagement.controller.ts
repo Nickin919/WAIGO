@@ -64,16 +64,9 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
         role: true,
         isActive: true,
         accountId: true,
-        turnkeyTeamId: true,
         assignedToDistributorId: true,
         assignedToRsmId: true,
         createdAt: true,
-        turnkeyTeam: {
-          select: {
-            id: true,
-            name: true
-          }
-        },
         account: {
           select: {
             id: true,

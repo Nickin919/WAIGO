@@ -87,7 +87,7 @@ model User {
   assignedToDistributorId String? @map("assigned_to_distributor_id") // Basic/Direct assigned to Distributor
   assignedToRsmId         String? @map("assigned_to_rsm_id") // Distributor assigned to RSM
   
-  // TurnKey Team (legacy; Direct users may use account-based grouping)
+  // TurnKey Team (deprecated – no longer used in app)
   turnkeyTeamId   String?   @map("turnkey_team_id")
   
   // Distributor settings
@@ -136,7 +136,7 @@ model User {
 }
 
 // ============================================================================
-// TURNKEY TEAMS
+// TURNKEY TEAMS (deprecated – no longer used in app; tables kept for DB compatibility)
 // ============================================================================
 
 model TurnkeyTeam {

@@ -287,46 +287,6 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
-
-      {/* Team Activity (TurnKey Users) */}
-      {effectiveRole(user?.role ?? '') === 'DIRECT_USER' && user?.turnkeyTeamId && (
-        <div className="mt-6">
-          <div className="card p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Team Activity</h3>
-              <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
-                TurnKey Team
-              </span>
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                  <span className="text-white text-sm font-semibold">S</span>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm">
-                    <span className="font-medium">Sarah</span> updated{' '}
-                    <span className="text-green-600">Control Panel Project</span>
-                  </p>
-                  <p className="text-xs text-gray-500">30 minutes ago</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
-                  <span className="text-white text-sm font-semibold">M</span>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm">
-                    <span className="font-medium">Mike</span> created new{' '}
-                    <span className="text-green-600">pricing contract</span>
-                  </p>
-                  <p className="text-xs text-gray-500">1 hour ago</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

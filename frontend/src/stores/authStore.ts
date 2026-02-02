@@ -9,7 +9,6 @@ interface User {
   companyName?: string;
   role: 'FREE' | 'BASIC' | 'TURNKEY' | 'DISTRIBUTOR' | 'RSM' | 'ADMIN';
   catalogId?: string | null;
-  turnkeyTeamId?: string | null;
   sessionId?: string;
 }
 

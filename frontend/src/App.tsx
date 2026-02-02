@@ -28,7 +28,6 @@ import AssignmentsPage from './pages/assignments/AssignmentsPage';
 import MyPriceContractsPage from './pages/assignments/MyPriceContractsPage';
 import ManagedUsersPage from './pages/management/ManagedUsersPage';
 import PricingContractsPage from './pages/management/PricingContractsPage';
-import TeamPage from './pages/management/TeamPage';
 import ActivityPage from './pages/management/ActivityPage';
 import ProductFinder from './pages/public/ProductFinder';
 import BomCrossReference from './pages/public/BomCrossReference';
@@ -110,7 +109,7 @@ function App() {
         <Route path="/managed-users" element={<ManagedUsersPage />} />
         <Route path="/pricing-contracts" element={<PricingContractsPage />} />
         <Route path="/cost-tables" element={<Navigate to="/pricing-contracts" replace />} />
-        <Route path="/team" element={<TeamPage />} />
+        <Route path="/team" element={<Navigate to="/dashboard" replace />} />
         <Route path="/activity" element={<ActivityPage />} />
         <Route path="/product-finder" element={<ProductFinder />} />
         <Route path="/bom-cross-reference" element={<BomCrossReference />} />

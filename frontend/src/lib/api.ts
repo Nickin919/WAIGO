@@ -326,30 +326,13 @@ export const userManagementApi = {
 };
 
 // ============================================================================
-// Team API
-// ============================================================================
-
-export const teamApi = {
-  getAll: () => api.get('/teams'),
-  getById: (id: string) => api.get(`/teams/${id}`),
-  create: (data: { name: string; description?: string }) => api.post('/teams', data),
-  update: (id: string, data: { name?: string; description?: string }) =>
-    api.patch(`/teams/${id}`, data),
-  delete: (id: string) => api.delete(`/teams/${id}`),
-  addMember: (data: { teamId: string; userId: string }) =>
-    api.post('/teams/members', data),
-  removeMember: (teamId: string, userId: string) =>
-    api.delete(`/teams/${teamId}/members/${userId}`),
-};
-
-// ============================================================================
 // Pricing Contracts API (backend: /cost-tables)
 // ============================================================================
 
 export const costTableApi = {
   getAll: () => api.get('/cost-tables'),
   getById: (id: string) => api.get(`/cost-tables/${id}`),
-  create: (data: { name: string; description?: string; userId?: string; turnkeyTeamId?: string }) =>
+  create: (data: { name: string; description?: string }) =>
     api.post('/cost-tables', data),
   update: (id: string, data: { name?: string; description?: string }) =>
     api.patch(`/cost-tables/${id}`, data),

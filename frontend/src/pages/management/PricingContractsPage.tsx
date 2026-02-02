@@ -17,9 +17,7 @@ interface PricingContract {
   name: string;
   description: string | null;
   userId: string | null;
-  turnkeyTeamId: string | null;
   user?: { firstName: string | null; lastName: string | null; email: string | null } | null;
-  turnkeyTeam?: { name: string } | null;
   _count?: { items: number };
 }
 
@@ -631,8 +629,7 @@ const PricingContractsPage = () => {
                   <tr key={c.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium">{c.name}</td>
                     <td className="px-4 py-3 text-gray-600">
-                      {c.turnkeyTeam?.name ||
-                        (c.user ? [c.user.firstName, c.user.lastName].filter(Boolean).join(' ') || c.user.email : '—')}
+                      {c.user ? [c.user.firstName, c.user.lastName].filter(Boolean).join(' ') || c.user.email : '—'}
                     </td>
                     <td className="px-4 py-3 text-gray-600">{c._count?.items ?? 0}</td>
                     <td className="px-4 py-3 text-right">

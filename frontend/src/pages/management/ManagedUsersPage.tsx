@@ -16,7 +16,6 @@ interface User {
   isActive: boolean;
   accountId?: string | null;
   account?: { id: string; name: string; type: string } | null;
-  turnkeyTeam?: { id: string; name: string } | null;
   assignedToDistributor?: { id: string; email: string | null; companyName: string | null } | null;
   assignedToRsm?: { id: string; email: string | null; firstName?: string | null; lastName?: string | null } | null;
   createdAt: string;
@@ -249,7 +248,6 @@ const ManagedUsersPage = () => {
                   {canAssignDistributorToRsm && (
                     <th className="px-4 py-3 text-left font-medium text-gray-700">RSM</th>
                   )}
-                  <th className="px-4 py-3 text-left font-medium text-gray-700">Team</th>
                   <th className="px-4 py-3 text-right font-medium text-gray-700">Actions</th>
                 </tr>
               </thead>
@@ -274,9 +272,6 @@ const ManagedUsersPage = () => {
                         {u.assignedToRsm ? [u.assignedToRsm.firstName, u.assignedToRsm.lastName].filter(Boolean).join(' ') || u.assignedToRsm.email : '—'}
                       </td>
                     )}
-                    <td className="px-4 py-3 text-gray-600">
-                      {u.turnkeyTeam?.name || '—'}
-                    </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex flex-wrap items-center justify-end gap-2">
                         <Link
