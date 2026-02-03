@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Pencil, Download, Trash2 } from 'lucide-react';
+import { ArrowLeft, Pencil, Download, Trash2, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { quoteApi } from '@/lib/api';
 
@@ -9,6 +9,7 @@ const QuoteDetail = () => {
   const [quote, setQuote] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     if (quoteId && quoteId !== 'new') {
@@ -42,6 +43,29 @@ const QuoteDetail = () => {
     }).catch(() => toast.error('Download failed'));
   };
 
+  const handleEmailQuote = () => {
+    if (!quoteId || sending) return;
+    const to = quote?.customerEmail?.trim();
+    if (!to) {
+      const email = window.prompt('No customer email on quote. Enter recipient email:');
+      if (!email?.trim()) return;
+      sendQuoteTo(email.trim());
+      return;
+    }
+    sendQuoteTo(to);
+  };
+
+  const sendQuoteTo = (to: string) => {
+    if (!quoteId) return;
+    setSending(true);
+    quoteApi.sendEmail(quoteId, { to }).then((res) => {
+      toast.success(res.data?.message ?? 'Quote sent successfully');
+    }).catch((err: any) => {
+      const msg = err.response?.data?.error ?? 'Failed to send quote email';
+      toast.error(msg);
+    }).finally(() => setSending(false));
+  };
+
   const formatCurrency = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
 
   if (loading || !quote) {
@@ -70,6 +94,14 @@ const QuoteDetail = () => {
           <Link to={`/quotes/${quoteId}/edit`} className="btn bg-gray-200 flex items-center gap-2">
             <Pencil className="w-4 h-4" /> Edit
           </Link>
+          <button onClick={handleEmailQuote} disabled={sending} className="btn btn-primary flex items-center gap-2 disabled:opacity-60">
+            {sending ? (
+              <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Mail className="w-4 h-4" />
+            )}
+            Email quote
+          </button>
           <button onClick={handleDownload} className="btn bg-gray-200 flex items-center gap-2">
             <Download className="w-4 h-4" /> CSV
           </button>

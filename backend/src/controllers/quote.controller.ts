@@ -4,6 +4,9 @@ import { AuthRequest } from '../middleware/auth';
 import { getSubordinateUserIds } from '../lib/hierarchy';
 import { effectiveRole, isInternal } from '../lib/roles';
 import { ROLE_MAX_DISCOUNT } from '../lib/quoteConstants';
+import { sendQuoteEmail } from '../lib/emailService';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 async function canAccessQuote(userId: string, userRole: string, quoteUserId: string): Promise<boolean> {
   const subordinateIds = await getSubordinateUserIds(userId, userRole);
@@ -479,6 +482,75 @@ export const downloadQuoteCSV = async (req: AuthRequest, res: Response): Promise
   } catch (error) {
     console.error('Download CSV error:', error);
     res.status(500).json({ error: 'Failed to download quote' });
+  }
+};
+
+/**
+ * Send quote by email (Resend). Recipient: body.to or quote.customerEmail.
+ */
+export const sendQuoteEmailHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const { id } = req.params;
+    const toOverride = req.body?.to as string | undefined;
+
+    const quote = await prisma.quote.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+
+    if (!quote) {
+      res.status(404).json({ error: 'Quote not found' });
+      return;
+    }
+
+    const allowed = await canAccessQuote(req.user.id, req.user.role, quote.userId);
+    if (!allowed) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    const to = (toOverride ?? quote.customerEmail ?? '').trim();
+    if (!to) {
+      res.status(400).json({
+        error: 'No recipient. Set quote customer email or pass "to" in the request body.',
+      });
+      return;
+    }
+    if (!EMAIL_REGEX.test(to)) {
+      res.status(400).json({ error: 'Invalid email address' });
+      return;
+    }
+
+    const customerName = quote.customerName ?? 'Customer';
+    const itemCount = quote.items.length;
+    const quoteSummary = `Quote ${quote.quoteNumber} includes ${itemCount} item(s) with a total of $${Number(quote.total).toFixed(2)}.`;
+
+    await sendQuoteEmail({
+      to,
+      quoteId: quote.id,
+      quoteNumber: quote.quoteNumber,
+      customerName,
+      quoteSummary,
+    });
+
+    if (!quote.sentAt) {
+      await prisma.quote.update({
+        where: { id },
+        data: { sentAt: new Date() },
+      });
+    }
+
+    res.json({ message: 'Quote sent successfully to ' + to });
+  } catch (error) {
+    console.error('Send quote email error:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to send quote email',
+    });
   }
 };
 

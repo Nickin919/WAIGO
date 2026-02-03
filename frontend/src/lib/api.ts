@@ -264,6 +264,8 @@ export const quoteApi = {
   delete: (id: string) => api.delete(`/quotes/${id}`),
   downloadCSV: (id: string) => api.get(`/quotes/${id}/download-csv`, { responseType: 'blob' }),
   generatePDF: (id: string) => api.get(`/quotes/${id}/pdf`, { responseType: 'blob' }),
+  sendEmail: (id: string, body?: { to?: string }) =>
+    api.post<{ message: string }>(`/quotes/${id}/send`, body ?? {}),
 };
 
 // ============================================================================

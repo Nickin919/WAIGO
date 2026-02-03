@@ -503,8 +503,9 @@ model Quote {
   fob             String?   @db.VarChar(100)
   terms           String?   @default("Net 30") @db.VarChar(100)
   isActive        Boolean   @default(true) @map("is_active")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  sentAt         DateTime? @map("sent_at") // First time quote was emailed (optional)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   // Relations
   user          User         @relation(fields: [userId], references: [id])
@@ -518,6 +519,20 @@ model Quote {
   @@index([customerId])
   @@index([priceContractId])
   @@map("quotes")
+}
+
+model EmailLog {
+  id        Int       @id @default(autoincrement())
+  quoteId   String?   @map("quote_id") // Quote.id (uuid); soft reference for audit
+  recipient String
+  subject   String
+  status    String    // 'sent' | 'failed' | 'bounced'
+  error     String?   @db.Text
+  sentAt    DateTime  @default(now()) @map("sent_at")
+  resendId  String?   @unique @map("resend_id") // Resend email id for webhook lookup
+
+  @@index([quoteId])
+  @@map("email_logs")
 }
 
 model QuoteItem {
