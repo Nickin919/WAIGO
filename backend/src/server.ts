@@ -188,7 +188,11 @@ const startServer = async () => {
     await prisma.$queryRaw`SELECT 1`;
     console.log('✅ Database connected');
 
-    await ensureMasterCatalog();
+    try {
+      await ensureMasterCatalog();
+    } catch (err) {
+      console.error('⚠️ Master Catalog setup failed (server will still start):', err);
+    }
 
     const server = app.listen(PORT, () => {
       const host = process.env.RAILWAY_PUBLIC_DOMAIN || `localhost:${PORT}`;
