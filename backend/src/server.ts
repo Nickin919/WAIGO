@@ -144,6 +144,42 @@ app.use(errorHandler);
 // Start Server
 // ============================================================================
 
+const MASTER_CATALOG_NAME = 'Master Catalog';
+
+async function ensureMasterCatalog(): Promise<void> {
+  const existingMaster = await prisma.catalog.findFirst({
+    where: { isMaster: true },
+    select: { id: true },
+  });
+  if (existingMaster) return;
+
+  const byName = await prisma.catalog.findFirst({
+    where: { name: MASTER_CATALOG_NAME },
+    select: { id: true, isMaster: true },
+  });
+  if (byName) {
+    if (!byName.isMaster) {
+      await prisma.catalog.update({
+        where: { id: byName.id },
+        data: { isMaster: true, isActive: true },
+      });
+      console.log(`✅ Marked "${MASTER_CATALOG_NAME}" as MASTER`);
+    }
+    return;
+  }
+
+  await prisma.catalog.create({
+    data: {
+      name: MASTER_CATALOG_NAME,
+      description: 'Default catalog for product imports. All other catalogs are built from this.',
+      isMaster: true,
+      isActive: true,
+      isPublic: false,
+    },
+  });
+  console.log(`✅ Created default "${MASTER_CATALOG_NAME}" (MASTER)`);
+}
+
 const startServer = async () => {
   try {
     // Verify database connection
@@ -151,6 +187,8 @@ const startServer = async () => {
     await prisma.$connect();
     await prisma.$queryRaw`SELECT 1`;
     console.log('✅ Database connected');
+
+    await ensureMasterCatalog();
 
     const server = app.listen(PORT, () => {
       const host = process.env.RAILWAY_PUBLIC_DOMAIN || `localhost:${PORT}`;

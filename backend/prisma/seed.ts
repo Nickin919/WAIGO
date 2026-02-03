@@ -13,6 +13,31 @@ async function main() {
   }
 
   try {
+    // Ensure default Master Catalog exists (required for product import)
+    let masterCatalog = await prisma.catalog.findFirst({
+      where: { name: 'Master Catalog' },
+    });
+    if (!masterCatalog) {
+      masterCatalog = await prisma.catalog.create({
+        data: {
+          name: 'Master Catalog',
+          description: 'Default catalog for product imports. All other catalogs are built from this.',
+          isMaster: true,
+          isActive: true,
+          isPublic: false,
+        },
+      });
+      console.log('✅ Created Master Catalog (MASTER)');
+    } else if (!masterCatalog.isMaster) {
+      await prisma.catalog.update({
+        where: { id: masterCatalog.id },
+        data: { isMaster: true, isActive: true },
+      });
+      console.log('✅ Marked Master Catalog as MASTER');
+    } else {
+      console.log('⏭️ Master Catalog already exists');
+    }
+
     // Create demo catalog (idempotent: use upsert or skip if exists)
     let catalog = await prisma.catalog.findFirst({
       where: { name: 'WAGO Demo Catalog' }
