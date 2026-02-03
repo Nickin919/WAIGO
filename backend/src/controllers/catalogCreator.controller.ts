@@ -6,6 +6,7 @@ import { getSubordinateUserIds } from '../lib/hierarchy';
 interface CreateCatalogData {
   name: string;
   description?: string;
+  sourceCatalogId?: string;
   productIds?: string[];
   categoryIds?: string[];
 }
@@ -91,6 +92,13 @@ export const getCatalogDetail = async (req: AuthRequest, res: Response): Promise
             firstName: true,
             lastName: true
           }
+        },
+        sourceCatalog: {
+          select: {
+            id: true,
+            name: true,
+            isMaster: true
+          }
         }
       }
     });
@@ -160,21 +168,23 @@ export const createUserCatalog = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
-    const { name, description, productIds, categoryIds } = req.body as CreateCatalogData;
+    const { name, description, sourceCatalogId, productIds, categoryIds } = req.body as CreateCatalogData;
 
     if (!name?.trim()) {
       res.status(400).json({ error: 'Catalog name is required' });
       return;
     }
 
-    // Create catalog
+    const createData: { name: string; description?: string | null; createdById: string; isPublic: boolean; sourceCatalogId?: string | null } = {
+      name: name.trim(),
+      description: description?.trim() ?? null,
+      createdById: req.user.id,
+      isPublic: false
+    };
+    if (sourceCatalogId) createData.sourceCatalogId = sourceCatalogId;
+
     const catalog = await prisma.catalog.create({
-      data: {
-        name: name.trim(),
-        description: description?.trim(),
-        createdById: req.user.id,
-        isPublic: false
-      }
+      data: createData
     });
 
     // Add selected products
@@ -216,7 +226,7 @@ export const updateUserCatalog = async (req: AuthRequest, res: Response): Promis
     }
 
     const { id } = req.params;
-    const { name, description, productIds, categoryIds } = req.body as CreateCatalogData;
+    const { name, description, sourceCatalogId, productIds, categoryIds } = req.body as CreateCatalogData;
 
     // Check access
     const canAccess = await canAccessCatalog(req.user.id, req.user.role, id);
@@ -225,10 +235,10 @@ export const updateUserCatalog = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
-    // Update catalog
-    const updateData: any = { updatedAt: new Date() };
+    const updateData: { updatedAt: Date; name?: string; description?: string | null; sourceCatalogId?: string | null } = { updatedAt: new Date() };
     if (name !== undefined) updateData.name = name.trim();
     if (description !== undefined) updateData.description = description?.trim();
+    if (sourceCatalogId !== undefined) updateData.sourceCatalogId = sourceCatalogId || null;
 
     const catalog = await prisma.catalog.update({
       where: { id },
@@ -305,6 +315,44 @@ export const deleteUserCatalog = async (req: AuthRequest, res: Response): Promis
 };
 
 /**
+ * Get catalogs that can be used as source when building a new catalog: MASTER (if any) + user's visible catalogs.
+ * GET /api/catalog-creator/source-catalogs
+ */
+export const getSourceCatalogs = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const subordinateIds = await getSubordinateUserIds(req.user.id, req.user.role);
+
+    const [masterCatalog, visibleCatalogs] = await Promise.all([
+      prisma.catalog.findFirst({
+        where: { isMaster: true, isActive: true },
+        select: { id: true, name: true, isMaster: true, sourceCatalogId: true }
+      }),
+      prisma.catalog.findMany({
+        where: { createdById: { in: subordinateIds }, isActive: true },
+        select: { id: true, name: true, isMaster: true, sourceCatalogId: true },
+        orderBy: { name: 'asc' }
+      })
+    ]);
+
+    const list = [];
+    if (masterCatalog) list.push({ ...masterCatalog, label: `${masterCatalog.name} (MASTER)` });
+    visibleCatalogs.forEach(c => {
+      if (c.id !== masterCatalog?.id) list.push({ ...c, label: c.name });
+    });
+
+    res.json({ sourceCatalogs: list });
+  } catch (error) {
+    console.error('Get source catalogs error:', error);
+    res.status(500).json({ error: 'Failed to fetch source catalogs' });
+  }
+};
+
+/**
  * Bulk lookup products by part numbers
  * POST /api/products/lookup-parts
  */
@@ -356,8 +404,9 @@ export const lookupPartNumbers = async (req: AuthRequest, res: Response): Promis
 };
 
 /**
- * Get all products for catalog creator (with category grouping)
- * GET /api/products/for-catalog
+ * Get all products for catalog creator (with category grouping).
+ * Source catalog determines products: MASTER = Parts owned by that catalog; secondary = Parts resolved via CatalogItem -> Part.
+ * GET /api/catalog-creator/products-for-catalog?sourceCatalogId=<id>
  */
 export const getProductsForCatalog = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -366,28 +415,89 @@ export const getProductsForCatalog = async (req: AuthRequest, res: Response): Pr
       return;
     }
 
-    const { catalogId } = req.query;
+    const sourceCatalogId = req.query.sourceCatalogId as string | undefined;
+    if (!sourceCatalogId) {
+      res.status(400).json({ error: 'sourceCatalogId is required. Use the MASTER catalog or a catalog built from it.' });
+      return;
+    }
 
-    const products = await prisma.part.findMany({
+    const sourceCatalog = await prisma.catalog.findUnique({
+      where: { id: sourceCatalogId },
+      select: { id: true, isMaster: true }
+    });
+    if (!sourceCatalog) {
+      res.status(404).json({ error: 'Source catalog not found' });
+      return;
+    }
+
+    const subordinateIds = await getSubordinateUserIds(req.user.id, req.user.role);
+    const masterCatalog = await prisma.catalog.findFirst({
+      where: { isMaster: true },
+      select: { id: true }
+    });
+    const visibleCatalogIds = await prisma.catalog.findMany({
+      where: { createdById: { in: subordinateIds } },
+      select: { id: true }
+    }).then(c => c.map(x => x.id));
+    if (!visibleCatalogIds.includes(sourceCatalogId) && sourceCatalogId !== masterCatalog?.id) {
+      res.status(403).json({ error: 'Access denied to source catalog' });
+      return;
+    }
+
+    if (sourceCatalog.isMaster) {
+      const products = await prisma.part.findMany({
+        where: {
+          catalogId: sourceCatalogId,
+          active: true
+        },
+        include: {
+          category: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        },
+        orderBy: [
+          { category: { name: 'asc' } },
+          { partNumber: 'asc' }
+        ],
+        take: 10000
+      });
+      res.json({ products });
+      return;
+    }
+
+    const catalogItems = await prisma.catalogItem.findMany({
       where: {
-        catalogId: catalogId as string || undefined,
-        active: true
+        catalogId: sourceCatalogId,
+        productId: { not: null }
       },
       include: {
-        category: {
-          select: {
-            id: true,
-            name: true
+        product: {
+          include: {
+            category: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
           }
         }
-      },
-      orderBy: [
-        { category: { name: 'asc' } },
-        { partNumber: 'asc' }
-      ],
-      take: 10000 // Reasonable limit
+      }
     });
-
+    const seen = new Set<string>();
+    const products = catalogItems
+      .filter(item => item.product && !seen.has(item.product!.id))
+      .map(item => {
+        seen.add(item.product!.id);
+        return item.product!;
+      })
+      .sort((a, b) => {
+        const catA = a.category?.name ?? '';
+        const catB = b.category?.name ?? '';
+        return catA.localeCompare(catB) || a.partNumber.localeCompare(b.partNumber);
+      });
     res.json({ products });
   } catch (error) {
     console.error('Get products for catalog error:', error);

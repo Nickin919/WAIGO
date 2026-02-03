@@ -42,6 +42,8 @@ const CatalogCreator = () => {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   
   // Data state
+  const [sourceCatalogs, setSourceCatalogs] = useState<Array<{ id: string; name: string; label: string; isMaster?: boolean }>>([]);
+  const [sourceCatalogId, setSourceCatalogId] = useState<string>('');
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -57,25 +59,56 @@ const CatalogCreator = () => {
     notFound: string[];
   } | null>(null);
 
-  // Load data
+  // Load source catalogs once, then set default source to MASTER (first in list)
   useEffect(() => {
+    (async () => {
+      try {
+        const res = await axios.get<{ sourceCatalogs: Array<{ id: string; name: string; label: string; isMaster?: boolean }> }>('/api/catalog-creator/source-catalogs');
+        const list = res.data.sourceCatalogs || [];
+        setSourceCatalogs(list);
+        setSourceCatalogId((prev) => (list.length > 0 && !prev ? list[0].id : prev));
+      } catch (e) {
+        console.error('Failed to load source catalogs', e);
+      }
+    })();
+  }, []);
+
+  // Load products when source catalog or edit id changes
+  useEffect(() => {
+    if (!sourceCatalogId && !(isEditing && id)) return;
     loadData();
-  }, [id]);
+  }, [id, sourceCatalogId]);
 
   const loadData = async () => {
+    if (!sourceCatalogId && !(isEditing && id)) return;
+    setLoading(true);
     try {
-      // Load products
-      const productsRes = await axios.get('/api/catalog-creator/products-for-catalog');
-      setProducts(productsRes.data.products);
-
-      // If editing, load existing catalog
+      let effectiveSourceId = sourceCatalogId;
       if (isEditing && id) {
         const catalogRes = await axios.get(`/api/catalog-creator/detail/${id}`);
-        setName(catalogRes.data.catalog.name);
-        setDescription(catalogRes.data.catalog.description || '');
-        
+        const catalog = catalogRes.data.catalog;
+        setName(catalog.name);
+        setDescription(catalog.description || '');
+        if (catalog.sourceCatalogId) {
+          setSourceCatalogId(catalog.sourceCatalogId);
+          effectiveSourceId = catalog.sourceCatalogId;
+        }
         const productIds = catalogRes.data.items.products.map((p: Product) => p.id);
         setSelectedProductIds(new Set(productIds));
+      }
+      if (!effectiveSourceId) {
+        const srcRes = await axios.get<{ sourceCatalogs: Array<{ id: string }> }>('/api/catalog-creator/source-catalogs');
+        const list = srcRes.data.sourceCatalogs || [];
+        if (list.length > 0) {
+          effectiveSourceId = list[0].id;
+          setSourceCatalogId(effectiveSourceId);
+        }
+      }
+      if (effectiveSourceId) {
+        const productsRes = await axios.get('/api/catalog-creator/products-for-catalog', {
+          params: { sourceCatalogId: effectiveSourceId }
+        });
+        setProducts(productsRes.data.products || []);
       }
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -128,7 +161,7 @@ const CatalogCreator = () => {
           const filteredChildren = node.children.filter(child =>
             child.name.toLowerCase().includes(searchLower) ||
             child.product?.partNumber.toLowerCase().includes(searchLower) ||
-            child.product?.description?.toLowerCase().includes(searchLower)
+            (child.product?.englishDescription ?? child.product?.description)?.toLowerCase().includes(searchLower)
           );
 
           if (filteredChildren.length > 0) {
@@ -290,6 +323,7 @@ const CatalogCreator = () => {
       const data = {
         name: name.trim(),
         description: description.trim(),
+        sourceCatalogId: sourceCatalogId || undefined,
         productIds: Array.from(selectedProductIds)
       };
 
@@ -480,6 +514,28 @@ const CatalogCreator = () => {
                   data-testid="input-catalog-description"
                 />
               </div>
+              {sourceCatalogs.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Build from (source catalog)
+                  </label>
+                  <select
+                    value={sourceCatalogId}
+                    onChange={(e) => setSourceCatalogId(e.target.value)}
+                    className="input"
+                    data-testid="select-source-catalog"
+                  >
+                    {sourceCatalogs.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Products and descriptions come from the source. Use MASTER for the full catalog.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 

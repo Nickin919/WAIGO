@@ -22,7 +22,10 @@ router.patch('/update/:id', catalogCreatorController.updateUserCatalog);
 // Delete catalog
 router.delete('/delete/:id', catalogCreatorController.deleteUserCatalog);
 
-// Get all products for catalog creator
+// Get source catalog options (MASTER + visible catalogs) for building from
+router.get('/source-catalogs', catalogCreatorController.getSourceCatalogs);
+
+// Get all products for catalog creator (requires sourceCatalogId query param)
 router.get('/products-for-catalog', catalogCreatorController.getProductsForCatalog);
 
 // Bulk lookup products by part numbers

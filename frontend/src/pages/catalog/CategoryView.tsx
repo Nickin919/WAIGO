@@ -152,7 +152,7 @@ const CategoryView = () => {
                     {part.partNumber}
                   </div>
                   <div className="text-sm text-gray-900 line-clamp-2 mb-2">
-                    {part.description}
+                    {part.englishDescription ?? part.description}
                   </div>
                   {part._count.videos > 0 && (
                     <div className="text-xs text-purple-600">

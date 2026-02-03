@@ -13,6 +13,7 @@ export const getAllCatalogs = async (req: AuthRequest, res: Response): Promise<v
         id: true,
         name: true,
         description: true,
+        isMaster: true,
         createdAt: true,
         _count: {
           select: {

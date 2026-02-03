@@ -106,7 +106,7 @@ const AdminDashboard = () => {
             className="btn btn-primary flex items-center justify-center space-x-2"
           >
             <Upload className="w-5 h-5" />
-            <span>Import Products</span>
+            <span>Product Import</span>
           </button>
           <button
             onClick={() => navigate('/admin/data-management')}

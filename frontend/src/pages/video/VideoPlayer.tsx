@@ -186,7 +186,7 @@ const VideoPlayer = () => {
                   {video.part.partNumber}
                 </div>
                 <div className="text-sm text-gray-900">
-                  {video.part.description}
+                  {video.part.englishDescription ?? video.part.description}
                 </div>
               </Link>
             </div>

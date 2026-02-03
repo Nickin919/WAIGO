@@ -68,7 +68,7 @@ router.get('/parts/search', async (req: Request, res: Response): Promise<void> =
       results: publicParts.map(part => ({
         id: part.id,
         partNumber: part.partNumber,
-        description: part.description,
+        description: part.englishDescription ?? part.description,
         category: part.category.name,
         catalogName: part.catalog.name,
         thumbnailUrl: part.thumbnailUrl
@@ -129,7 +129,7 @@ router.post('/cross-reference', async (req: Request, res: Response): Promise<voi
       },
       wagoEquivalents: crossRefs.map(ref => ({
         partNumber: ref.wagoPart.partNumber,
-        description: ref.wagoPart.description,
+        description: ref.wagoPart.englishDescription ?? ref.wagoPart.description,
         category: ref.wagoPart.category.name,
         compatibilityScore: ref.compatibilityScore,
         notes: ref.notes,
@@ -167,6 +167,7 @@ router.post('/cross-reference/bulk', async (req: Request, res: Response): Promis
               select: {
                 partNumber: true,
                 description: true,
+                englishDescription: true,
                 minQty: true,
                 packageQty: true
               }
@@ -185,7 +186,7 @@ router.post('/cross-reference/bulk', async (req: Request, res: Response): Promis
           },
           wagoEquivalent: crossRefs.length > 0 ? {
             partNumber: crossRefs[0].wagoPart.partNumber,
-            description: crossRefs[0].wagoPart.description,
+            description: crossRefs[0].wagoPart.englishDescription ?? crossRefs[0].wagoPart.description,
             compatibilityScore: crossRefs[0].compatibilityScore,
             notes: crossRefs[0].notes,
             minQty: crossRefs[0].wagoPart.minQty,

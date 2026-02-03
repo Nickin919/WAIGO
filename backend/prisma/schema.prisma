@@ -219,23 +219,26 @@ model CatalogAssignment {
 // ============================================================================
 
 model Catalog {
-  id          String    @id @default(uuid())
-  name        String
-  description String?
-  isActive    Boolean   @default(true) @map("is_active")
-  isPublic    Boolean   @default(false) @map("is_public")
-  isMaster    Boolean   @default(false) @map("is_master") // Label: single source of truth (ADMIN)
-  createdById String?   @map("created_by_id")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  id               String    @id @default(uuid())
+  name             String
+  description      String?
+  isActive         Boolean   @default(true) @map("is_active")
+  isPublic         Boolean   @default(false) @map("is_public")
+  isMaster         Boolean   @default(false) @map("is_master") // Label: single source of truth (ADMIN)
+  sourceCatalogId  String?   @map("source_catalog_id") // Catalog this was built from (MASTER or secondary)
+  createdById     String?   @map("created_by_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  users       User[]
-  createdBy   User?     @relation("CatalogCreator", fields: [createdById], references: [id])
-  categories  Category[]
-  parts       Part[]
-  assignments CatalogAssignment[]
-  catalogItems CatalogItem[] // User-selected products for this catalog
+  users            User[]
+  createdBy        User?     @relation("CatalogCreator", fields: [createdById], references: [id])
+  sourceCatalog   Catalog?  @relation("CatalogSource", fields: [sourceCatalogId], references: [id], onDelete: SetNull)
+  derivedCatalogs Catalog[]  @relation("CatalogSource")
+  categories      Category[]
+  parts           Part[]
+  assignments     CatalogAssignment[]
+  catalogItems    CatalogItem[] // User-selected products for this catalog
 
   @@map("catalogs")
 }

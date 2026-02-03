@@ -59,6 +59,20 @@ export const bulkImportProducts = async (req: AuthRequest, res: Response): Promi
       return;
     }
 
+    // Product import for authoritative data (descriptions, prices) is restricted to MASTER catalog only
+    const catalog = await prisma.catalog.findUnique({
+      where: { id: catalogId },
+      select: { id: true, isMaster: true }
+    });
+    if (!catalog) {
+      res.status(400).json({ error: 'Catalog not found' });
+      return;
+    }
+    if (!catalog.isMaster) {
+      res.status(400).json({ error: 'Product import is only allowed into the MASTER catalog. Select the MASTER catalog to import.' });
+      return;
+    }
+
     // Process import
     const result = await processProductImport(
       products as ImportProduct[],

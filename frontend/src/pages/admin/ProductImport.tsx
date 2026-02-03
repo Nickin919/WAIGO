@@ -162,7 +162,7 @@ const ProductImport = () => {
   const [importResult, setImportResult] = useState<any>(null);
   const [clearing, setClearing] = useState(false);
   const [parsing, setParsing] = useState(false);
-  const [catalogs, setCatalogs] = useState<{ id: string; name: string }[]>([]);
+  const [catalogs, setCatalogs] = useState<{ id: string; name: string; isMaster?: boolean }[]>([]);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>('');
   const [dragActive, setDragActive] = useState(false);
   const [newCatalogName, setNewCatalogName] = useState('');
@@ -172,15 +172,18 @@ const ProductImport = () => {
 
   const effectiveCatalogId = selectedCatalogId || user?.catalogId || '';
   const isAdmin = user?.role === 'ADMIN';
+  const selectedCatalog = catalogs.find((c) => c.id === effectiveCatalogId);
+  const isMasterSelected = selectedCatalog?.isMaster === true;
 
   const fetchCatalogs = () => {
     catalogApi.getAll().then((res) => {
       const list = Array.isArray(res.data) ? res.data : [];
-      setCatalogs(list.map((c: any) => ({ id: c.id, name: c.name || 'Unnamed' })));
+      setCatalogs(list.map((c: any) => ({ id: c.id, name: c.name || 'Unnamed', isMaster: !!c.isMaster })));
       if (list.length > 0 && !selectedCatalogId) {
+        const master = list.find((c: any) => c.isMaster);
         const userCat = user?.catalogId;
         const match = userCat && list.some((c: any) => c.id === userCat);
-        setSelectedCatalogId(match ? userCat! : list[0].id);
+        setSelectedCatalogId(master ? master.id : (match ? userCat! : list[0].id));
       }
     }).catch(() => {});
   };
@@ -371,11 +374,12 @@ const ProductImport = () => {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-8">
-        <button onClick={() => navigate('/admin')} className="flex items-center text-green-600 hover:underline mb-4">
-          <ArrowLeft className="w-4 h-4 mr-1" /> Back to Admin
+        <button onClick={() => navigate('/admin')} className="flex items-center text-green-600 hover:underline mb-2">
+          <ArrowLeft className="w-4 h-4 mr-1" /> Back to Administration
         </button>
+        <p className="text-sm text-gray-500 mb-1">Administration &gt; Product Import</p>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Product Import</h1>
-        <p className="text-gray-600">Import products from CSV with column mapping</p>
+        <p className="text-gray-600">Import products from CSV into the MASTER catalog. Map columns, then preview and import.</p>
       </div>
 
       <div className="mb-8 flex items-center justify-between max-w-3xl">
@@ -403,7 +407,9 @@ const ProductImport = () => {
                 >
                   <option value="">Select catalog...</option>
                   {catalogs.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                    <option key={c.id} value={c.id}>
+                      {c.name}{c.isMaster ? ' (MASTER)' : ''}
+                    </option>
                   ))}
                 </select>
                 {isAdmin && (
@@ -446,6 +452,14 @@ const ProductImport = () => {
                     </button>
                   </div>
                 </div>
+              )}
+              <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                Product import is only allowed into the <strong>MASTER</strong> catalog. Select the catalog marked (MASTER) to add or update products. Sub-catalogs are built from MASTER and cannot be imported into.
+              </p>
+              {effectiveCatalogId && !isMasterSelected && (
+                <p className="mt-1 text-xs text-red-600 font-medium">
+                  The selected catalog is not the MASTER. Import will fail until you select the MASTER catalog.
+                </p>
               )}
             </div>
 
@@ -536,18 +550,25 @@ const MappingStep = ({ headers, rawData, columnMapping, setColumnMapping, update
   return (
     <div>
       <h2 className="text-xl font-bold mb-4">Map Columns</h2>
-      <div className="mb-6 p-4 bg-gray-50 rounded-lg flex items-center justify-between">
-        <div>
-          <label className="font-medium block mb-1">Update-Only Mode</label>
-          <p className="text-sm text-gray-600">Only update existing products</p>
+      <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <label className="font-medium block mb-1">Update-Only Mode</label>
+            <p className="text-sm text-gray-600">Only update existing products (no new rows created)</p>
+          </div>
+          <input
+            type="checkbox"
+            id="update-only-check"
+            checked={updateOnly}
+            onChange={(e) => setUpdateOnly(e.target.checked)}
+            className="w-4 h-4 rounded text-green-600"
+          />
         </div>
-        <input
-          type="checkbox"
-          id="update-only-check"
-          checked={updateOnly}
-          onChange={(e) => setUpdateOnly(e.target.checked)}
-          className="w-4 h-4 rounded text-green-600"
-        />
+        {updateOnly && (
+          <p className="text-xs text-gray-600 mt-2">
+            Map <strong>Part Number</strong> plus any columns you want to update (e.g. English Description). Only those columns are updated for matching parts; unmapped columns are left unchanged. You can use a CSV with just Part Number and English Description.
+          </p>
+        )}
       </div>
       <div className="overflow-x-auto mb-6">
         <table className="w-full">

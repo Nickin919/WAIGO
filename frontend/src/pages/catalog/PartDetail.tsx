@@ -71,7 +71,7 @@ const PartDetail = () => {
               {part.partNumber}
             </div>
             <h1 className="text-3xl font-bold text-gray-900 mb-4">
-              {part.description}
+              {part.englishDescription ?? part.description}
             </h1>
 
             <div className="space-y-3 mb-6">

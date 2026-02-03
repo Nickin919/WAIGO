@@ -328,11 +328,11 @@ export const updateProjectItem = async (req: AuthRequest, res: Response): Promis
     if (body.panelAccessory === 'PANEL' || body.panelAccessory === 'ACCESSORY' || body.panelAccessory === null) updateData.panelAccessory = body.panelAccessory;
     if (typeof body.notes === 'string') updateData.notes = body.notes;
     if (body.partId != null) {
-      const part = await prisma.part.findUnique({ where: { id: body.partId }, select: { id: true, partNumber: true, description: true } });
+      const part = await prisma.part.findUnique({ where: { id: body.partId }, select: { id: true, partNumber: true, description: true, englishDescription: true } });
       if (part) {
         updateData.partId = part.id;
         updateData.partNumber = part.partNumber;
-        updateData.description = part.description;
+        updateData.description = part.englishDescription ?? part.description;
         updateData.isWagoPart = true;
       }
     }
@@ -571,7 +571,7 @@ export const suggestWagoUpgrades = async (req: AuthRequest, res: Response): Prom
           originalManufacturer: { equals: manufacturer, mode: 'insensitive' }
         },
         include: {
-          wagoPart: { select: { id: true, partNumber: true, description: true } }
+          wagoPart: { select: { id: true, partNumber: true, description: true, englishDescription: true } }
         },
         orderBy: { compatibilityScore: 'desc' }
       });
@@ -584,7 +584,7 @@ export const suggestWagoUpgrades = async (req: AuthRequest, res: Response): Prom
           wagoEquivalents: crossRefs.map((ref) => ({
             wagoPartId: ref.wagoPart.id,
             partNumber: ref.wagoPart.partNumber,
-            description: ref.wagoPart.description,
+            description: ref.wagoPart.englishDescription ?? ref.wagoPart.description,
             compatibilityScore: ref.compatibilityScore,
             notes: ref.notes
           }))
@@ -628,7 +628,7 @@ export const applyWagoUpgrade = async (req: AuthRequest, res: Response): Promise
 
     const wagoPart = await prisma.part.findUnique({
       where: { id: wagoPartId },
-      select: { id: true, partNumber: true, description: true }
+      select: { id: true, partNumber: true, description: true, englishDescription: true }
     });
     if (!wagoPart) {
       res.status(404).json({ error: 'WAGO part not found' });
@@ -643,17 +643,18 @@ export const applyWagoUpgrade = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
+    const resolvedDescription = wagoPart.englishDescription ?? wagoPart.description;
     const updated = await prisma.projectItem.update({
       where: { id: itemId },
       data: {
         partId: wagoPart.id,
         partNumber: wagoPart.partNumber,
-        description: wagoPart.description,
+        description: resolvedDescription,
         isWagoPart: true,
         hasWagoEquivalent: true
       },
       include: {
-        part: { select: { id: true, partNumber: true, description: true, thumbnailUrl: true } }
+        part: { select: { id: true, partNumber: true, description: true, englishDescription: true, thumbnailUrl: true } }
       }
     });
     res.json(updated);
