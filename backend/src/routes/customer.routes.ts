@@ -6,6 +6,8 @@ const router = Router();
 
 router.get('/', authenticate, authorize('ADMIN', 'RSM', 'DISTRIBUTOR', 'TURNKEY', 'BASIC'), customerController.getCustomers);
 router.post('/', authenticate, authorize('ADMIN', 'RSM', 'DISTRIBUTOR', 'TURNKEY', 'BASIC'), customerController.createCustomer);
+router.post('/bulk', authenticate, authorize('ADMIN', 'RSM', 'DISTRIBUTOR', 'TURNKEY', 'BASIC'), customerController.bulkCreateCustomers);
+router.patch('/:id', authenticate, authorize('ADMIN', 'RSM', 'DISTRIBUTOR', 'TURNKEY', 'BASIC'), customerController.updateCustomer);
 router.delete('/:id', authenticate, authorize('ADMIN', 'RSM', 'DISTRIBUTOR', 'TURNKEY', 'BASIC'), customerController.deleteCustomer);
 
 export default router;
