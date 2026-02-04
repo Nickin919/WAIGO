@@ -6,7 +6,14 @@ import ExcelJS from 'exceljs';
 import nodemailer from 'nodemailer';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { getSubordinateUserIds } from '../lib/hierarchy';
 import { addProjectItemSchema, parseBomCsvRow } from '../lib/validation/bomSchemas';
+
+/** Check if current user can access a project (owner or in hierarchy, like quotes). */
+async function canAccessProject(currentUserId: string, currentUserRole: string, projectUserId: string): Promise<boolean> {
+  const subordinateIds = await getSubordinateUserIds(currentUserId, currentUserRole);
+  return subordinateIds.includes(projectUserId);
+}
 
 const BOM_SAMPLE = 'manufacturer,partNumber,description,quantity,unitPrice\nWAGO,221-413,PCB terminal block 2.5mm,10,0.85\nPhoenix Contact,1234567,Competitor terminal,5,\n';
 
@@ -21,13 +28,15 @@ export const getProjects = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
+    const subordinateIds = await getSubordinateUserIds(req.user.id, req.user.role);
+
     const page = Math.max(1, parseInt(String(req.query.page), 10) || DEFAULT_PAGE);
     const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(String(req.query.limit), 10) || DEFAULT_LIMIT));
     const skip = (page - 1) * limit;
 
     const [projects, total] = await Promise.all([
       prisma.project.findMany({
-        where: { userId: req.user.id },
+        where: { userId: { in: subordinateIds } },
         select: {
           id: true,
           name: true,
@@ -36,13 +45,17 @@ export const getProjects = async (req: AuthRequest, res: Response): Promise<void
           currentRevision: true,
           updatedAt: true,
           createdAt: true,
-          _count: { select: { items: true } }
+          userId: true,
+          _count: { select: { items: true } },
+          user: {
+            select: { id: true, email: true, firstName: true, lastName: true },
+          },
         },
         orderBy: { updatedAt: 'desc' },
         skip,
         take: limit,
       }),
-      prisma.project.count({ where: { userId: req.user.id } }),
+      prisma.project.count({ where: { userId: { in: subordinateIds } } }),
     ]);
 
     res.json({
@@ -94,8 +107,9 @@ export const getProjectById = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    if (project.userId !== req.user.id) {
-      res.status(403).json({ error: 'Not authorized' });
+    const allowed = await canAccessProject(req.user.id, req.user.role, project.userId);
+    if (!allowed) {
+      res.status(403).json({ error: 'Access denied' });
       return;
     }
 
@@ -141,6 +155,20 @@ export const updateProject = async (req: AuthRequest, res: Response): Promise<vo
     const { id } = req.params;
     const { name, description } = req.body;
 
+    const existing = await prisma.project.findUnique({
+      where: { id },
+      select: { userId: true },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+    const allowed = await canAccessProject(req.user!.id, req.user!.role, existing.userId);
+    if (!allowed) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
     const project = await prisma.project.update({
       where: { id },
       data: {
@@ -159,6 +187,20 @@ export const updateProject = async (req: AuthRequest, res: Response): Promise<vo
 export const deleteProject = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+
+    const existing = await prisma.project.findUnique({
+      where: { id },
+      select: { userId: true },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+    const allowed = await canAccessProject(req.user!.id, req.user!.role, existing.userId);
+    if (!allowed) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
 
     await prisma.project.delete({
       where: { id }
@@ -196,8 +238,9 @@ export const addProjectItem = async (req: AuthRequest, res: Response): Promise<v
       res.status(404).json({ error: 'Project not found' });
       return;
     }
-    if (project.userId !== req.user.id) {
-      res.status(403).json({ error: 'Not authorized' });
+    const allowedAdd = await canAccessProject(req.user.id, req.user.role, project.userId);
+    if (!allowedAdd) {
+      res.status(403).json({ error: 'Access denied' });
       return;
     }
 
@@ -248,9 +291,10 @@ export const uploadBOM = async (req: AuthRequest, res: Response): Promise<void> 
       res.status(404).json({ error: 'Project not found' });
       return;
     }
-    if (project.userId !== req.user!.id) {
+    const allowedUpload = await canAccessProject(req.user!.id, req.user!.role, project.userId);
+    if (!allowedUpload) {
       fs.unlinkSync(file.path);
-      res.status(403).json({ error: 'Not authorized' });
+      res.status(403).json({ error: 'Access denied' });
       return;
     }
     if (project.status !== 'DRAFT') {
@@ -345,8 +389,9 @@ export const updateProjectItem = async (req: AuthRequest, res: Response): Promis
       res.status(404).json({ error: 'Project item not found' });
       return;
     }
-    if (existing.project.userId !== req.user.id) {
-      res.status(403).json({ error: 'Not authorized' });
+    const allowedUpdateItem = await canAccessProject(req.user.id, req.user.role, existing.project.userId);
+    if (!allowedUpdateItem) {
+      res.status(403).json({ error: 'Access denied' });
       return;
     }
 
@@ -378,8 +423,9 @@ export const deleteProjectItem = async (req: AuthRequest, res: Response): Promis
       res.status(404).json({ error: 'Project item not found' });
       return;
     }
-    if (existing.project.userId !== req.user.id) {
-      res.status(403).json({ error: 'Not authorized' });
+    const allowedDeleteItem = await canAccessProject(req.user.id, req.user.role, existing.project.userId);
+    if (!allowedDeleteItem) {
+      res.status(403).json({ error: 'Access denied' });
       return;
     }
 
@@ -411,8 +457,9 @@ export const submitProject = async (req: AuthRequest, res: Response): Promise<vo
       res.status(404).json({ error: 'Project not found' });
       return;
     }
-    if (project.userId !== req.user.id) {
-      res.status(403).json({ error: 'Not authorized' });
+    const allowedSubmit = await canAccessProject(req.user.id, req.user.role, project.userId);
+    if (!allowedSubmit) {
+      res.status(403).json({ error: 'Access denied' });
       return;
     }
     if (project.status !== 'DRAFT') {
@@ -500,8 +547,9 @@ export const finalizeProject = async (req: AuthRequest, res: Response): Promise<
       res.status(404).json({ error: 'Project not found' });
       return;
     }
-    if (project.userId !== req.user.id) {
-      res.status(403).json({ error: 'Not authorized' });
+    const allowedFinalize = await canAccessProject(req.user.id, req.user.role, project.userId);
+    if (!allowedFinalize) {
+      res.status(403).json({ error: 'Access denied' });
       return;
     }
     if (project.status !== 'SUBMITTED') {
@@ -536,8 +584,9 @@ export const suggestWagoUpgrades = async (req: AuthRequest, res: Response): Prom
       res.status(404).json({ error: 'Project not found' });
       return;
     }
-    if (project.userId !== req.user.id) {
-      res.status(403).json({ error: 'Not authorized' });
+    const allowedSuggest = await canAccessProject(req.user.id, req.user.role, project.userId);
+    if (!allowedSuggest) {
+      res.status(403).json({ error: 'Access denied' });
       return;
     }
 
@@ -621,8 +670,9 @@ export const applyWagoUpgrade = async (req: AuthRequest, res: Response): Promise
       res.status(404).json({ error: 'Project not found' });
       return;
     }
-    if (project.userId !== req.user.id) {
-      res.status(403).json({ error: 'Not authorized' });
+    const allowedApply = await canAccessProject(req.user.id, req.user.role, project.userId);
+    if (!allowedApply) {
+      res.status(403).json({ error: 'Access denied' });
       return;
     }
 
@@ -676,11 +726,16 @@ export const createRevision = async (req: AuthRequest, res: Response): Promise<v
 
     const project = await prisma.project.findUnique({
       where: { id },
-      select: { currentRevision: true }
+      select: { currentRevision: true, userId: true }
     });
 
     if (!project) {
       res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+    const allowedRevision = await canAccessProject(req.user!.id, req.user!.role, project.userId);
+    if (!allowedRevision) {
+      res.status(403).json({ error: 'Access denied' });
       return;
     }
 
@@ -709,6 +764,20 @@ export const createRevision = async (req: AuthRequest, res: Response): Promise<v
 export const getRevisions = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+
+    const project = await prisma.project.findUnique({
+      where: { id },
+      select: { userId: true },
+    });
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+    const allowedRevisions = await canAccessProject(req.user!.id, req.user!.role, project.userId);
+    if (!allowedRevisions) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
 
     const revisions = await prisma.projectRevision.findMany({
       where: { projectId: id },
@@ -742,14 +811,16 @@ type ReportData = {
   advantages: string[];
 };
 
-async function getReportData(projectId: string, userId: string): Promise<ReportData | null> {
+async function getReportData(projectId: string, currentUserId: string, currentUserRole: string): Promise<ReportData | null> {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     include: {
       items: { orderBy: { createdAt: 'asc' } }
     }
   });
-  if (!project || project.userId !== userId) return null;
+  if (!project) return null;
+  const allowed = await canAccessProject(currentUserId, currentUserRole, project.userId);
+  if (!allowed) return null;
   if (project.status !== 'COMPLETED') return null;
 
   const items = project.items;
@@ -803,7 +874,7 @@ export const getProjectReport = async (req: AuthRequest, res: Response): Promise
     const { id } = req.params;
     const format = (req.query.format as string)?.toLowerCase();
 
-    const report = await getReportData(id, req.user.id);
+    const report = await getReportData(id, req.user.id, req.user.role);
     if (!report) {
       res.status(404).json({ error: 'Project not found or report only available for completed projects' });
       return;
@@ -903,7 +974,7 @@ export const emailProjectReport = async (req: AuthRequest, res: Response): Promi
       return;
     }
 
-    const report = await getReportData(id, req.user.id);
+    const report = await getReportData(id, req.user.id, req.user.role);
     if (!report) {
       res.status(404).json({ error: 'Project not found or report not available' });
       return;

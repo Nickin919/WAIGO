@@ -66,14 +66,15 @@ const Projects = () => {
                   {project.description}
                 </p>
               )}
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">
-                  {project._count?.items ?? 0} items
-                </span>
-                <span className="text-gray-600">
-                  {project.status ? statusLabel(project.status) : 'Draft'} · Rev {project.currentRevision}
-                </span>
+              <div className="flex items-center justify-between text-sm text-gray-600">
+                <span>{project._count?.items ?? 0} items</span>
+                <span>{project.status ? statusLabel(project.status) : 'Draft'} · Rev {project.currentRevision}</span>
               </div>
+              {project.user && (
+                <p className="text-xs text-gray-500 mt-2">
+                  Created by {[project.user.firstName, project.user.lastName].filter(Boolean).join(' ') || project.user.email || 'Unknown'}
+                </p>
+              )}
             </Link>
           ))}
         </div>

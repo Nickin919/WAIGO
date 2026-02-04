@@ -1,6 +1,6 @@
 {
   "name": "wago-backend",
-  "version": "1.0.0",
+  "version": "1.4.3",
   "description": "Backend API for WAGO Project Hub",
   "main": "dist/server.js",
   "scripts": {
