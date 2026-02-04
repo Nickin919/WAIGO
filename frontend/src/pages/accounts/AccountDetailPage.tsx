@@ -216,6 +216,10 @@ const AccountDetailPage = () => {
 
   const handleAssignContracts = (contractIds: string[]) => {
     if (!userId) return;
+    if (!contractIds?.length) {
+      toast.error('Select at least one price contract.');
+      return;
+    }
     setSubmitting(true);
     assignmentsApi
       .assignContracts({ userId, contractIds })
@@ -522,7 +526,7 @@ function ContractModal({
         </div>
         <div className="flex gap-2 justify-end">
           <button type="button" onClick={onClose} className="btn bg-gray-200">Cancel</button>
-          <button type="button" onClick={() => onAssign(Array.from(selected))} disabled={submitting} className="btn btn-primary">{submitting ? 'Assigning...' : 'Assign'}</button>
+          <button type="button" onClick={() => onAssign(Array.from(selected))} disabled={submitting || selected.size === 0} className="btn btn-primary">{submitting ? 'Assigning...' : 'Assign'}</button>
         </div>
       </div>
     </div>

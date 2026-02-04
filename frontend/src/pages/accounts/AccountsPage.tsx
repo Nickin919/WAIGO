@@ -100,6 +100,14 @@ const AccountsPage = () => {
   };
 
   const handleAssignContracts = (contractIds: string[]) => {
+    if (selectedIds.size === 0) {
+      toast.error('Select at least one user.');
+      return;
+    }
+    if (!contractIds?.length) {
+      toast.error('Select at least one price contract.');
+      return;
+    }
     setSubmitting(true);
     assignmentsApi
       .assignContracts({ userIds: Array.from(selectedIds), contractIds })

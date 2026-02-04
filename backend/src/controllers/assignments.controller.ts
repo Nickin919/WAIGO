@@ -315,8 +315,12 @@ export const assignContracts = async (req: AuthRequest, res: Response): Promise<
 
     const { userId, userIds, contractIds } = req.body;
     const targetIds = userIds && Array.isArray(userIds) ? userIds : userId ? [userId] : [];
-    if (targetIds.length === 0 || !Array.isArray(contractIds) || contractIds.length === 0) {
-      res.status(400).json({ error: 'userIds or userId and contractIds required' });
+    if (targetIds.length === 0) {
+      res.status(400).json({ error: 'Provide userId or userIds (at least one user)' });
+      return;
+    }
+    if (!Array.isArray(contractIds) || contractIds.length === 0) {
+      res.status(400).json({ error: 'At least one contract is required (contractIds)' });
       return;
     }
 
