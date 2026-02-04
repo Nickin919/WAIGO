@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Package, Video, FolderKanban, Upload } from 'lucide-react';
+import { Users, Package, Video, FolderKanban, Upload, BookOpen } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 
 const AdminDashboard = () => {
@@ -114,6 +114,13 @@ const AdminDashboard = () => {
           >
             <FolderKanban className="w-5 h-5" />
             <span>BOM Data</span>
+          </button>
+          <button
+            onClick={() => navigate('/admin/literature')}
+            className="btn btn-primary flex items-center justify-center space-x-2"
+          >
+            <BookOpen className="w-5 h-5" />
+            <span>Literature Library</span>
           </button>
         </div>
       </div>

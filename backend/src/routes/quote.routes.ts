@@ -17,6 +17,9 @@ const sendQuoteRateLimit = rateLimit({
 // Authenticated routes
 router.get('/', authenticate, quoteController.getQuotes);
 router.get('/:id', authenticate, quoteController.getQuoteById);
+router.get('/:id/literature/suggested', authenticate, quoteController.getSuggestedLiteratureHandler);
+router.get('/:id/literature', authenticate, quoteController.getQuoteLiteratureHandler);
+router.post('/:id/literature/attach', authenticate, authorize('ADMIN', 'RSM', 'DISTRIBUTOR', 'TURNKEY', 'BASIC'), quoteController.attachLiteratureHandler);
 router.post('/', authenticate, authorize('ADMIN', 'RSM', 'DISTRIBUTOR', 'TURNKEY', 'BASIC'), quoteController.createQuote);
 router.post('/upload-csv', authenticate, authorize('ADMIN', 'DISTRIBUTOR'), uploadCSV, quoteController.uploadQuoteCSV);
 router.get('/:id/download-csv', authenticate, quoteController.downloadQuoteCSV);

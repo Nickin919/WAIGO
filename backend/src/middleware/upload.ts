@@ -5,7 +5,7 @@ import { Request } from 'express';
 
 // Use absolute path so read/write resolve the same file (avoids ENOENT when cwd differs, e.g. on Railway)
 const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
-const subdirs = ['videos', 'images', 'csv', 'documents', 'misc', 'pdf'];
+const subdirs = ['videos', 'images', 'csv', 'documents', 'misc', 'pdf', 'literature'];
 for (const subdir of subdirs) {
   const dirPath = path.join(uploadDir, subdir);
   if (!fs.existsSync(dirPath)) {
@@ -24,6 +24,7 @@ const storage = multer.diskStorage({
     else if (file.fieldname === 'excel' || file.fieldname === 'xlsx') subDir = 'documents';
     else if (file.fieldname === 'document') subDir = 'documents';
     else if (file.fieldname === 'pdf') subDir = 'pdf';
+    else if (file.fieldname === 'file') subDir = 'literature'; // literature PDF upload
     cb(null, path.join(uploadDir, subDir));
   },
   filename: (req, file, cb) => {
@@ -32,6 +33,10 @@ const storage = multer.diskStorage({
     // Use safe generated name for PDFs to avoid ENOENT from spaces/path chars in original filename
     if (file.fieldname === 'pdf') {
       cb(null, `quote-${uniqueSuffix}${ext}`);
+    } else if (file.fieldname === 'file') {
+      const ext2 = path.extname(file.originalname) || '.pdf';
+      const base = path.basename(file.originalname, ext2).replace(/[^a-zA-Z0-9._-]/g, '_');
+      cb(null, `${Date.now()}-${base}${ext2}`);
     } else {
       const basename = path.basename(file.originalname, path.extname(file.originalname)).replace(/[^a-zA-Z0-9._-]/g, '_');
       cb(null, `${basename}-${uniqueSuffix}${ext}`);
@@ -50,7 +55,8 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
     excel: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'],
     xlsx: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'],
     document: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-    pdf: ['application/pdf']
+    pdf: ['application/pdf'],
+    file: ['application/pdf'] // literature: PDF only
   };
 
   const fieldAllowedTypes = allowedTypes[file.fieldname] || [];
@@ -79,6 +85,7 @@ export const uploadCSV = upload.single('csv');
 export const uploadExcel = upload.single('excel');
 export const uploadDocument = upload.single('document');
 export const uploadPDF = upload.single('pdf');
+export const uploadLiterature = upload.single('file');
 export const uploadMultiple = upload.array('files', 10);
 
 export default upload;

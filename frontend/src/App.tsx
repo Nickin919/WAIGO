@@ -26,6 +26,7 @@ import Profile from './pages/Profile';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ProductImport from './pages/admin/ProductImport';
 import DataManagement from './pages/admin/DataManagement';
+import LiteratureLibrary from './pages/admin/LiteratureLibrary';
 import CatalogList from './pages/catalog/CatalogList';
 import CatalogCreator from './pages/catalog/CatalogCreator';
 import AssignmentsPage from './pages/assignments/AssignmentsPage';
@@ -132,6 +133,7 @@ function App() {
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/import-products" element={<ProductImport />} />
         <Route path="/admin/data-management" element={<DataManagement />} />
+        <Route path="/admin/literature" element={<LiteratureLibrary />} />
       </Route>
 
       {/* 404 */}

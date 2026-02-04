@@ -38,6 +38,16 @@ async function main() {
       console.log('⏭️ Master Catalog already exists');
     }
 
+    // Literature zip milestone (bytes; default 15MB)
+    const zipKey = 'literature_zip_milestone';
+    const existingZip = await prisma.settings.findUnique({ where: { key: zipKey } });
+    if (!existingZip) {
+      await prisma.settings.create({
+        data: { key: zipKey, value: '15728640', description: 'Bytes threshold for zipping literature pack (15MB)' },
+      });
+      console.log('✅ Created settings: literature_zip_milestone');
+    }
+
     // Create demo catalog (idempotent: use upsert or skip if exists)
     let catalog = await prisma.catalog.findFirst({
       where: { name: 'WAGO Demo Catalog' }

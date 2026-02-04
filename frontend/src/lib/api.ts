@@ -266,6 +266,37 @@ export const quoteApi = {
   generatePDF: (id: string) => api.get(`/quotes/${id}/pdf`, { responseType: 'blob' }),
   sendEmail: (id: string, body?: { to?: string }) =>
     api.post<{ message: string }>(`/quotes/${id}/send`, body ?? {}),
+  getSuggestedLiterature: (id: string) => api.get(`/quotes/${id}/literature/suggested`),
+  getQuoteLiterature: (id: string) => api.get(`/quotes/${id}/literature`),
+  attachLiterature: (id: string, literatureIds: string[]) =>
+    api.post(`/quotes/${id}/literature/attach`, { literatureIds }),
+};
+
+// ============================================================================
+// Literature API
+// ============================================================================
+
+export const literatureApi = {
+  list: (params?: { type?: string; partId?: string; seriesName?: string; limit?: number; offset?: number }) =>
+    api.get<{ items: any[]; total: number }>('/literature', { params }),
+  getById: (id: string) => api.get(`/literature/${id}`),
+  upload: (formData: FormData) =>
+    api.post('/literature', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  updateAssociations: (id: string, data: { partIds: string[]; seriesNames: string[] }) =>
+    api.patch(`/literature/${id}/associations`, data),
+  getZipMilestone: () => api.get<{ literature_zip_milestone: number }>('/literature/settings/zip-milestone'),
+  updateZipMilestone: (valueBytes: number) =>
+    api.put('/literature/settings/zip-milestone', { literature_zip_milestone: valueBytes }),
+  exportPdf: () => api.get('/literature/export/pdf', { responseType: 'blob' }),
+  exportCsv: () => api.get('/literature/export/csv', { responseType: 'blob' }),
+  getSampleCsv: () => api.get('/literature/sample-csv', { responseType: 'blob' }),
+  bulkUpdateAssociations: (file: File) => {
+    const form = new FormData();
+    form.append('csv', file);
+    return api.post<{ updated: number; errors: string[] }>('/literature/bulk-update-associations', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };
 
 // ============================================================================

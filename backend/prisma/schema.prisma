@@ -131,6 +131,7 @@ model User {
   priceContractAssignmentsGiven UserPriceContractAssignment[] @relation("PriceContractAssigner")
   priceChanges    PriceHistory[] @relation("PriceChanges")
   salesCustomers  SalesCustomer[] @relation("SalesCustomerRsm")
+  literatureUploaded Literature[] @relation("LiteratureUploader")
 
   @@map("users")
 }
@@ -325,6 +326,7 @@ model Part {
   priceHistory  PriceHistory[]
   catalogItems  CatalogItem[]
   priceContractItems PriceContractItem[]
+  literature     LiteraturePart[]
 
   @@unique([catalogId, partNumber])
   @@index([catalogId])
@@ -374,6 +376,86 @@ model PartFile {
 
   @@index([partId])
   @@map("part_files")
+}
+
+// ============================================================================
+// LITERATURE LIBRARY
+// ============================================================================
+
+enum LiteratureType {
+  WHITE_PAPER
+  FLYER
+  BROCHURE
+  CATALOG_PAGE
+}
+
+model Literature {
+  id           String         @id @default(uuid())
+  title        String
+  description  String?        @db.Text
+  type         LiteratureType
+  filePath     String         @map("file_path")
+  fileSize     Int            @map("file_size") // bytes
+  uploadedById String         @map("uploaded_by_id")
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  uploadedBy   User            @relation("LiteratureUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
+  quoteLiterature QuoteLiterature[]
+  parts        LiteraturePart[]
+  series       LiteratureSeries[]
+
+  @@index([type])
+  @@map("literature")
+}
+
+model LiteraturePart {
+  literatureId String   @map("literature_id")
+  partId       String   @map("part_id")
+  assignedAt   DateTime @default(now()) @map("assigned_at")
+
+  literature   Literature @relation(fields: [literatureId], references: [id], onDelete: Cascade)
+  part         Part       @relation(fields: [partId], references: [id], onDelete: Cascade)
+
+  @@id([literatureId, partId])
+  @@index([literatureId])
+  @@index([partId])
+  @@map("literature_parts")
+}
+
+model LiteratureSeries {
+  literatureId String   @map("literature_id")
+  seriesName   String   @map("series_name")
+  assignedAt   DateTime @default(now()) @map("assigned_at")
+
+  literature   Literature @relation(fields: [literatureId], references: [id], onDelete: Cascade)
+
+  @@id([literatureId, seriesName])
+  @@index([literatureId])
+  @@index([seriesName])
+  @@map("literature_series")
+}
+
+model QuoteLiterature {
+  quoteId      String   @map("quote_id")
+  literatureId String   @map("literature_id")
+  attachedAt   DateTime @default(now()) @map("attached_at")
+
+  quote      Quote      @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  literature Literature @relation(fields: [literatureId], references: [id], onDelete: Cascade)
+
+  @@id([quoteId, literatureId])
+  @@index([quoteId])
+  @@index([literatureId])
+  @@map("quote_literature")
+}
+
+model Settings {
+  id          Int     @id @default(autoincrement())
+  key         String  @unique
+  value       String  @db.Text
+  description String? @db.Text
+
+  @@map("settings")
 }
 
 // ============================================================================
@@ -513,6 +595,7 @@ model Quote {
   priceContract PriceContract? @relation(fields: [priceContractId], references: [id])
   items         QuoteItem[]
   discounts     QuoteDiscount[]
+  literature    QuoteLiterature[]
 
   @@index([catalogId])
   @@index([userId])

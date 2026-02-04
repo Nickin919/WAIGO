@@ -5,6 +5,12 @@ import { getSubordinateUserIds } from '../lib/hierarchy';
 import { effectiveRole, isInternal } from '../lib/roles';
 import { ROLE_MAX_DISCOUNT } from '../lib/quoteConstants';
 import { sendQuoteEmail } from '../lib/emailService';
+import {
+  getSuggestedLiteratureForQuote,
+  attachToQuote,
+  getQuoteLiterature,
+  generateLiteraturePack,
+} from '../lib/literatureService';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -486,6 +492,95 @@ export const downloadQuoteCSV = async (req: AuthRequest, res: Response): Promise
 };
 
 /**
+ * Get literature suggested for this quote (by part/series on quote items).
+ */
+export const getSuggestedLiteratureHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const { id } = req.params;
+    const quote = await prisma.quote.findUnique({ where: { id }, select: { id: true, userId: true } });
+    if (!quote) {
+      res.status(404).json({ error: 'Quote not found' });
+      return;
+    }
+    const allowed = await canAccessQuote(req.user.id, req.user.role, quote.userId);
+    if (!allowed) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+    const list = await getSuggestedLiteratureForQuote(id);
+    res.json(list);
+  } catch (error) {
+    console.error('Get suggested literature error:', error);
+    res.status(500).json({ error: 'Failed to get suggested literature' });
+  }
+};
+
+/**
+ * Attach literature items to a quote.
+ */
+export const attachLiteratureHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const { id } = req.params;
+    const literatureIds = Array.isArray(req.body.literatureIds) ? req.body.literatureIds : [req.body.literatureIds].filter(Boolean);
+    if (!literatureIds.length) {
+      res.status(400).json({ error: 'literatureIds array is required' });
+      return;
+    }
+    const quote = await prisma.quote.findUnique({ where: { id }, select: { id: true, userId: true } });
+    if (!quote) {
+      res.status(404).json({ error: 'Quote not found' });
+      return;
+    }
+    const allowed = await canAccessQuote(req.user.id, req.user.role, quote.userId);
+    if (!allowed) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+    const list = await attachToQuote(id, literatureIds);
+    res.json(list);
+  } catch (error) {
+    console.error('Attach literature error:', error);
+    res.status(500).json({ error: 'Failed to attach literature' });
+  }
+};
+
+/**
+ * Get literature attached to a quote.
+ */
+export const getQuoteLiteratureHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const { id } = req.params;
+    const quote = await prisma.quote.findUnique({ where: { id }, select: { id: true, userId: true } });
+    if (!quote) {
+      res.status(404).json({ error: 'Quote not found' });
+      return;
+    }
+    const allowed = await canAccessQuote(req.user.id, req.user.role, quote.userId);
+    if (!allowed) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+    const list = await getQuoteLiterature(id);
+    res.json(list);
+  } catch (error) {
+    console.error('Get quote literature error:', error);
+    res.status(500).json({ error: 'Failed to get quote literature' });
+  }
+};
+
+/**
  * Send quote by email (Resend). Recipient: body.to or quote.customerEmail.
  */
 export const sendQuoteEmailHandler = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -530,12 +625,23 @@ export const sendQuoteEmailHandler = async (req: AuthRequest, res: Response): Pr
     const itemCount = quote.items.length;
     const quoteSummary = `Quote ${quote.quoteNumber} includes ${itemCount} item(s) with a total of $${Number(quote.total).toFixed(2)}.`;
 
+    const literatureAttachments: { filename: string; content: Buffer }[] = [];
+    try {
+      const pack = await generateLiteraturePack(quote.id);
+      if (pack.buffer.length > 0 && pack.filename) {
+        literatureAttachments.push({ filename: pack.filename, content: pack.buffer });
+      }
+    } catch (packErr) {
+      console.warn('Literature pack skipped for quote email:', packErr);
+    }
+
     await sendQuoteEmail({
       to,
       quoteId: quote.id,
       quoteNumber: quote.quoteNumber,
       customerName,
       quoteSummary,
+      literatureAttachments: literatureAttachments.length ? literatureAttachments : undefined,
     });
 
     if (!quote.sentAt) {
@@ -548,8 +654,12 @@ export const sendQuoteEmailHandler = async (req: AuthRequest, res: Response): Pr
     res.json({ message: 'Quote sent successfully to ' + to });
   } catch (error) {
     console.error('Send quote email error:', error);
-    res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to send quote email',
+    const message = error instanceof Error ? error.message : 'Failed to send quote email';
+    const isNotConfigured = message.includes('RESEND_API_KEY');
+    res.status(isNotConfigured ? 503 : 500).json({
+      error: isNotConfigured
+        ? 'Quote email is not configured. Set RESEND_API_KEY in the server environment.'
+        : message,
     });
   }
 };

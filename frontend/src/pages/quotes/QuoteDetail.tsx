@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Pencil, Download, Trash2, Mail } from 'lucide-react';
+import { ArrowLeft, Pencil, Download, Trash2, Mail, BookOpen, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { quoteApi } from '@/lib/api';
 
@@ -10,11 +10,22 @@ const QuoteDetail = () => {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [sending, setSending] = useState(false);
+  const [attachedLiterature, setAttachedLiterature] = useState<any[]>([]);
+  const [suggestedLiterature, setSuggestedLiterature] = useState<any[]>([]);
+  const [attachingId, setAttachingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (quoteId && quoteId !== 'new') {
       quoteApi.getById(quoteId).then((res) => setQuote(res.data)).catch(() => toast.error('Failed to load quote')).finally(() => setLoading(false));
     }
+  }, [quoteId]);
+
+  const attachedIds = (attachedLiterature || []).map((ql: any) => ql.literatureId || ql.literature?.id).filter(Boolean);
+
+  useEffect(() => {
+    if (!quoteId || quoteId === 'new') return;
+    quoteApi.getQuoteLiterature(quoteId).then((res) => setAttachedLiterature(res.data || [])).catch(() => {});
+    quoteApi.getSuggestedLiterature(quoteId).then((res) => setSuggestedLiterature(res.data || [])).catch(() => {});
   }, [quoteId]);
 
   const handleDelete = () => {
@@ -64,6 +75,16 @@ const QuoteDetail = () => {
       const msg = err.response?.data?.error ?? 'Failed to send quote email';
       toast.error(msg);
     }).finally(() => setSending(false));
+  };
+
+  const attachLiterature = (literatureIds: string[]) => {
+    if (!quoteId) return;
+    setAttachingId(literatureIds[0] ?? null);
+    quoteApi.attachLiterature(quoteId, literatureIds).then((res) => {
+      setAttachedLiterature(res.data || []);
+      setSuggestedLiterature((prev) => prev.filter((s) => !literatureIds.includes(s.id)));
+      toast.success('Literature attached');
+    }).catch(() => toast.error('Failed to attach')).finally(() => setAttachingId(null));
   };
 
   const formatCurrency = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
@@ -163,6 +184,51 @@ const QuoteDetail = () => {
           <div className="mt-4 pt-4 border-t flex justify-end">
             <span className="text-xl font-bold">Total: {formatCurrency(quote.total)}</span>
           </div>
+        </div>
+
+        {/* Literature */}
+        <div>
+          <h3 className="text-sm font-medium text-gray-500 mb-2 flex items-center gap-1">
+            <BookOpen className="w-4 h-4" /> Literature
+          </h3>
+          <p className="text-xs text-gray-500 mb-2">
+            Attached literature is included when you email this quote (as PDF or ZIP).
+          </p>
+          {attachedLiterature.length > 0 && (
+            <div className="mb-3">
+              <span className="text-sm font-medium text-gray-700">Attached: </span>
+              <span className="text-sm text-gray-600">
+                {attachedLiterature.map((ql: any) => ql.literature?.title).filter(Boolean).join(', ')}
+              </span>
+            </div>
+          )}
+          {suggestedLiterature.filter((lit: any) => !attachedIds.includes(lit.id)).length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {suggestedLiterature.filter((lit: any) => !attachedIds.includes(lit.id)).map((lit: any) => (
+                <span
+                  key={lit.id}
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded text-sm"
+                >
+                  {lit.title}
+                  <button
+                    type="button"
+                    onClick={() => attachLiterature([lit.id])}
+                    disabled={attachingId === lit.id}
+                    className="text-green-600 hover:underline disabled:opacity-50 flex items-center gap-0.5"
+                  >
+                    {attachingId === lit.id ? (
+                      <span className="inline-block w-3 h-3 border border-green-600 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <><Plus className="w-3 h-3" /> Attach</>
+                    )}
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          {attachedLiterature.length === 0 && suggestedLiterature.filter((lit: any) => !attachedIds.includes(lit.id)).length === 0 && (
+            <p className="text-sm text-gray-500">No literature attached or suggested for this quote.</p>
+          )}
         </div>
       </div>
     </div>

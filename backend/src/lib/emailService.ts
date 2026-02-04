@@ -23,6 +23,7 @@ export interface SendQuoteEmailParams {
   customerName: string;
   quoteSummary: string;
   pdfBuffer?: Buffer;
+  literatureAttachments?: { filename: string; content: Buffer }[];
 }
 
 /**
@@ -38,6 +39,7 @@ export async function sendQuoteEmail(params: SendQuoteEmailParams): Promise<{ id
     customerName,
     quoteSummary,
     pdfBuffer,
+    literatureAttachments = [],
   } = params;
 
   const viewQuoteUrl = `${FRONTEND_URL}/quotes/${quoteId}`;
@@ -54,6 +56,9 @@ export async function sendQuoteEmail(params: SendQuoteEmailParams): Promise<{ id
   const attachments: { filename: string; content: Buffer }[] = [];
   if (pdfBuffer) {
     attachments.push({ filename: `Quote_${quoteNumber.replace(/#/g, '')}.pdf`, content: pdfBuffer });
+  }
+  for (const att of literatureAttachments) {
+    attachments.push({ filename: att.filename, content: att.content });
   }
 
   const bccFiltered = process.env.EMAIL_BCC ? [...bcc, process.env.EMAIL_BCC] : bcc;
