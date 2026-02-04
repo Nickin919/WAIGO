@@ -19,7 +19,7 @@ const Dashboard = () => {
   const [quotesCount, setQuotesCount] = useState<number | null>(null);
   const [recentProjects, setRecentProjects] = useState<{ id: string; name: string; updatedAt: string }[]>([]);
   const [recentQuotes, setRecentQuotes] = useState<{ id: string; quoteNumber?: string; createdAt: string }[]>([]);
-  const [catalogSummary, setCatalogSummary] = useState<{ catalogCount: number; averagePartsPerCatalog: number } | null>(null);
+  const [catalogSummary, setCatalogSummary] = useState<{ catalogCount: number; averagePartsPerCatalog: number; totalPartsCount?: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -77,7 +77,7 @@ const Dashboard = () => {
         );
         promises.push(
           catalogApi.getMySummary().then((r) => {
-            const data = r.data as { catalogCount: number; averagePartsPerCatalog: number };
+            const data = r.data as { catalogCount: number; averagePartsPerCatalog: number; totalPartsCount?: number };
             setCatalogSummary(data);
             return data;
           }).catch(() => {
@@ -97,7 +97,9 @@ const Dashboard = () => {
     loadData();
   }, [user?.id, user?.catalogId]);
 
-  const partsLabel = stats?.partsCount != null ? stats.partsCount : '—';
+  const partsLabel = catalogSummary?.totalPartsCount != null
+    ? catalogSummary.totalPartsCount
+    : (stats?.partsCount != null ? stats.partsCount : (loading ? '…' : '—'));
   const videosLabel = stats?.videosCount != null ? stats.videosCount : '—';
   const projectsLabel = projectsCount != null ? projectsCount : (loading ? '…' : 0);
   const quotesLabel = quotesCount != null ? quotesCount : (loading ? '…' : 0);

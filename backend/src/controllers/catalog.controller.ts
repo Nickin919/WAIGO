@@ -168,7 +168,7 @@ export const getMyCatalogSummary = async (req: AuthRequest, res: Response): Prom
       ? Math.round(totalPartsCount / catalogCount)
       : 0;
 
-    res.json({ catalogCount, averagePartsPerCatalog });
+    res.json({ catalogCount, averagePartsPerCatalog, totalPartsCount });
   } catch (error) {
     console.error('Get my catalog summary error:', error);
     res.status(500).json({ error: 'Failed to fetch catalog summary' });
