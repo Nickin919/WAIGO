@@ -49,6 +49,20 @@ const AssignmentsPage = () => {
   const canManage = user?.role && ['ADMIN', 'RSM', 'DISTRIBUTOR_REP'].includes(effRole);
   const canAssignToDistributor = effRole === 'ADMIN' || effRole === 'RSM';
   const canAssignDistributorToRsm = effRole === 'ADMIN';
+  const isAdmin = effRole === 'ADMIN';
+  const [roleUpdatingId, setRoleUpdatingId] = useState<string | null>(null);
+
+  const ROLE_OPTIONS: { value: string; label: string }[] = [
+    { value: 'FREE', label: 'Free / Guest' },
+    { value: 'BASIC_USER', label: 'Basic User' },
+    { value: 'BASIC', label: 'Basic (legacy)' },
+    { value: 'DIRECT_USER', label: 'Direct User' },
+    { value: 'TURNKEY', label: 'TurnKey (legacy)' },
+    { value: 'DISTRIBUTOR_REP', label: 'Distributor' },
+    { value: 'DISTRIBUTOR', label: 'Distributor (legacy)' },
+    { value: 'RSM', label: 'RSM' },
+    { value: 'ADMIN', label: 'Admin' },
+  ];
 
   useEffect(() => {
     if (!canManage) return;
@@ -176,6 +190,25 @@ const AssignmentsPage = () => {
       })
       .catch((err: any) => toast.error(err.response?.data?.error || 'Failed to assign'))
       .finally(() => setSubmitting(false));
+  };
+
+  const handleRoleChange = (userId: string, newRole: string) => {
+    if (userId === user?.id) {
+      toast.error('You cannot change your own role');
+      return;
+    }
+    setRoleUpdatingId(userId);
+    userManagementApi
+      .updateUserRole(userId, newRole)
+      .then(() => {
+        toast.success('Role updated');
+        assignmentsApi.getUsers({ page, limit: 20, search: search || undefined }).then((r) => {
+          const d = r.data as { users: UserRow[] };
+          setUsers(d.users || []);
+        });
+      })
+      .catch((err: any) => toast.error(err.response?.data?.error || 'Failed to update role'))
+      .finally(() => setRoleUpdatingId(null));
   };
 
   const handleAssignCatalogs = (catalogIds: string[], primaryCatalogId?: string) => {
@@ -315,7 +348,9 @@ const AssignmentsPage = () => {
                 <input type="checkbox" checked={users.length > 0 && selectedIds.size === users.length} onChange={toggleSelectAll} className="rounded" />
               </th>
               <th className="px-4 py-2 text-left">Name</th>
-              <th className="px-4 py-2 text-left">Role</th>
+              <th className="px-4 py-2 text-left" title={isAdmin ? 'Admins can change role via dropdown' : ''}>
+                Role{isAdmin ? ' (editable)' : ''}
+              </th>
               <th className="px-4 py-2 text-left">Primary Catalog</th>
               <th className="px-4 py-2 text-left">Assigned Catalogs</th>
               <th className="px-4 py-2 text-left">Price Contracts</th>
@@ -333,7 +368,24 @@ const AssignmentsPage = () => {
                     <input type="checkbox" checked={selectedIds.has(u.id)} onChange={() => toggleSelect(u.id)} className="rounded" />
                   </td>
                   <td className="px-4 py-2 font-medium">{[u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || u.id}</td>
-                  <td className="px-4 py-2">{u.role}</td>
+                  <td className="px-4 py-2">
+                    {isAdmin && u.id !== user?.id ? (
+                      <select
+                        value={u.role}
+                        onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                        disabled={roleUpdatingId === u.id}
+                        className="rounded border border-gray-300 px-2 py-1 text-sm bg-white min-w-[140px]"
+                        title="Change user role (Admin only)"
+                      >
+                        {ROLE_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span>{u.role}</span>
+                    )}
+                    {roleUpdatingId === u.id && <span className="ml-1 text-xs text-gray-500">Updating...</span>}
+                  </td>
                   <td className="px-4 py-2">{u.primaryCatalog?.name ?? '—'}</td>
                   <td className="px-4 py-2">
                     <div className="flex flex-wrap gap-1">
