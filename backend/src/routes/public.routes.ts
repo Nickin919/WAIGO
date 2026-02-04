@@ -31,7 +31,8 @@ router.get('/parts/search', async (req: Request, res: Response): Promise<void> =
       OR: [
         { partNumber: { contains: q, mode: 'insensitive' } },
         { description: { contains: q, mode: 'insensitive' } }
-      ]
+      ],
+      catalog: { isMaster: true, isActive: true }
     };
 
     if (category) {
@@ -52,8 +53,7 @@ router.get('/parts/search', async (req: Request, res: Response): Promise<void> =
         catalog: {
           select: {
             id: true,
-            name: true,
-            isPublic: true
+            name: true
           }
         }
       },
@@ -61,11 +61,8 @@ router.get('/parts/search', async (req: Request, res: Response): Promise<void> =
       orderBy: { partNumber: 'asc' }
     });
 
-    // Only return parts from public catalogs for non-authenticated users
-    const publicParts = parts.filter(part => part.catalog.isPublic);
-
     res.json({
-      results: publicParts.map(part => ({
+      results: parts.map(part => ({
         id: part.id,
         partNumber: part.partNumber,
         description: part.englishDescription ?? part.description,
@@ -73,7 +70,7 @@ router.get('/parts/search', async (req: Request, res: Response): Promise<void> =
         catalogName: part.catalog.name,
         thumbnailUrl: part.thumbnailUrl
       })),
-      total: publicParts.length
+      total: parts.length
     });
   } catch (error) {
     console.error('Product search error:', error);
@@ -210,13 +207,14 @@ router.post('/cross-reference/bulk', async (req: Request, res: Response): Promis
 });
 
 /**
- * Get public catalogs (FREE user access)
+ * Get public catalogs (FREE / no-login user access).
+ * No-login users are restricted to the MASTER catalog only.
  */
 router.get('/catalogs', async (req: Request, res: Response): Promise<void> => {
   try {
     const catalogs = await prisma.catalog.findMany({
       where: {
-        isPublic: true,
+        isMaster: true,
         isActive: true
       },
       select: {
