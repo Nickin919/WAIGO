@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { FreeMode } from 'swiper/modules';
 import { ChevronRight } from 'lucide-react';
@@ -10,6 +10,8 @@ import 'swiper/css';
 import 'swiper/css/free-mode';
 
 const Catalog = () => {
+  const [searchParams] = useSearchParams();
+  const catalogIdFromUrl = searchParams.get('catalogId');
   const user = useAuthStore((s) => s.user);
   const guest = useAuthStore(isGuestUser);
   const navigate = useNavigate();
@@ -19,9 +21,13 @@ const Catalog = () => {
   const [subCategories, setSubCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Resolve catalog ID: use user's catalog, or for guest use public catalogs, or fallback to all
+  // Resolve catalog ID: URL param > user's catalog > guest public > first available
   useEffect(() => {
     const resolveCatalog = async () => {
+      if (catalogIdFromUrl) {
+        setEffectiveCatalogId(catalogIdFromUrl);
+        return;
+      }
       if (user?.catalogId) {
         setEffectiveCatalogId(user.catalogId);
         return;
@@ -56,7 +62,7 @@ const Catalog = () => {
       }
     };
     resolveCatalog();
-  }, [user?.catalogId, user?.role, guest]);
+  }, [catalogIdFromUrl, user?.catalogId, user?.role, guest]);
 
   useEffect(() => {
     const loadTopCategories = async () => {
