@@ -39,11 +39,11 @@ export const uploadLiterature = async (req: AuthRequest, res: Response): Promise
     const partIdsRaw = req.body.partIds != null
       ? (Array.isArray(req.body.partIds) ? req.body.partIds : [req.body.partIds]).map(String)
       : [];
-    const partIds = partIdsRaw.flatMap((s) => s.split(/[,;\s]+/).map((p) => p.trim()).filter(Boolean));
+    const partIds = partIdsRaw.flatMap((s: string) => s.split(/[,;\s]+/).map((p: string) => p.trim()).filter(Boolean));
     const seriesNamesRaw = req.body.seriesNames != null
       ? (Array.isArray(req.body.seriesNames) ? req.body.seriesNames : [req.body.seriesNames]).map((s: string) => String(s))
       : [];
-    const seriesNames = seriesNamesRaw.flatMap((s) => s.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean));
+    const seriesNames = seriesNamesRaw.flatMap((s: string) => s.split(/[,;\n]+/).map((x: string) => x.trim()).filter(Boolean));
 
     const literature = await uploadLiteratureWithAssociations(
       file,
