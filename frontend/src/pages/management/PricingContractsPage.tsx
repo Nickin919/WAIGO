@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, FolderOpen, Download, Trash2, Upload, FileSpreadsheet, FileText, AlertTriangle, CheckCircle, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Plus, FolderOpen, Download, Trash2, Upload, FileSpreadsheet, FileText, AlertTriangle, CheckCircle, X, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { costTableApi } from '@/lib/api';
+import { costTableApi, priceContractApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 
@@ -12,18 +13,19 @@ const SAMPLE_CSV = `Part Number,Description,Custom Cost,Notes
 750-880,8-Channel Digital I/O Module,45.00,
 750-530,Power Supply 24V DC,28.50,Volume discount available`;
 
-interface PricingContract {
+/** Row shape for table: works for both CostTable and PriceContract */
+interface ContractRow {
   id: string;
   name: string;
   description: string | null;
-  userId: string | null;
-  user?: { firstName: string | null; lastName: string | null; email: string | null } | null;
-  _count?: { items: number };
+  ownerLabel: string;
+  itemCount: number;
+  isAssignable: boolean; // true when from PriceContract (ADMIN/RSM)
 }
 
 const PricingContractsPage = () => {
   const { user } = useAuthStore();
-  const [contracts, setContracts] = useState<PricingContract[]>([]);
+  const [contracts, setContracts] = useState<ContractRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
@@ -35,31 +37,70 @@ const PricingContractsPage = () => {
   const [uploadResult, setUploadResult] = useState<{
     contractId: string;
     imported: number;
-    skipped: Array<{ partNumber: string; reason: string }>;
+    skipped: Array<{ partNumber?: string; reason: string }>;
     unparsed: string[];
     seriesDiscounts?: Array<{ series: string; discountPercent: number; description: string }>;
     warnings?: Array<{ type: string; message: string; partNumber?: string }>;
     metadata?: { quoteNumber?: string; customerName?: string };
-    stats?: { totalLinesProcessed: number; productRows: number; discountRows: number };
+    stats?: { totalLinesProcessed?: number; productRows?: number; discountRows?: number };
   } | null>(null);
 
-  const canManage = user?.role && ['DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'].includes(effectiveRole(user.role));
+  const role = user?.role ? effectiveRole(user.role) : null;
+  const canManage = role && ['DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'].includes(role);
+  /** ADMIN/RSM see and manage assignable PriceContracts (same ones used in Accounts) */
+  const isAssignableMode = role === 'ADMIN' || role === 'RSM';
 
   const loadContracts = useCallback(() => {
     if (!canManage) return;
     setLoading(true);
-    costTableApi
-      .getAll()
-      .then((res) => {
-        const data = Array.isArray(res.data) ? res.data : [];
-        setContracts(data);
-      })
-      .catch(() => {
-        toast.error('Failed to load pricing contracts');
-        setContracts([]);
-      })
-      .finally(() => setLoading(false));
-  }, [canManage]);
+    if (isAssignableMode) {
+      priceContractApi
+        .list()
+        .then((res) => {
+          const data = Array.isArray(res.data) ? res.data : [];
+          setContracts(
+            data.map((c: { id: string; name: string; description?: string | null; createdBy?: { firstName?: string | null; lastName?: string | null; email?: string | null }; _count?: { items: number } }) => ({
+              id: c.id,
+              name: c.name,
+              description: c.description ?? null,
+              ownerLabel: c.createdBy
+                ? [c.createdBy.firstName, c.createdBy.lastName].filter(Boolean).join(' ') || c.createdBy.email || '—'
+                : '—',
+              itemCount: c._count?.items ?? 0,
+              isAssignable: true,
+            }))
+          );
+        })
+        .catch(() => {
+          toast.error('Failed to load pricing contracts');
+          setContracts([]);
+        })
+        .finally(() => setLoading(false));
+    } else {
+      costTableApi
+        .getAll()
+        .then((res) => {
+          const data = Array.isArray(res.data) ? res.data : [];
+          setContracts(
+            data.map((c: { id: string; name: string; description?: string | null; user?: { firstName?: string | null; lastName?: string | null; email?: string | null }; _count?: { items: number } }) => ({
+              id: c.id,
+              name: c.name,
+              description: c.description ?? null,
+              ownerLabel: c.user
+                ? [c.user.firstName, c.user.lastName].filter(Boolean).join(' ') || c.user.email || '—'
+                : '—',
+              itemCount: c._count?.items ?? 0,
+              isAssignable: false,
+            }))
+          );
+        })
+        .catch(() => {
+          toast.error('Failed to load pricing contracts');
+          setContracts([]);
+        })
+        .finally(() => setLoading(false));
+    }
+  }, [canManage, isAssignableMode]);
 
   useEffect(() => {
     loadContracts();
@@ -82,11 +123,10 @@ const PricingContractsPage = () => {
       return;
     }
     setCreating(true);
-    costTableApi
-      .create({
-        name: newName.trim(),
-        description: newDesc.trim() || undefined,
-      })
+    const createPromise = isAssignableMode
+      ? priceContractApi.create({ name: newName.trim(), description: newDesc.trim() || undefined })
+      : costTableApi.create({ name: newName.trim(), description: newDesc.trim() || undefined });
+    createPromise
       .then((res) => {
         const newId = res.data?.id;
         const fileToUpload = createDropFile;
@@ -97,7 +137,6 @@ const PricingContractsPage = () => {
         toast.success('Pricing contract created');
         loadContracts();
 
-        // If user dropped a file, upload it to the new contract (PDF or CSV)
         if (newId && fileToUpload) {
           const isPdf = fileToUpload.name.toLowerCase().endsWith('.pdf');
           const isCsv = fileToUpload.name.toLowerCase().endsWith('.csv');
@@ -105,28 +144,40 @@ const PricingContractsPage = () => {
             toast.error('Only CSV or PDF files can be uploaded');
             return;
           }
+          if (isAssignableMode && isCsv) {
+            toast('Assignable contracts support PDF only. Upload a WAGO quote PDF to add items.', { icon: 'ℹ️' });
+            return;
+          }
           setUploadingId(newId);
           const formData = new FormData();
           if (isPdf) {
             formData.append('pdf', fileToUpload);
-            costTableApi
+            const uploadApi = isAssignableMode ? priceContractApi : costTableApi;
+            (uploadApi as { uploadPdf: (id: string, fd: FormData) => Promise<{ data?: Record<string, unknown> }> })
               .uploadPdf(newId, formData)
               .then((uploadRes) => {
-                const data = uploadRes.data;
-                const imported = data?.itemsImported ?? 0;
-                const metadata = data?.metadata ?? {};
+                const data = uploadRes.data ?? {};
+                const imported = Number((data.imported ?? data.itemsImported) ?? 0);
+                const metadata = (data.metadata ?? {}) as { quoteNumber?: string };
                 const quoteInfo = metadata?.quoteNumber ? ` (Quote: ${metadata.quoteNumber})` : '';
                 toast.success(`PDF imported: ${imported} items added${quoteInfo}`);
                 loadContracts();
+                const skippedRaw = data.skippedItems ?? data.skipped ?? [];
+                const skipped = Array.isArray(skippedRaw)
+                  ? skippedRaw.map((s: { partNumber?: string; reason?: string; row?: { partNumber?: string } }) => ({
+                      partNumber: s.partNumber ?? s.row?.partNumber,
+                      reason: s.reason ?? 'Unknown',
+                    }))
+                  : [];
                 setUploadResult({
                   contractId: newId,
                   imported,
-                  skipped: data?.skipped ?? [],
-                  unparsed: data?.unparsedRowDetails ?? [],
-                  seriesDiscounts: data?.seriesDiscounts ?? [],
-                  warnings: data?.warnings ?? [],
-                  metadata: data?.metadata ?? {},
-                  stats: data?.stats ?? {},
+                  skipped,
+                  unparsed: (data.unparsedRowDetails ?? data.unparsedRows ?? []) as string[],
+                  seriesDiscounts: (data.seriesDiscounts ?? []) as Array<{ series: string; discountPercent: number; description: string }>,
+                  warnings: (Array.isArray(data.warnings) ? data.warnings : []) as Array<{ type: string; message: string; partNumber?: string }>,
+                  metadata: (data.metadata ?? {}) as { quoteNumber?: string; customerName?: string },
+                  stats: (data.stats ?? {}) as { totalLinesProcessed?: number; productRows?: number; discountRows?: number },
                 });
               })
               .catch((err: unknown) => {
@@ -140,10 +191,8 @@ const PricingContractsPage = () => {
                   warnings: (Array.isArray(errData?.warnings) ? errData.warnings : []) as Array<{ type: string; message: string; partNumber?: string }>,
                 });
               })
-              .finally(() => {
-                setUploadingId(null);
-              });
-          } else {
+              .finally(() => setUploadingId(null));
+          } else if (!isAssignableMode) {
             formData.append('csv', fileToUpload);
             formData.append('costTableId', newId);
             costTableApi
@@ -155,9 +204,7 @@ const PricingContractsPage = () => {
               .catch((err: unknown) =>
                 toast.error((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to upload CSV')
               )
-              .finally(() => {
-                setUploadingId(null);
-              });
+              .finally(() => setUploadingId(null));
           }
         }
       })
@@ -170,46 +217,49 @@ const PricingContractsPage = () => {
   const handleUploadFile = (id: string, file: File) => {
     const isPdf = file.name.toLowerCase().endsWith('.pdf');
     const isCsv = file.name.toLowerCase().endsWith('.csv');
-    
+
     if (!isPdf && !isCsv) {
       toast.error('Please select a CSV or PDF file');
       return;
     }
-    
+    if (isAssignableMode && isCsv) {
+      toast('Assignable contracts support PDF only. Upload a WAGO quote PDF.', { icon: 'ℹ️' });
+      return;
+    }
+
     setUploadingId(id);
     const formData = new FormData();
-    
+
     if (isPdf) {
       formData.append('pdf', file);
-      costTableApi
+      const uploadApi = isAssignableMode ? priceContractApi : costTableApi;
+      (uploadApi as { uploadPdf: (id: string, fd: FormData) => Promise<{ data?: Record<string, unknown> }> })
         .uploadPdf(id, formData)
         .then((res) => {
-          const data = res.data;
-          const imported = data?.itemsImported ?? 0;
-          const skipped = data?.skipped ?? [];
-          const unparsed = data?.unparsedRowDetails ?? [];
-          const seriesDiscounts = data?.seriesDiscounts ?? [];
-          const warnings = data?.warnings ?? [];
-          const metadata = data?.metadata ?? {};
-          const stats = data?.stats ?? {};
-          
+          const data = res.data ?? {};
+          const imported = Number((data.imported ?? data.itemsImported) ?? 0);
+          const skippedRaw = data.skippedItems ?? data.skipped ?? [];
+          const skipped = Array.isArray(skippedRaw)
+            ? skippedRaw.map((s: { partNumber?: string; reason?: string; row?: { partNumber?: string } }) => ({
+                partNumber: s.partNumber ?? s.row?.partNumber,
+                reason: s.reason ?? 'Unknown',
+              }))
+            : [];
+          const metadata = (data.metadata ?? {}) as { quoteNumber?: string };
           if (imported > 0) {
             const quoteInfo = metadata?.quoteNumber ? ` (Quote: ${metadata.quoteNumber})` : '';
             toast.success(`PDF imported: ${imported} items added${quoteInfo}`);
           }
-          
-          // Show results modal (always show for PDF to display series discounts)
           setUploadResult({
             contractId: id,
             imported,
             skipped,
-            unparsed,
-            seriesDiscounts,
-            warnings,
+            unparsed: (data.unparsedRowDetails ?? data.unparsedRows ?? []) as string[],
+            seriesDiscounts: (data.seriesDiscounts ?? []) as Array<{ series: string; discountPercent: number; description: string }>,
+            warnings: (Array.isArray(data.warnings) ? data.warnings : []) as Array<{ type: string; message: string; partNumber?: string }>,
             metadata,
-            stats,
+            stats: (data.stats ?? {}) as { totalLinesProcessed?: number; productRows?: number; discountRows?: number },
           });
-          
           loadContracts();
         })
         .catch((err: unknown) => {
@@ -243,7 +293,11 @@ const PricingContractsPage = () => {
   const handleDelete = async (id: string, name: string) => {
     if (!window.confirm(`Delete pricing contract "${name}"?`)) return;
     try {
-      await costTableApi.delete(id);
+      if (isAssignableMode) {
+        await priceContractApi.delete(id);
+      } else {
+        await costTableApi.delete(id);
+      }
       toast.success('Pricing contract deleted');
       loadContracts();
     } catch (err: unknown) {
@@ -252,6 +306,7 @@ const PricingContractsPage = () => {
   };
 
   const handleDownload = (id: string, name: string) => {
+    if (isAssignableMode) return; // No CSV download for assignable PriceContracts
     costTableApi
       .downloadCsv(id)
       .then((res) => {
@@ -529,33 +584,48 @@ const PricingContractsPage = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Pricing Contracts</h1>
           <p className="text-gray-600 mt-1">
-            Custom pricing contracts for quotes and projects. Upload CSV or WAGO Quote PDF.
+            {isAssignableMode
+              ? 'Assignable price contracts. Create here, then assign to users in Accounts. Upload WAGO Quote PDF to add items.'
+              : 'Custom pricing contracts for quotes and projects. Upload CSV or WAGO Quote PDF.'}
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="btn btn-primary flex items-center gap-2 w-fit"
-        >
-          <Plus className="w-5 h-5" />
-          New Pricing Contract
-        </button>
+        <div className="flex items-center gap-3 flex-wrap">
+          {isAssignableMode && (
+            <Link
+              to="/accounts"
+              className="btn bg-green-700 hover:bg-green-800 text-white flex items-center gap-2 w-fit"
+            >
+              <Users className="w-5 h-5" />
+              Assign to users
+            </Link>
+          )}
+          <button
+            onClick={() => setShowCreate(true)}
+            className="btn btn-primary flex items-center gap-2 w-fit"
+          >
+            <Plus className="w-5 h-5" />
+            New Pricing Contract
+          </button>
+        </div>
       </div>
 
       {showCreate && (
         <div className="card p-6 mb-6">
           <h3 className="font-bold mb-4">Create Pricing Contract</h3>
           <div className="space-y-4 max-w-md">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Sample CSV</label>
-              <button
-                type="button"
-                onClick={handleDownloadSample}
-                className="flex items-center gap-2 text-green-600 hover:underline text-sm"
-              >
-                <FileSpreadsheet className="w-4 h-4" />
-                Download sample CSV with example data
-              </button>
-            </div>
+            {!isAssignableMode && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Sample CSV</label>
+                <button
+                  type="button"
+                  onClick={handleDownloadSample}
+                  className="flex items-center gap-2 text-green-600 hover:underline text-sm"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  Download sample CSV with example data
+                </button>
+              </div>
+            )}
 
             <input
               type="text"
@@ -573,8 +643,10 @@ const PricingContractsPage = () => {
             />
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Upload File (optional)</label>
-              <DropZone label="Drop CSV or WAGO Quote PDF here" />
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {isAssignableMode ? 'Upload WAGO Quote PDF (optional)' : 'Upload File (optional)'}
+              </label>
+              <DropZone label={isAssignableMode ? 'Drop WAGO Quote PDF here' : 'Drop CSV or WAGO Quote PDF here'} />
               {createDropFile && (
                 <p className="text-sm text-green-600 mt-2">Selected: {createDropFile.name}</p>
               )}
@@ -628,16 +700,14 @@ const PricingContractsPage = () => {
                 {contracts.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium">{c.name}</td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {c.user ? [c.user.firstName, c.user.lastName].filter(Boolean).join(' ') || c.user.email : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{c._count?.items ?? 0}</td>
+                    <td className="px-4 py-3 text-gray-600">{c.ownerLabel}</td>
+                    <td className="px-4 py-3 text-gray-600">{c.itemCount}</td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex gap-2 justify-end">
+                      <div className="flex gap-2 justify-end items-center flex-wrap">
                         <label className="cursor-pointer">
                           <input
                             type="file"
-                            accept=".csv,.pdf"
+                            accept={isAssignableMode ? '.pdf' : '.csv,.pdf'}
                             className="hidden"
                             disabled={uploadingId === c.id}
                             onChange={(e) => {
@@ -648,15 +718,25 @@ const PricingContractsPage = () => {
                           />
                           <span className="text-green-600 hover:underline flex items-center gap-1">
                             <Upload className="w-4 h-4" />
-                            {uploadingId === c.id ? 'Uploading...' : 'Upload'}
+                            {uploadingId === c.id ? 'Uploading...' : isAssignableMode ? 'PDF' : 'Upload'}
                           </span>
                         </label>
-                        <button
-                          onClick={() => handleDownload(c.id, c.name)}
-                          className="text-green-600 hover:underline flex items-center gap-1"
-                        >
-                          <Download className="w-4 h-4" /> CSV
-                        </button>
+                        {!c.isAssignable && (
+                          <button
+                            onClick={() => handleDownload(c.id, c.name)}
+                            className="text-green-600 hover:underline flex items-center gap-1"
+                          >
+                            <Download className="w-4 h-4" /> CSV
+                          </button>
+                        )}
+                        {c.isAssignable && (
+                          <Link
+                            to="/accounts"
+                            className="text-green-600 hover:underline flex items-center gap-1"
+                          >
+                            <Users className="w-4 h-4" /> Assign
+                          </Link>
+                        )}
                         <button
                           onClick={() => handleDelete(c.id, c.name)}
                           className="text-red-600 hover:underline flex items-center gap-1"

@@ -307,6 +307,7 @@ export const assignmentsApi = {
   getTree: () => api.get('/assignments/tree'),
   getUsers: (params?: { search?: string; page?: number; limit?: number }) =>
     api.get('/assignments/users', { params }),
+  getAssignmentUser: (userId: string) => api.get(`/assignments/users/${userId}`),
   getMyAssignments: () => api.get('/assignments/me'),
   assignCatalogs: (data: { userId?: string; userIds?: string[]; catalogIds: string[]; primaryCatalogId?: string }) =>
     api.post('/assignments/catalogs', data),
@@ -328,6 +329,8 @@ export const priceContractApi = {
   delete: (id: string) => api.delete(`/price-contracts/${id}`),
   addItems: (contractId: string, items: Array<{ partId?: string; seriesOrGroup?: string; costPrice: number; suggestedSellPrice?: number; discountPercent?: number; minQuantity?: number }>) =>
     api.post(`/price-contracts/${contractId}/items`, { items }),
+  uploadPdf: (contractId: string, formData: FormData) =>
+    api.post(`/price-contracts/${contractId}/items/upload-pdf`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   updateMyContractItems: (contractId: string, items: Array<{ id: string; suggestedSellPrice: number | null }>) =>
     api.patch(`/my/contracts/${contractId}/items`, { items }),
 };

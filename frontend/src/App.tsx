@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuthStore, isGuestUser } from './stores/authStore';
 
 // Layouts
@@ -29,9 +29,9 @@ import DataManagement from './pages/admin/DataManagement';
 import LiteratureLibrary from './pages/admin/LiteratureLibrary';
 import CatalogList from './pages/catalog/CatalogList';
 import CatalogCreator from './pages/catalog/CatalogCreator';
-import AssignmentsPage from './pages/assignments/AssignmentsPage';
+import AccountsPage from './pages/accounts/AccountsPage';
+import AccountDetailPage from './pages/accounts/AccountDetailPage';
 import MyPriceContractsPage from './pages/assignments/MyPriceContractsPage';
-import ManagedUsersPage from './pages/management/ManagedUsersPage';
 import PricingContractsPage from './pages/management/PricingContractsPage';
 import ActivityPage from './pages/management/ActivityPage';
 import ProductFinder from './pages/public/ProductFinder';
@@ -39,6 +39,13 @@ import BomCrossReference from './pages/public/BomCrossReference';
 import BomAnalyzer from './pages/public/BomAnalyzer';
 import SalesDashboard from './pages/sales/SalesDashboard';
 import NotFound from './pages/NotFound';
+
+// Redirect /assignments and /managed-users to /accounts (optionally with userId from query)
+const AssignmentsRedirect = () => {
+  const [searchParams] = useSearchParams();
+  const userId = searchParams.get('userId');
+  return <Navigate to={userId ? `/accounts/${userId}` : '/accounts'} replace />;
+};
 
 // Redirect guest to catalog, others to dashboard
 const GuestOrDashboardRedirect = () => {
@@ -114,8 +121,10 @@ function App() {
         <Route path="/catalog-list" element={<CatalogList />} />
         <Route path="/catalog-creator/new" element={<CatalogCreator />} />
         <Route path="/catalog-creator/:id" element={<CatalogCreator />} />
-        <Route path="/assignments" element={<AssignmentsPage />} />
-        <Route path="/managed-users" element={<ManagedUsersPage />} />
+        <Route path="/accounts" element={<AccountsPage />} />
+        <Route path="/accounts/:userId" element={<AccountDetailPage />} />
+        <Route path="/assignments" element={<AssignmentsRedirect />} />
+        <Route path="/managed-users" element={<Navigate to="/accounts" replace />} />
         <Route path="/pricing-contracts" element={<PricingContractsPage />} />
         <Route path="/cost-tables" element={<Navigate to="/pricing-contracts" replace />} />
         <Route path="/team" element={<Navigate to="/dashboard" replace />} />

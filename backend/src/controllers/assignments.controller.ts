@@ -127,7 +127,13 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
           email: true,
           role: true,
           catalogId: true,
+          accountId: true,
+          assignedToDistributorId: true,
+          assignedToRsmId: true,
           catalog: { select: { id: true, name: true } },
+          account: { select: { id: true, name: true, type: true } },
+          assignedToDistributor: { select: { id: true, email: true, companyName: true, firstName: true, lastName: true } },
+          assignedToRsm: { select: { id: true, email: true, firstName: true, lastName: true } },
           catalogAssignments: {
             include: { catalog: { select: { id: true, name: true } } },
           },
@@ -144,10 +150,17 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
 
     res.json({
       users: users.map((u) => ({
-        ...u,
+        id: u.id,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        email: u.email,
+        role: u.role,
         primaryCatalog: u.catalogAssignments.find((a) => a.isPrimary)?.catalog ?? (u.catalog ? { id: u.catalog.id, name: u.catalog.name } : null),
         assignedCatalogs: u.catalogAssignments.map((a) => a.catalog),
         assignedContracts: u.priceContractAssignments.map((a) => a.contract),
+        account: u.account,
+        assignedToDistributor: u.assignedToDistributor,
+        assignedToRsm: u.assignedToRsm,
       })),
       total,
       page,
@@ -156,6 +169,73 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
   } catch (error) {
     console.error('Assignments users error:', error);
     res.status(500).json({ error: 'Failed to load users' });
+  }
+};
+
+/**
+ * GET /api/assignments/users/:userId – single user assignment data (for account detail page)
+ */
+export const getAssignmentUser = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const role = req.user.role;
+    if (!canManageHierarchy(role)) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+    const subordinateIds = await getSubordinateUserIds(req.user.id, role);
+    const { userId } = req.params;
+    if (!subordinateIds.includes(userId)) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    const u = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
+        catalogId: true,
+        accountId: true,
+        assignedToDistributorId: true,
+        assignedToRsmId: true,
+        catalog: { select: { id: true, name: true } },
+        account: { select: { id: true, name: true, type: true } },
+        assignedToDistributor: { select: { id: true, email: true, companyName: true, firstName: true, lastName: true } },
+        assignedToRsm: { select: { id: true, email: true, firstName: true, lastName: true } },
+        catalogAssignments: {
+          include: { catalog: { select: { id: true, name: true } } },
+        },
+        priceContractAssignments: {
+          include: { contract: { select: { id: true, name: true } } },
+        },
+      },
+    });
+    if (!u) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    res.json({
+      id: u.id,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      email: u.email,
+      role: u.role,
+      primaryCatalog: u.catalogAssignments.find((a) => a.isPrimary)?.catalog ?? (u.catalog ? { id: u.catalog.id, name: u.catalog.name } : null),
+      assignedCatalogs: u.catalogAssignments.map((a) => a.catalog),
+      assignedContracts: u.priceContractAssignments.map((a) => a.contract),
+      account: u.account,
+      assignedToDistributor: u.assignedToDistributor,
+      assignedToRsm: u.assignedToRsm,
+    });
+  } catch (error) {
+    console.error('Get assignment user error:', error);
+    res.status(500).json({ error: 'Failed to load user' });
   }
 };
 

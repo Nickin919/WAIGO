@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Home, Grid3x3, PlayCircle, FolderKanban, DollarSign, Users, Calculator, Settings, BarChart3, Building2, Search, Link2, TrendingUp, UserCircle, ClipboardList } from 'lucide-react';
+import { Home, Grid3x3, PlayCircle, FolderKanban, DollarSign, Users, Calculator, Settings, BarChart3, Search, Link2, TrendingUp, UserCircle, ClipboardList } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 import { publicApi } from '@/lib/api';
@@ -38,8 +38,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   ];
 
   const managementItems = [
-    { path: '/managed-users', icon: Building2, label: 'Managed Users', roles: ['DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
-    { path: '/assignments', icon: Users, label: 'Assignments', roles: ['DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
+    { path: '/accounts', icon: Users, label: 'Accounts', roles: ['DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
     { path: '/pricing-contracts', icon: Calculator, label: 'Pricing Contracts', roles: ['DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
     { path: '/activity', icon: BarChart3, label: 'Activity Dashboard', roles: ['DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
   ];
