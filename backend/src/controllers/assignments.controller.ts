@@ -296,13 +296,27 @@ export const getMyAssignments = async (req: AuthRequest, res: Response): Promise
       }),
     ]);
 
-    const primary = catalogAssignments.find((a) => a.isPrimary) ?? (user?.catalogId ? catalogAssignments.find((a) => a.catalogId === user.catalogId) : null);
+    let catalogsPayload = catalogAssignments.map((a) => ({
+      ...a.catalog,
+      isPrimary: a.isPrimary,
+    }));
+    let primaryCatalogId: string | null = catalogAssignments.find((a) => a.isPrimary)?.catalogId ?? (user?.catalogId ? catalogAssignments.find((a) => a.catalogId === user.catalogId)?.catalogId : null) ?? user?.catalogId ?? null;
+
+    // New users with no catalog assignments see only the MASTER catalog until catalogs are assigned
+    if (catalogsPayload.length === 0) {
+      const masterCatalog = await prisma.catalog.findFirst({
+        where: { isMaster: true, isActive: true },
+        select: { id: true, name: true, _count: { select: { parts: true, categories: true } } },
+      });
+      if (masterCatalog) {
+        catalogsPayload = [{ ...masterCatalog, isPrimary: true }];
+        primaryCatalogId = masterCatalog.id;
+      }
+    }
+
     res.json({
-      catalogs: catalogAssignments.map((a) => ({
-        ...a.catalog,
-        isPrimary: a.isPrimary,
-      })),
-      primaryCatalogId: primary?.catalogId ?? user?.catalogId ?? null,
+      catalogs: catalogsPayload,
+      primaryCatalogId,
       priceContracts: priceContractAssignments.map((a) => a.contract),
     });
   } catch (error) {

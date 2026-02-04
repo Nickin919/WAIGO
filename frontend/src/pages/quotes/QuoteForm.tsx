@@ -83,6 +83,11 @@ const QuoteForm = () => {
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [quickAddPartNumber, setQuickAddPartNumber] = useState('');
   const [quickAddLoading, setQuickAddLoading] = useState(false);
+  const [quickAddSuggestions, setQuickAddSuggestions] = useState<Part[]>([]);
+  const [showQuickAddSuggestions, setShowQuickAddSuggestions] = useState(false);
+  const [quickAddHighlightIndex, setQuickAddHighlightIndex] = useState(-1);
+  const quickAddInputRef = useRef<HTMLInputElement>(null);
+  const quickAddSuggestionsRef = useRef<HTMLDivElement>(null);
 
   const [bulkInput, setBulkInput] = useState('');
   const [showBulkImport, setShowBulkImport] = useState(false);
@@ -124,31 +129,18 @@ const QuoteForm = () => {
         const assignedCatalogs = data.catalogs || [];
         const assignedContracts = data.priceContracts || [];
         setPriceContracts(assignedContracts);
-        if (assignedCatalogs.length > 0) {
-          setCatalogs(assignedCatalogs.map((c) => ({ id: c.id, name: c.name || 'Unnamed' })));
-          const primary = data.primaryCatalogId ?? assignedCatalogs.find((c) => c.isPrimary)?.id ?? assignedCatalogs[0]?.id;
-          if (primary && !catalogId) setCatalogId(primary);
-        } else {
-          catalogApi.getAll().then((r) => {
-            const list = Array.isArray(r.data) ? r.data : [];
-            setCatalogs(list.map((c: any) => ({ id: c.id, name: c.name || 'Unnamed' })));
-            if (list.length > 0 && !catalogId) {
-              const userCat = user?.catalogId;
-              const match = userCat && list.some((c: any) => c.id === userCat);
-              setCatalogId(match ? userCat! : list[0].id);
-            }
-          }).catch(() => {});
-        }
+        setCatalogs(assignedCatalogs.map((c) => ({ id: c.id, name: c.name || 'Unnamed' })));
+        const primary = data.primaryCatalogId ?? assignedCatalogs.find((c) => c.isPrimary)?.id ?? assignedCatalogs[0]?.id;
+        if (primary && !catalogId) setCatalogId(primary);
       })
       .catch(() => {
+        // On error, show only MASTER catalog so we never expose all catalogs to unassigned users
         catalogApi.getAll().then((res) => {
           const list = Array.isArray(res.data) ? res.data : [];
-          setCatalogs(list.map((c: any) => ({ id: c.id, name: c.name || 'Unnamed' })));
-          if (list.length > 0 && !catalogId) {
-            const userCat = user?.catalogId;
-            const match = userCat && list.some((c: any) => c.id === userCat);
-            setCatalogId(match ? userCat! : list[0].id);
-          }
+          const masterOnly = list.filter((c: any) => c.isMaster);
+          const useList = masterOnly.length > 0 ? masterOnly : list;
+          setCatalogs(useList.map((c: any) => ({ id: c.id, name: c.name || 'Unnamed' })));
+          if (useList.length > 0 && !catalogId) setCatalogId(useList[0].id);
         }).catch(() => {});
       });
   }, [user?.catalogId]);
@@ -233,6 +225,29 @@ const QuoteForm = () => {
     }
   }, [showProductPicker, catalogId, productSearch]);
 
+  // Autocomplete for quick-add part number: debounced search as user types
+  useEffect(() => {
+    if (!catalogId || !quickAddPartNumber.trim()) {
+      setQuickAddSuggestions([]);
+      setShowQuickAddSuggestions(false);
+      setQuickAddHighlightIndex(-1);
+      return;
+    }
+    const t = setTimeout(() => {
+      partApi.getByCatalog(catalogId, { search: quickAddPartNumber.trim(), limit: 10 }).then((res) => {
+        const data = res.data as { parts?: Part[] };
+        const list = data?.parts || [];
+        setQuickAddSuggestions(list);
+        setShowQuickAddSuggestions(list.length > 0);
+        setQuickAddHighlightIndex(-1);
+      }).catch(() => {
+        setQuickAddSuggestions([]);
+        setShowQuickAddSuggestions(false);
+      });
+    }, 200);
+    return () => clearTimeout(t);
+  }, [catalogId, quickAddPartNumber]);
+
   const calculateSellPrice = (item: LineItem) => {
     const cost = item.productPrice * (1 - item.discountPct / 100);
     return cost * (1 + (item.marginPct || 0) / 100);
@@ -304,8 +319,26 @@ const QuoteForm = () => {
     return text.split(/[,\n\r\t]+/).map((s) => s.trim()).filter(Boolean);
   };
 
+  /** Select a part from autocomplete and add to quote */
+  const selectQuickAddSuggestion = (part: Part) => {
+    addProduct(part);
+    setQuickAddPartNumber('');
+    setQuickAddSuggestions([]);
+    setShowQuickAddSuggestions(false);
+    setQuickAddHighlightIndex(-1);
+    toast.success(`Added ${part.partNumber}`);
+  };
+
   /** Quick-add single part by part number (Enter or Add) */
   const handleQuickAddPart = async () => {
+    if (showQuickAddSuggestions && quickAddSuggestions.length > 0 && quickAddHighlightIndex >= 0 && quickAddSuggestions[quickAddHighlightIndex]) {
+      selectQuickAddSuggestion(quickAddSuggestions[quickAddHighlightIndex]);
+      return;
+    }
+    if (showQuickAddSuggestions && quickAddSuggestions.length > 0 && quickAddHighlightIndex < 0) {
+      selectQuickAddSuggestion(quickAddSuggestions[0]);
+      return;
+    }
     const pn = quickAddPartNumber.trim();
     if (!pn || !catalogId) {
       if (!catalogId) toast.error('Select a catalog first');
@@ -319,6 +352,8 @@ const QuoteForm = () => {
       if (data.found?.length > 0) {
         addProduct(data.found[0]);
         setQuickAddPartNumber('');
+        setQuickAddSuggestions([]);
+        setShowQuickAddSuggestions(false);
         toast.success(`Added ${data.found[0].partNumber}`);
       } else {
         toast.error(`Part "${pn}" not found`);
@@ -655,19 +690,64 @@ const QuoteForm = () => {
         <div>
           <h2 className="text-lg font-bold mb-4">Line Items</h2>
 
-          {/* Quick-add: type part number, Enter or Add */}
+          {/* Quick-add: type part number with autocomplete, Enter or Add */}
           <div className="flex gap-2 mb-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <div className="relative flex-1" ref={quickAddSuggestionsRef}>
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none z-10" />
               <input
+                ref={quickAddInputRef}
                 type="text"
                 value={quickAddPartNumber}
                 onChange={(e) => setQuickAddPartNumber(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleQuickAddPart())}
-                placeholder="Type part number and press Enter to add"
+                onKeyDown={(e) => {
+                  if (showQuickAddSuggestions && quickAddSuggestions.length > 0) {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setQuickAddHighlightIndex((i) => (i < quickAddSuggestions.length - 1 ? i + 1 : i));
+                      return;
+                    }
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setQuickAddHighlightIndex((i) => (i > 0 ? i - 1 : -1));
+                      return;
+                    }
+                    if (e.key === 'Escape') {
+                      setShowQuickAddSuggestions(false);
+                      setQuickAddHighlightIndex(-1);
+                      return;
+                    }
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleQuickAddPart();
+                      return;
+                    }
+                  }
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleQuickAddPart();
+                  }
+                }}
+                onFocus={() => quickAddPartNumber.trim() && quickAddSuggestions.length > 0 && setShowQuickAddSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowQuickAddSuggestions(false), 150)}
+                placeholder="Type part number (suggestions as you type) or press Enter to add"
                 className="input w-full pl-10"
                 disabled={!catalogId || quickAddLoading}
               />
+              {showQuickAddSuggestions && quickAddSuggestions.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
+                  {quickAddSuggestions.map((p, i) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); selectQuickAddSuggestion(p); }}
+                      className={`w-full text-left px-3 py-2 flex justify-between gap-2 ${i === quickAddHighlightIndex ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                    >
+                      <span className="font-medium">{p.partNumber}</span>
+                      <span className="text-gray-500 truncate">{(p.englishDescription || p.description || '').slice(0, 40)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <button
               type="button"
