@@ -3,7 +3,6 @@ import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { getSubordinateUserIds } from '../lib/hierarchy';
 import { effectiveRole, isInternal } from '../lib/roles';
-import { ROLE_MAX_DISCOUNT } from '../lib/quoteConstants';
 import { sendQuoteEmail } from '../lib/emailService';
 import {
   getSuggestedLiteratureForQuote,
@@ -130,17 +129,7 @@ export const createQuote = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const maxDiscount = ROLE_MAX_DISCOUNT[effectiveRole(req.user.role)] ?? 10;
-    for (const item of items) {
-      const discount = Number(item.discountPct) || 0;
-      if (discount > maxDiscount) {
-        res.status(400).json({
-          error: `Discount exceeds your maximum allowed (${maxDiscount}%)`,
-        });
-        return;
-      }
-    }
-
+    // Role-based discount limit removed per product requirement; no validation here.
     if (priceContractId) {
       const contract = await prisma.priceContract.findUnique({ where: { id: priceContractId } });
       if (!contract) {
@@ -283,17 +272,7 @@ export const updateQuote = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const maxDiscount = ROLE_MAX_DISCOUNT[effectiveRole(req.user.role)] ?? 10;
-    for (const item of items) {
-      const discount = Number(item.discountPct) || 0;
-      if (discount > maxDiscount) {
-        res.status(400).json({
-          error: `Discount exceeds your maximum allowed (${maxDiscount}%)`,
-        });
-        return;
-      }
-    }
-
+    // Role-based discount limit removed per product requirement; no validation here.
     if (priceContractId !== undefined) {
       if (priceContractId) {
         const contract = await prisma.priceContract.findUnique({ where: { id: priceContractId } });

@@ -526,12 +526,7 @@ const QuoteForm = () => {
       toast.error('Add at least one item');
       return;
     }
-    const invalid = items.find((i) => i.discountPct > maxDiscount);
-    if (invalid) {
-      toast.error(`Discount cannot exceed ${maxDiscount}% for your role`);
-      return;
-    }
-
+    // Role-based discount limit removed per product requirement; no validation here.
     setSaving(true);
     const payload = {
       catalogId,
