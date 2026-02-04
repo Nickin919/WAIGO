@@ -271,14 +271,14 @@ const QuoteForm = () => {
     return byPartNumber ?? null;
   };
 
-  const addProduct = (part: Part) => {
+  const addProduct = (part: Part, quantityOverride?: number) => {
     const contractItem = findContractItem(part);
-    const quantity = 1;
+    const qty = quantityOverride ?? Math.max(1, part.minQty ?? 1);
     let listPrice = part.basePrice ?? 0;
     let defaultDisc = 0;
     let marginPct = 0;
     // Only use contract/catalog pricing when a price contract is selected
-    if (priceContractId && contractItem && quantity >= contractItem.minQuantity) {
+    if (priceContractId && contractItem && qty >= contractItem.minQuantity) {
       listPrice = contractItem.costPrice;
       defaultDisc = contractItem.discountPercent ?? part.distributorDiscount ?? 0;
       const costAfterDisc = listPrice * (1 - defaultDisc / 100);
@@ -289,8 +289,9 @@ const QuoteForm = () => {
     // When no price contract: sell price defaults to list price (0% discount, 0% margin)
     const existing = items.find((i) => i.partId === part.id);
     if (existing) {
+      const addQty = quantityOverride ?? Math.max(1, part.minQty ?? 1);
       setItems(items.map((i) =>
-        i.partId === part.id ? { ...i, quantity: i.quantity + 1 } : i
+        i.partId === part.id ? { ...i, quantity: i.quantity + addQty } : i
       ));
     } else {
       setItems([
@@ -303,7 +304,7 @@ const QuoteForm = () => {
           productDescription: part.englishDescription || part.description || '',
           minQty: part.minQty ?? null,
           distributorDiscount: defaultDisc,
-          quantity: 1,
+          quantity: qty,
           discountPct: defaultDisc,
           marginPct,
           marginSelected: false,
@@ -383,12 +384,14 @@ const QuoteForm = () => {
         for (const part of data.found) {
           const key = part.partNumber.toUpperCase();
           const count = partCounts.get(key) || 1;
+          const minQty = Math.max(1, part.minQty ?? 1);
+          const qty = Math.max(count, minQty);
           const contractItem = findContractItem(part);
           let listPrice = part.basePrice ?? 0;
           let defaultDisc = 0;
           let marginPct = 0;
           // Only use contract/catalog pricing when a price contract is selected
-          if (priceContractId && contractItem && count >= contractItem.minQuantity) {
+          if (priceContractId && contractItem && qty >= contractItem.minQuantity) {
             listPrice = contractItem.costPrice;
             defaultDisc = contractItem.discountPercent ?? part.distributorDiscount ?? 0;
             const costAfterDisc = listPrice * (1 - defaultDisc / 100);
@@ -399,7 +402,7 @@ const QuoteForm = () => {
           // When no price contract: sell price defaults to list price (0% discount, 0% margin)
           const idx = next.findIndex((i) => i.partId === part.id);
           if (idx >= 0) {
-            next[idx].quantity += count;
+            next[idx].quantity += qty;
           } else {
             next.push({
               partId: part.id,
@@ -409,7 +412,7 @@ const QuoteForm = () => {
               productDescription: part.englishDescription || part.description || '',
               minQty: part.minQty ?? null,
               distributorDiscount: defaultDisc,
-              quantity: count,
+              quantity: qty,
               discountPct: defaultDisc,
               marginPct,
               marginSelected: false,
@@ -441,20 +444,73 @@ const QuoteForm = () => {
     e.target.value = '';
   };
 
+  /** CSV rows: part number in col 0, optional quantity in col 1. Uses CSV quantity when provided, else catalog min qty. */
   const readCsvFile = (file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
       const text = (reader.result as string) || '';
       const lines = text.split(/\r?\n/);
-      const parts: string[] = [];
+      const rows: { partNumber: string; quantity?: number }[] = [];
       for (const line of lines) {
         const cells = line.split(',').map((c) => c.replace(/^["']|["']$/g, '').trim());
-        if (cells[0]) parts.push(cells[0]);
+        const partNumber = cells[0];
+        if (!partNumber) continue;
+        const qty = cells[1] != null && cells[1] !== '' ? parseInt(cells[1], 10) : undefined;
+        rows.push({ partNumber, quantity: qty && !isNaN(qty) && qty >= 1 ? qty : undefined });
       }
-      if (parts.length > 0) {
-        setBulkInput((prev) => (prev ? `${prev}\n${parts.join('\n')}` : parts.join('\n')));
-        toast.success(`Loaded ${parts.length} part numbers from file`);
+      if (rows.length === 0 || !catalogId) {
+        if (!catalogId) toast.error('Select a catalog first');
+        return;
       }
+      setBulkImporting(true);
+      const partNumbers = rows.map((r) => r.partNumber);
+      partApi.lookupBulk(catalogId, partNumbers).then((res) => {
+        const data = res.data as { found: Part[]; notFound: string[] };
+        const partByNumber = new Map<string, Part>();
+        (data.found || []).forEach((p) => partByNumber.set(p.partNumber.toUpperCase(), p));
+        setItems((prev) => {
+          let next = [...prev];
+          for (const row of rows) {
+            const part = partByNumber.get(row.partNumber.toUpperCase());
+            if (!part) continue;
+            const qty = row.quantity ?? Math.max(1, part.minQty ?? 1);
+            const contractItem = findContractItem(part);
+            let listPrice = part.basePrice ?? 0;
+            let defaultDisc = 0;
+            let marginPct = 0;
+            if (priceContractId && contractItem && qty >= contractItem.minQuantity) {
+              listPrice = contractItem.costPrice;
+              defaultDisc = contractItem.discountPercent ?? part.distributorDiscount ?? 0;
+              const costAfterDisc = listPrice * (1 - defaultDisc / 100);
+              if (contractItem.suggestedSellPrice != null && costAfterDisc > 0) {
+                marginPct = (contractItem.suggestedSellPrice / costAfterDisc - 1) * 100;
+              }
+            }
+            const idx = next.findIndex((i) => i.partId === part.id);
+            if (idx >= 0) {
+              next[idx].quantity += qty;
+            } else {
+              next.push({
+                partId: part.id,
+                productSeries: part.series || part.partNumber,
+                productPartNumber: part.partNumber,
+                productPrice: listPrice,
+                productDescription: part.englishDescription || part.description || '',
+                minQty: part.minQty ?? null,
+                distributorDiscount: defaultDisc,
+                quantity: qty,
+                discountPct: defaultDisc,
+                marginPct,
+                marginSelected: false,
+                discountSelected: false,
+              });
+            }
+          }
+          return next;
+        });
+        toast.success(`Added ${data.found?.length ?? 0} products from CSV`);
+        if ((data.notFound || []).length > 0) setNotFoundParts(data.notFound || []);
+      }).catch(() => toast.error('CSV lookup failed')).finally(() => setBulkImporting(false));
     };
     reader.readAsText(file);
   };
@@ -859,7 +915,7 @@ const QuoteForm = () => {
                     )}
                     <td className="px-4 py-2 text-right font-medium">{formatCurrency(calculateSellPrice(item))}</td>
                     <td className="px-4 py-2">
-                      <input type="number" min={1} value={item.quantity} onChange={(e) => updateItem(idx, { quantity: parseInt(e.target.value, 10) || 1 })} className="input py-1 w-16 text-center" />
+                      <input type="number" min={1} value={item.quantity} onChange={(e) => updateItem(idx, { quantity: parseInt(e.target.value, 10) || 1 })} className="input py-1 min-w-[5rem] w-24 text-center" placeholder="Qty" />
                     </td>
                     <td className="px-4 py-2 text-right font-medium">{formatCurrency(calculateLineTotal(item))}</td>
                     <td className="px-4 py-2">
