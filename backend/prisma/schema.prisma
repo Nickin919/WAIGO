@@ -97,6 +97,11 @@ model User {
   sessionId       String?   @unique @map("session_id")
   lastActiveAt    DateTime? @map("last_active_at")
   
+  // Profile (optional)
+  avatarUrl       String?   @map("avatar_url")
+  address         String?   @db.Text
+  phone           String?
+  
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 

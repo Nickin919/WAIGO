@@ -1,6 +1,8 @@
 import { Response } from 'express';
 import { validationResult } from 'express-validator';
 import bcrypt from 'bcrypt';
+import path from 'path';
+import fs from 'fs';
 import { prisma } from '../lib/prisma';
 import { generateToken } from '../lib/jwt';
 import { sendWelcomeEmail } from '../lib/email';
@@ -45,6 +47,9 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
         lastName: true,
         role: true,
         catalogId: true,
+        avatarUrl: true,
+        address: true,
+        phone: true,
         createdAt: true
       }
     });
@@ -94,7 +99,10 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
         lastName: true,
         role: true,
         catalogId: true,
-        isActive: true
+        isActive: true,
+        avatarUrl: true,
+        address: true,
+        phone: true
       }
     });
 
@@ -153,10 +161,14 @@ export const getCurrentUser = async (req: AuthRequest, res: Response): Promise<v
         email: true,
         firstName: true,
         lastName: true,
+        companyName: true,
         role: true,
         catalogId: true,
         distributorMarginPercent: true,
         isActive: true,
+        avatarUrl: true,
+        address: true,
+        phone: true,
         createdAt: true,
         updatedAt: true,
         catalog: {
@@ -182,7 +194,8 @@ export const getCurrentUser = async (req: AuthRequest, res: Response): Promise<v
 };
 
 /**
- * Update user profile
+ * Update user profile (firstName, lastName, email, address, phone).
+ * Changing email requires currentPassword for verification.
  */
 export const updateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -191,21 +204,67 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const { firstName, lastName } = req.body;
+    const { firstName, lastName, email, address, phone, currentPassword } = req.body;
+
+    const data: {
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      address?: string;
+      phone?: string;
+    } = {};
+    if (firstName !== undefined) data.firstName = firstName;
+    if (lastName !== undefined) data.lastName = lastName;
+    if (address !== undefined) data.address = address;
+    if (phone !== undefined) data.phone = phone;
+
+    if (email !== undefined && email !== null && email !== '') {
+      const trimmed = String(email).trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+        res.status(400).json({ error: 'Invalid email format' });
+        return;
+      }
+      const existing = await prisma.user.findFirst({
+        where: { email: trimmed, id: { not: req.user.id } }
+      });
+      if (existing) {
+        res.status(409).json({ error: 'Email already in use' });
+        return;
+      }
+      if (!currentPassword || typeof currentPassword !== 'string') {
+        res.status(400).json({ error: 'Current password is required to change email' });
+        return;
+      }
+      const userWithPass = await prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: { passwordHash: true }
+      });
+      if (!userWithPass?.passwordHash) {
+        res.status(400).json({ error: 'Cannot change email for this account' });
+        return;
+      }
+      const isValid = await bcrypt.compare(currentPassword, userWithPass.passwordHash);
+      if (!isValid) {
+        res.status(401).json({ error: 'Current password is incorrect' });
+        return;
+      }
+      data.email = trimmed;
+    }
 
     const updatedUser = await prisma.user.update({
       where: { id: req.user.id },
-      data: {
-        ...(firstName !== undefined && { firstName }),
-        ...(lastName !== undefined && { lastName })
-      },
+      data,
       select: {
         id: true,
         email: true,
         firstName: true,
         lastName: true,
+        companyName: true,
         role: true,
         catalogId: true,
+        avatarUrl: true,
+        address: true,
+        phone: true,
         updatedAt: true
       }
     });
@@ -266,5 +325,131 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
   } catch (error) {
     console.error('Change password error:', error);
     res.status(500).json({ error: 'Failed to change password' });
+  }
+};
+
+/**
+ * Get current user's recent activity (last 10–20 actions from quotes, projects, customers)
+ */
+export const getMyActivity = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const userId = req.user.id;
+    const limitPerType = 8;
+
+    const [quotes, projects, customers] = await Promise.all([
+      prisma.quote.findMany({
+        where: { userId },
+        select: { id: true, quoteNumber: true, customerName: true, updatedAt: true },
+        orderBy: { updatedAt: 'desc' },
+        take: limitPerType
+      }),
+      prisma.project.findMany({
+        where: { userId },
+        select: { id: true, name: true, updatedAt: true },
+        orderBy: { updatedAt: 'desc' },
+        take: limitPerType
+      }),
+      prisma.customer.findMany({
+        where: { createdById: userId },
+        select: { id: true, name: true, company: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        take: limitPerType
+      })
+    ]);
+
+    type ActivityItem = {
+      type: 'quote' | 'project' | 'customer';
+      id: string;
+      title: string;
+      date: string;
+    };
+
+    const items: ActivityItem[] = [
+      ...quotes.map((q) => ({
+        type: 'quote' as const,
+        id: q.id,
+        title: `Quote ${q.quoteNumber}${q.customerName ? ` – ${q.customerName}` : ''}`,
+        date: q.updatedAt.toISOString()
+      })),
+      ...projects.map((p) => ({
+        type: 'project' as const,
+        id: p.id,
+        title: p.name,
+        date: p.updatedAt.toISOString()
+      })),
+      ...customers.map((c) => ({
+        type: 'customer' as const,
+        id: c.id,
+        title: c.company ? `${c.name} (${c.company})` : c.name,
+        date: c.createdAt.toISOString()
+      }))
+    ];
+
+    items.sort((a, b) => (new Date(b.date).getTime() - new Date(a.date).getTime()));
+    const recent = items.slice(0, 20);
+
+    res.json(recent);
+  } catch (error) {
+    console.error('Get my activity error:', error);
+    res.status(500).json({ error: 'Failed to fetch activity' });
+  }
+};
+
+const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
+
+/**
+ * Upload avatar for current user. Expects multipart field "avatar" (image file).
+ * Stores file in uploads/avatars and sets user.avatarUrl to /uploads/avatars/filename.
+ */
+export const uploadAvatar = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    if (!req.file || !req.file.path) {
+      res.status(400).json({ error: 'No avatar file uploaded' });
+      return;
+    }
+    const relativePath = `/uploads/avatars/${path.basename(req.file.path)}`;
+    const previous = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { avatarUrl: true }
+    });
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { avatarUrl: relativePath },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        companyName: true,
+        role: true,
+        catalogId: true,
+        avatarUrl: true,
+        address: true,
+        phone: true,
+        updatedAt: true
+      }
+    });
+    if (previous?.avatarUrl) {
+      const oldPath = path.join(uploadDir, previous.avatarUrl.replace(/^\/uploads\/?/, ''));
+      if (fs.existsSync(oldPath)) {
+        try {
+          fs.unlinkSync(oldPath);
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+    }
+    res.json(updatedUser);
+  } catch (error) {
+    console.error('Upload avatar error:', error);
+    res.status(500).json({ error: 'Failed to upload avatar' });
   }
 };

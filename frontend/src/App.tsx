@@ -38,6 +38,7 @@ import ProductFinder from './pages/public/ProductFinder';
 import BomCrossReference from './pages/public/BomCrossReference';
 import BomAnalyzer from './pages/public/BomAnalyzer';
 import SalesDashboard from './pages/sales/SalesDashboard';
+import NotificationsPage from './pages/NotificationsPage';
 import NotFound from './pages/NotFound';
 
 // Redirect /assignments and /managed-users to /accounts (optionally with userId from query)
@@ -135,6 +136,7 @@ function App() {
         <Route path="/sales" element={<SalesDashboard />} />
         <Route path="/my-price-contracts" element={<MyPriceContractsPage />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
       </Route>
 
       {/* Admin routes */}

@@ -10,6 +10,9 @@ interface User {
   role: 'FREE' | 'BASIC' | 'TURNKEY' | 'DISTRIBUTOR' | 'RSM' | 'ADMIN';
   catalogId?: string | null;
   sessionId?: string;
+  avatarUrl?: string | null;
+  address?: string | null;
+  phone?: string | null;
 }
 
 interface AuthState {

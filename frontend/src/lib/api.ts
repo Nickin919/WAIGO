@@ -74,8 +74,21 @@ export const authApi = {
   getCurrentUser: () =>
     api.get('/auth/me'),
   
-  updateProfile: (data: { firstName?: string; lastName?: string }) =>
+  getMyActivity: () =>
+    api.get('/auth/me/activity'),
+  
+  updateProfile: (data: {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    address?: string;
+    phone?: string;
+    currentPassword?: string;
+  }) =>
     api.patch('/auth/me', data),
+  
+  uploadAvatar: (formData: FormData) =>
+    api.post('/auth/me/avatar', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   
   changePassword: (currentPassword: string, newPassword: string) =>
     api.patch('/auth/change-password', { currentPassword, newPassword }),

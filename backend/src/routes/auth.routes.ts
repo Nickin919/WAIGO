@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { body } from 'express-validator';
 import * as authController from '../controllers/auth.controller';
 import { authenticate } from '../middleware/auth';
+import { uploadAvatar as uploadAvatarMiddleware } from '../middleware/upload';
 
 const router = Router();
 
@@ -30,8 +31,14 @@ router.post(
 // Get current user profile
 router.get('/me', authenticate, authController.getCurrentUser);
 
+// Get current user's recent activity (quotes, projects, customers)
+router.get('/me/activity', authenticate, authController.getMyActivity);
+
 // Update profile
 router.patch('/me', authenticate, authController.updateProfile);
+
+// Upload avatar (multipart: avatar = image file)
+router.post('/me/avatar', authenticate, uploadAvatarMiddleware, authController.uploadAvatar);
 
 // Change password
 router.patch(
