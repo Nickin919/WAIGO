@@ -55,7 +55,7 @@ export async function sendQuoteEmail(params: SendQuoteEmailParams): Promise<{ id
 
   const attachments: { filename: string; content: Buffer }[] = [];
   if (pdfBuffer) {
-    attachments.push({ filename: `Quote_${quoteNumber.replace(/#/g, '')}.pdf`, content: pdfBuffer });
+    attachments.push({ filename: `PricingProposal_${quoteNumber.replace(/#/g, '')}.pdf`, content: pdfBuffer });
   }
   for (const att of literatureAttachments) {
     attachments.push({ filename: att.filename, content: att.content });
@@ -69,7 +69,7 @@ export async function sendQuoteEmail(params: SendQuoteEmailParams): Promise<{ id
       from: DEFAULT_FROM,
       to: [to],
       bcc: bccFiltered.length > 0 ? bccFiltered : undefined,
-      subject: `WAIGO Quote ${quoteNumber} – ${customerName}`,
+      subject: `WAIGO Pricing Proposal ${quoteNumber} – ${customerName}`,
       html,
       attachments:
         attachments.length > 0
@@ -86,7 +86,7 @@ export async function sendQuoteEmail(params: SendQuoteEmailParams): Promise<{ id
       data: {
         quoteId,
         recipient: to,
-        subject: `WAIGO Quote ${quoteNumber}`,
+        subject: `WAIGO Pricing Proposal ${quoteNumber}`,
         status: 'sent',
         resendId: data?.id ?? null,
       },
@@ -99,7 +99,7 @@ export async function sendQuoteEmail(params: SendQuoteEmailParams): Promise<{ id
       data: {
         quoteId,
         recipient: to,
-        subject: `WAIGO Quote ${quoteNumber}`,
+        subject: `WAIGO Pricing Proposal ${quoteNumber}`,
         status: 'failed',
         error: errorMessage,
       },

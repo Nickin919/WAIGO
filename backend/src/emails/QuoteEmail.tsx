@@ -46,7 +46,7 @@ export default function QuoteEmail({
                 color: '#111827',
               }}
             >
-              Your WAIGO Quote #{quoteNumber}
+              Your WAIGO Pricing Proposal #{quoteNumber}
             </Text>
             <Text style={{ marginBottom: '16px', color: '#374151' }}>
               Hello {customerName},
@@ -55,7 +55,7 @@ export default function QuoteEmail({
               <Text style={{ color: '#374151' }}>{quoteSummary}</Text>
             </Section>
             <Text style={{ marginBottom: '16px', color: '#374151' }}>
-              You can view the full quote online and download it as needed.
+              You can view the full pricing proposal online and download it as needed.
             </Text>
             <Button
               href={viewQuoteUrl}
@@ -67,7 +67,7 @@ export default function QuoteEmail({
                 fontWeight: '600',
               }}
             >
-              View Quote Online
+              View Pricing Proposal Online
             </Button>
             <Text
               style={{
