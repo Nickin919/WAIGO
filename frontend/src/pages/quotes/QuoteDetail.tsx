@@ -171,16 +171,28 @@ const QuoteDetail = () => {
             </thead>
             <tbody>
               {items.map((item: any) => (
-                <tr key={item.id} className="border-t">
-                  <td className="px-4 py-2 font-medium">{item.snapshotPartNumber || item.partNumber}</td>
+                <tr key={item.id} className={`border-t ${item.isSellAffected ? 'bg-emerald-50/40' : ''}`}>
+                  <td className="px-4 py-2">
+                    <span className={item.isCostAffected || item.isSellAffected ? 'font-bold' : 'font-medium'}>
+                      {item.snapshotPartNumber || item.partNumber}
+                      {item.isCostAffected && <span className="text-gray-600 ml-0.5">*</span>}
+                      {item.isSellAffected && <span className="text-emerald-700 ml-0.5">†</span>}
+                    </span>
+                  </td>
                   <td className="px-4 py-2 text-gray-600 truncate max-w-xs">{item.snapshotDescription || item.description}</td>
                   <td className="px-4 py-2 text-right">{item.quantity}</td>
-                  <td className="px-4 py-2 text-right">{formatCurrency(item.sellPrice ?? item.costPrice)}</td>
+                  <td className={`px-4 py-2 text-right ${item.isSellAffected ? 'font-bold text-emerald-800' : ''}`}>{formatCurrency(item.sellPrice ?? item.costPrice)}</td>
                   <td className="px-4 py-2 text-right font-medium">{formatCurrency(item.lineTotal)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {(items.some((i: any) => i.isCostAffected || i.isSellAffected)) && (
+            <p className="text-xs text-gray-500 mt-2">
+              <span className="font-medium text-gray-600">*</span> Cost affected by SPA/discount &nbsp;
+              <span className="font-medium text-emerald-700">†</span> Sell price from pricing contract
+            </p>
+          )}
           <div className="mt-4 pt-4 border-t flex justify-end">
             <span className="text-xl font-bold">Total: {formatCurrency(quote.total)}</span>
           </div>

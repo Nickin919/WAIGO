@@ -20,6 +20,10 @@ interface LineItem {
   marginPct: number;
   marginSelected?: boolean;
   discountSelected?: boolean;
+  /** Cost affected by SPA/discount – show bold + * */
+  isCostAffected?: boolean;
+  /** Sell price from pricing contract – show bold + † (green) */
+  isSellAffected?: boolean;
 }
 
 interface Customer {
@@ -188,6 +192,8 @@ const QuoteForm = () => {
           marginPct: i.marginPct ?? 0,
           marginSelected: false,
           discountSelected: false,
+          isCostAffected: Boolean(i.isCostAffected),
+          isSellAffected: Boolean(i.isSellAffected),
         })));
       }).catch(() => toast.error('Failed to load quote')).finally(() => setLoading(false));
     }
@@ -256,6 +262,14 @@ const QuoteForm = () => {
   const calculateTotal = () => items.reduce((sum, i) => sum + calculateLineTotal(i), 0);
 
   /** Find contract item for a part: by partId or by seriesOrGroup matching part.series/partNumber */
+  /** Margin % so that sell price = list price when the given discount % is applied (cost = list * (1 - disc/100), sell = cost * (1 + margin/100) = list). */
+  const marginToKeepSellEqualToList = (discountPct: number): number => {
+    if (discountPct <= 0) return 0;
+    const factor = 1 - discountPct / 100;
+    if (factor <= 0) return 0;
+    return 100 * (1 / factor - 1);
+  };
+
   const findContractItem = (part: Part): PriceContractItemRow | null => {
     if (!contractDetails?.items?.length) return null;
     const byPart = contractDetails.items.find((i) => i.partId === part.id);
@@ -277,7 +291,7 @@ const QuoteForm = () => {
     let listPrice = part.basePrice ?? 0;
     let defaultDisc = 0;
     let marginPct = 0;
-    // Only use contract/catalog pricing when a price contract is selected
+    // When a price contract is selected, use contract cost/discount and suggested sell (margin)
     if (priceContractId && contractItem && qty >= contractItem.minQuantity) {
       listPrice = contractItem.costPrice;
       defaultDisc = contractItem.discountPercent ?? part.distributorDiscount ?? 0;
@@ -285,8 +299,11 @@ const QuoteForm = () => {
       if (contractItem.suggestedSellPrice != null && costAfterDisc > 0) {
         marginPct = (contractItem.suggestedSellPrice / costAfterDisc - 1) * 100;
       }
+    } else {
+      // No price contract: use part's standard (distributor) discount and set margin so sell price = list price
+      defaultDisc = part.distributorDiscount ?? 0;
+      marginPct = marginToKeepSellEqualToList(defaultDisc);
     }
-    // When no price contract: sell price defaults to list price (0% discount, 0% margin)
     const existing = items.find((i) => i.partId === part.id);
     if (existing) {
       const addQty = quantityOverride ?? Math.max(1, part.minQty ?? 1);
@@ -294,6 +311,8 @@ const QuoteForm = () => {
         i.partId === part.id ? { ...i, quantity: i.quantity + addQty } : i
       ));
     } else {
+      const usedContractPricing = Boolean(priceContractId && contractItem && qty >= contractItem.minQuantity && contractItem.suggestedSellPrice != null);
+      const costAffected = defaultDisc > 0;
       setItems([
         ...items,
         {
@@ -309,6 +328,8 @@ const QuoteForm = () => {
           marginPct,
           marginSelected: false,
           discountSelected: false,
+          isCostAffected: costAffected,
+          isSellAffected: usedContractPricing,
         },
       ]);
     }
@@ -390,7 +411,6 @@ const QuoteForm = () => {
           let listPrice = part.basePrice ?? 0;
           let defaultDisc = 0;
           let marginPct = 0;
-          // Only use contract/catalog pricing when a price contract is selected
           if (priceContractId && contractItem && qty >= contractItem.minQuantity) {
             listPrice = contractItem.costPrice;
             defaultDisc = contractItem.discountPercent ?? part.distributorDiscount ?? 0;
@@ -398,12 +418,16 @@ const QuoteForm = () => {
             if (contractItem.suggestedSellPrice != null && costAfterDisc > 0) {
               marginPct = (contractItem.suggestedSellPrice / costAfterDisc - 1) * 100;
             }
+          } else {
+            defaultDisc = part.distributorDiscount ?? 0;
+            marginPct = marginToKeepSellEqualToList(defaultDisc);
           }
-          // When no price contract: sell price defaults to list price (0% discount, 0% margin)
           const idx = next.findIndex((i) => i.partId === part.id);
           if (idx >= 0) {
             next[idx].quantity += qty;
           } else {
+            const usedContractPricing = Boolean(priceContractId && contractItem && qty >= contractItem.minQuantity && contractItem.suggestedSellPrice != null);
+            const costAffected = defaultDisc > 0;
             next.push({
               partId: part.id,
               productSeries: part.series || part.partNumber,
@@ -417,6 +441,8 @@ const QuoteForm = () => {
               marginPct,
               marginSelected: false,
               discountSelected: false,
+              isCostAffected: costAffected,
+              isSellAffected: usedContractPricing,
             });
           }
         }
@@ -485,11 +511,16 @@ const QuoteForm = () => {
               if (contractItem.suggestedSellPrice != null && costAfterDisc > 0) {
                 marginPct = (contractItem.suggestedSellPrice / costAfterDisc - 1) * 100;
               }
+            } else {
+              defaultDisc = part.distributorDiscount ?? 0;
+              marginPct = marginToKeepSellEqualToList(defaultDisc);
             }
             const idx = next.findIndex((i) => i.partId === part.id);
             if (idx >= 0) {
               next[idx].quantity += qty;
             } else {
+              const usedContractPricing = Boolean(priceContractId && contractItem && qty >= contractItem.minQuantity && contractItem.suggestedSellPrice != null);
+              const costAffected = defaultDisc > 0;
               next.push({
                 partId: part.id,
                 productSeries: part.series || part.partNumber,
@@ -503,6 +534,8 @@ const QuoteForm = () => {
                 marginPct,
                 marginSelected: false,
                 discountSelected: false,
+                isCostAffected: costAffected,
+                isSellAffected: usedContractPricing,
               });
             }
           }
@@ -543,7 +576,12 @@ const QuoteForm = () => {
   };
 
   const updateItem = (index: number, updates: Partial<LineItem>) => {
-    setItems(items.map((i, idx) => (idx === index ? { ...i, ...updates } : i)));
+    setItems(items.map((i, idx) => {
+      if (idx !== index) return i;
+      const next = { ...i, ...updates };
+      if ('discountPct' in updates && updates.discountPct != null) next.isCostAffected = updates.discountPct > 0;
+      return next;
+    }));
   };
 
   const toggleMarginSelectAll = () => {
@@ -565,7 +603,7 @@ const QuoteForm = () => {
   };
   const applyBulkDiscount = (value: number) => {
     const clamped = Math.min(value, maxDiscount);
-    setItems(items.map((i) => (i.discountSelected ? { ...i, discountPct: clamped } : i)));
+    setItems(items.map((i) => (i.discountSelected ? { ...i, discountPct: clamped, isCostAffected: clamped > 0 } : i)));
   };
 
   const removeItem = (index: number) => {
@@ -595,6 +633,8 @@ const QuoteForm = () => {
         quantity: i.quantity,
         discountPct: i.discountPct,
         marginPct: i.marginPct,
+        isCostAffected: i.isCostAffected,
+        isSellAffected: i.isSellAffected,
       })),
     };
 
@@ -890,9 +930,13 @@ const QuoteForm = () => {
               </thead>
               <tbody>
                 {items.map((item, idx) => (
-                  <tr key={idx} className={`border-t ${(item.marginSelected || item.discountSelected) ? 'bg-green-50/50' : ''}`}>
+                  <tr key={idx} className={`border-t ${(item.marginSelected || item.discountSelected) ? 'bg-green-50/50' : ''} ${item.isSellAffected ? 'bg-emerald-50/40' : ''}`}>
                     <td className="px-4 py-2">
-                      <div className="font-medium">{item.productPartNumber}</div>
+                      <div className={`font-medium ${(item.isCostAffected || item.isSellAffected) ? 'font-bold' : ''} ${item.isSellAffected ? 'text-emerald-800' : ''}`}>
+                        {item.productPartNumber}
+                        {item.isCostAffected && <span className="text-gray-600 ml-0.5">*</span>}
+                        {item.isSellAffected && <span className="text-emerald-700 ml-0.5">†</span>}
+                      </div>
                       <div className="text-gray-500 truncate max-w-xs">{item.productDescription.slice(0, 40)}...</div>
                     </td>
                     <td className="px-4 py-2 text-right">{formatCurrency(item.productPrice)}</td>
@@ -913,7 +957,7 @@ const QuoteForm = () => {
                         </div>
                       </td>
                     )}
-                    <td className="px-4 py-2 text-right font-medium">{formatCurrency(calculateSellPrice(item))}</td>
+                    <td className={`px-4 py-2 text-right ${item.isSellAffected ? 'font-bold text-emerald-800' : 'font-medium'}`}>{formatCurrency(calculateSellPrice(item))}</td>
                     <td className="px-4 py-2">
                       <input type="number" min={1} value={item.quantity} onChange={(e) => updateItem(idx, { quantity: parseInt(e.target.value, 10) || 1 })} className="input py-1 min-w-[5rem] w-24 text-center" placeholder="Qty" />
                     </td>
@@ -934,6 +978,12 @@ const QuoteForm = () => {
           )}
 
           <p className="text-xs text-gray-500 mt-2">Max discount for your role: {maxDiscount}%</p>
+          {(items.some((i) => i.isCostAffected) || items.some((i) => i.isSellAffected)) && (
+            <p className="text-xs text-gray-500 mt-1">
+              <span className="font-medium text-gray-600">*</span> Cost affected by SPA/discount &nbsp;
+              <span className="font-medium text-emerald-700">†</span> Sell price from pricing contract
+            </p>
+          )}
         </div>
 
         <div className="flex gap-4">
