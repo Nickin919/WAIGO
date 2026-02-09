@@ -55,7 +55,7 @@ export function useReportQuery(projectId: string | undefined) {
 export function useCreateProjectMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { name: string; description?: string }) => {
+    mutationFn: async (payload: { name: string; description?: string; catalogId?: string }) => {
       const { data } = await projectApi.create(payload);
       return data as { id: string };
     },
