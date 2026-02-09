@@ -22,16 +22,20 @@ export function getUploadDir(): string {
   return path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
 }
 
-/** Ensures the upload directory and standard subdirs exist. Call at startup. */
+/** Ensures the upload directory and standard subdirs exist. Call at startup. Never throws. */
 export function ensureUploadDirs(): void {
-  const base = getUploadDir();
-  if (!fs.existsSync(base)) {
-    fs.mkdirSync(base, { recursive: true });
-  }
-  for (const sub of SUBDIRS) {
-    const dir = path.join(base, sub);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+  try {
+    const base = getUploadDir();
+    if (!fs.existsSync(base)) {
+      fs.mkdirSync(base, { recursive: true });
     }
+    for (const sub of SUBDIRS) {
+      const dir = path.join(base, sub);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    }
+  } catch (err) {
+    console.warn('[uploadPath] Could not create upload dirs (uploads may fail):', err instanceof Error ? err.message : err);
   }
 }
