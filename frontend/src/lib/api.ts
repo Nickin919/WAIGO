@@ -199,6 +199,29 @@ export const commentApi = {
 };
 
 // ============================================================================
+// BOM / Workflow API (uses project API: create project then upload BOM)
+// ============================================================================
+
+export const bomApi = {
+  /** Upload BOM file: creates a new project and uploads CSV to it. Returns project with id. */
+  upload: async (file: File) => {
+    const name = `BOM Import ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString('en-US', { hour12: false }).replace(/:/g, '-')}`;
+    const createRes = await api.post<{ id: string }>('/projects', { name });
+    const projectId = (createRes.data as { id: string }).id;
+    const formData = new FormData();
+    formData.append('csv', file);
+    await api.post(`/projects/${projectId}/upload-bom?replace=true`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    const project = await api.get(`/projects/${projectId}`);
+    return { data: project.data as { id: string; name?: string; items?: unknown[] } };
+  },
+  /** Stub: create project from BOM (e.g. from product finder). Use projectApi.create + addItem in practice. */
+  createFromBom: (data: { name: string; description?: string; catalogId?: string }) =>
+    api.post<{ id: string }>('/projects', data),
+};
+
+// ============================================================================
 // Project API
 // ============================================================================
 

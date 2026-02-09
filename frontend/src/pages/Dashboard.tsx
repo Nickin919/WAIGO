@@ -4,6 +4,7 @@ import { Plus, CheckCircle, DollarSign, Package, FolderKanban, Video, FileText, 
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 import { catalogApi, projectApi, quoteApi } from '@/lib/api';
+import { DashboardWorkflow } from '@/components/workflow/DashboardWorkflow';
 
 interface CatalogStats {
   partsCount: number;
@@ -187,6 +188,11 @@ const Dashboard = () => {
           </div>
           <div className="text-sm opacity-90">Quotes</div>
         </Link>
+      </div>
+
+      {/* Row-based workflow: BOM → Project/Quote/Catalog → Review */}
+      <div className="mb-8">
+        <DashboardWorkflow />
       </div>
 
       {/* Main Content Grid */}
