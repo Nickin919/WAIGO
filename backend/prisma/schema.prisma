@@ -101,6 +101,7 @@ model User {
   avatarUrl       String?   @map("avatar_url")
   address         String?   @db.Text
   phone           String?
+  defaultTerms    String?   @map("default_terms") @db.Text // Default Terms text for Pricing Proposal PDF (RSM/Distributor)
   
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
@@ -588,7 +589,7 @@ model Quote {
   total           Float     @default(0)
   validUntil      DateTime? @map("valid_until")
   fob             String?   @db.VarChar(100)
-  terms           String?   @default("Net 30") @db.VarChar(100)
+  terms           String?   @default("Net 30") @db.Text // Default from quote owner's profile Terms (User.defaultTerms)
   isActive        Boolean   @default(true) @map("is_active")
   sentAt         DateTime? @map("sent_at") // First time quote was emailed (optional)
   createdAt      DateTime  @default(now()) @map("created_at")

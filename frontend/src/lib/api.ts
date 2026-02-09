@@ -83,6 +83,7 @@ export const authApi = {
     email?: string;
     address?: string;
     phone?: string;
+    defaultTerms?: string;
     currentPassword?: string;
   }) =>
     api.patch('/auth/me', data),

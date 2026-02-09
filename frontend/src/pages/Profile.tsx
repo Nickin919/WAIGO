@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { LogOut, User, Mail, Lock, FileText, FolderKanban, Users, Loader2, Camera, MapPin, Phone } from 'lucide-react';
+import { LogOut, User, Mail, Lock, FileText, FolderKanban, Users, Loader2, Camera, MapPin, Phone, FileSignature } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 import { authApi } from '@/lib/api';
@@ -35,6 +35,9 @@ const Profile = () => {
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [savingContact, setSavingContact] = useState(false);
 
+  const [defaultTerms, setDefaultTerms] = useState(user?.defaultTerms ?? '');
+  const [savingTerms, setSavingTerms] = useState(false);
+
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -54,7 +57,8 @@ const Profile = () => {
     setEmail(user?.email ?? '');
     setAddress(user?.address ?? '');
     setPhone(user?.phone ?? '');
-  }, [user?.email, user?.address, user?.phone]);
+    setDefaultTerms(user?.defaultTerms ?? '');
+  }, [user?.email, user?.address, user?.phone, user?.defaultTerms]);
 
   useEffect(() => {
     let cancelled = false;
@@ -160,6 +164,25 @@ const Profile = () => {
       toast.error(msg);
     } finally {
       setSavingContact(false);
+    }
+  };
+
+  const handleSaveTerms = async () => {
+    if (savingTerms) return;
+    setSavingTerms(true);
+    try {
+      const res = await authApi.updateProfile({
+        defaultTerms: defaultTerms.trim() || undefined,
+      });
+      updateUser(res.data);
+      toast.success('Terms updated');
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'response' in err && typeof (err as { response: { data?: { error?: string } } }).response?.data?.error === 'string'
+        ? (err as { response: { data: { error: string } } }).response.data.error
+        : 'Failed to update terms';
+      toast.error(msg);
+    } finally {
+      setSavingTerms(false);
     }
   };
 
@@ -344,6 +367,31 @@ const Profile = () => {
                 {savingContact ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
               </button>
             </div>
+          </div>
+
+          {/* Terms (default text for Pricing Proposal PDF) */}
+          <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
+            <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+              <FileSignature className="w-4 h-4" /> Terms
+            </h3>
+            <p className="text-xs text-gray-500">
+              Default terms text for Pricing Proposal PDFs. Used when the quote owner is you (or your hierarchy).
+            </p>
+            <textarea
+              value={defaultTerms}
+              onChange={(e) => setDefaultTerms(e.target.value)}
+              placeholder="e.g. Net 30. Valid for 30 days from proposal date."
+              className="input w-full min-h-[100px] resize-y"
+              rows={4}
+            />
+            <button
+              type="button"
+              onClick={handleSaveTerms}
+              disabled={savingTerms}
+              className="btn btn-primary"
+            >
+              {savingTerms ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Terms'}
+            </button>
           </div>
         </div>
 

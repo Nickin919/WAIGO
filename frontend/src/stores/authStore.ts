@@ -13,6 +13,7 @@ interface User {
   avatarUrl?: string | null;
   address?: string | null;
   phone?: string | null;
+  defaultTerms?: string | null;
 }
 
 interface AuthState {

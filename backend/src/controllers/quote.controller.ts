@@ -117,7 +117,7 @@ export const createQuote = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const { catalogId, priceContractId, customerId, customerName, customerEmail, customerCompany, notes, items } = req.body;
+    const { catalogId, priceContractId, customerId, customerName, customerEmail, customerCompany, notes, terms: bodyTerms, items } = req.body;
 
     if (!catalogId) {
       res.status(400).json({ error: 'catalogId is required' });
@@ -155,6 +155,12 @@ export const createQuote = async (req: AuthRequest, res: Response): Promise<void
 
     const count = await prisma.quote.count();
     const quoteNumber = `PP#${(count + 1).toString().padStart(6, '0')}`;
+
+    const quoteOwner = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+    });
+    const defaultTermsFromProfile = (quoteOwner as { defaultTerms?: string | null } | null)?.defaultTerms ?? null;
+    const termsValue = bodyTerms != null && String(bodyTerms).trim() !== '' ? String(bodyTerms).trim() : (defaultTermsFromProfile ?? 'Net 30');
 
     let total = 0;
     const itemsToCreate: any[] = [];
@@ -214,7 +220,7 @@ export const createQuote = async (req: AuthRequest, res: Response): Promise<void
         customerCompany: customerCompany || undefined,
         notes: notes || null,
         total,
-        terms: 'Net 30',
+        terms: termsValue,
       },
     });
 
@@ -251,7 +257,7 @@ export const updateQuote = async (req: AuthRequest, res: Response): Promise<void
     }
 
     const { id } = req.params;
-    const { customerId, customerName, customerEmail, customerCompany, notes, priceContractId, items } = req.body;
+    const { customerId, customerName, customerEmail, customerCompany, notes, terms: bodyTerms, priceContractId, items } = req.body;
 
     const existing = await prisma.quote.findUnique({
       where: { id },
@@ -346,7 +352,7 @@ export const updateQuote = async (req: AuthRequest, res: Response): Promise<void
       });
     }
 
-    const updateData: { customerId?: string | null; customerName?: string | null; customerEmail?: string; customerCompany?: string; notes?: string | null; total: number; priceContractId?: string | null } = {
+    const updateData: { customerId?: string | null; customerName?: string | null; customerEmail?: string; customerCompany?: string; notes?: string | null; terms?: string; total: number; priceContractId?: string | null } = {
       customerId: customerId || null,
       customerName: displayName || null,
       customerEmail: customerEmail || undefined,
@@ -356,6 +362,9 @@ export const updateQuote = async (req: AuthRequest, res: Response): Promise<void
     };
     if (priceContractId !== undefined) {
       updateData.priceContractId = priceContractId || null;
+    }
+    if (bodyTerms !== undefined) {
+      updateData.terms = bodyTerms === '' || bodyTerms == null ? 'Net 30' : String(bodyTerms).trim();
     }
     await prisma.$transaction([
       prisma.quoteItem.deleteMany({ where: { quoteId: id } }),

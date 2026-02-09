@@ -102,7 +102,8 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
         isActive: true,
         avatarUrl: true,
         address: true,
-        phone: true
+        phone: true,
+        defaultTerms: true
       }
     });
 
@@ -169,6 +170,7 @@ export const getCurrentUser = async (req: AuthRequest, res: Response): Promise<v
         avatarUrl: true,
         address: true,
         phone: true,
+        defaultTerms: true,
         createdAt: true,
         updatedAt: true,
         catalog: {
@@ -194,7 +196,7 @@ export const getCurrentUser = async (req: AuthRequest, res: Response): Promise<v
 };
 
 /**
- * Update user profile (firstName, lastName, email, address, phone).
+ * Update user profile (firstName, lastName, email, address, phone, defaultTerms).
  * Changing email requires currentPassword for verification.
  */
 export const updateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -204,7 +206,7 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const { firstName, lastName, email, address, phone, currentPassword } = req.body;
+    const { firstName, lastName, email, address, phone, defaultTerms, currentPassword } = req.body;
 
     const data: {
       firstName?: string;
@@ -212,11 +214,13 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
       email?: string;
       address?: string;
       phone?: string;
+      defaultTerms?: string;
     } = {};
     if (firstName !== undefined) data.firstName = firstName;
     if (lastName !== undefined) data.lastName = lastName;
     if (address !== undefined) data.address = address;
     if (phone !== undefined) data.phone = phone;
+    if (defaultTerms !== undefined) data.defaultTerms = defaultTerms === '' ? null : defaultTerms;
 
     if (email !== undefined && email !== null && email !== '') {
       const trimmed = String(email).trim().toLowerCase();
@@ -265,6 +269,7 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
         avatarUrl: true,
         address: true,
         phone: true,
+        defaultTerms: true,
         updatedAt: true
       }
     });
@@ -434,6 +439,7 @@ export const uploadAvatar = async (req: AuthRequest, res: Response): Promise<voi
         avatarUrl: true,
         address: true,
         phone: true,
+        defaultTerms: true,
         updatedAt: true
       }
     });
