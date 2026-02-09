@@ -675,15 +675,16 @@ export const generateQuotePDF = async (req: AuthRequest, res: Response): Promise
             id: true,
             role: true,
             logoUrl: true,
+            avatarUrl: true,
             firstName: true,
             lastName: true,
             email: true,
             phone: true,
             assignedToRsm: {
-              select: { firstName: true, lastName: true, email: true, phone: true, logoUrl: true },
+              select: { firstName: true, lastName: true, email: true, phone: true, logoUrl: true, avatarUrl: true },
             },
             assignedToDistributor: {
-              select: { firstName: true, lastName: true, email: true, phone: true, logoUrl: true },
+              select: { firstName: true, lastName: true, email: true, phone: true, logoUrl: true, avatarUrl: true },
             },
           },
         },

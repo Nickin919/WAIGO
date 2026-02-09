@@ -55,6 +55,7 @@ export interface ContactForPdf {
   email: string | null;
   phone: string | null;
   logoUrl?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface QuoteForPdf {
@@ -87,6 +88,18 @@ function resolveLogoPath(logoUrl: string | null | undefined): string | null {
   const full = path.join(uploadBase, 'logos', basename);
   return fs.existsSync(full) ? full : null;
 }
+
+/** Resolve avatar URL (e.g. /uploads/avatars/xxx.jpg) to filesystem path. */
+function resolveAvatarPath(avatarUrl: string | null | undefined): string | null {
+  if (!avatarUrl || typeof avatarUrl !== 'string') return null;
+  const uploadBase = getUploadDir();
+  const basename = path.basename(avatarUrl);
+  if (!basename) return null;
+  const full = path.join(uploadBase, 'avatars', basename);
+  return fs.existsSync(full) ? full : null;
+}
+
+const AVATAR_SIZE = 48; // diameter in points for contact circles
 
 function formatDate(d: Date): string {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -316,14 +329,33 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     const distEmail = distContact?.email ?? '—';
     const distPhone = distContact?.phone ?? '—';
 
+    const r = AVATAR_SIZE / 2;
+    const drawContactAvatar = (cardX: number, avatarUrl: string | null | undefined) => {
+      const cx = cardX + r;
+      const cy = contactStartY + r;
+      const avatarPath = resolveAvatarPath(avatarUrl);
+      if (avatarPath) {
+        try {
+          doc.save();
+          doc.circle(cx, cy, r).clip();
+          doc.image(avatarPath, cardX, contactStartY, { width: AVATAR_SIZE, height: AVATAR_SIZE, fit: [AVATAR_SIZE, AVATAR_SIZE] });
+          doc.restore();
+        } catch {
+          doc.circle(cx, cy, r).fill('#e5e7eb');
+        }
+      } else {
+        doc.circle(cx, cy, r).fill('#e5e7eb');
+      }
+    };
+
     const card1X = MARGIN;
-    doc.circle(card1X + 24, contactStartY + 24, 24).fill('#e5e7eb');
+    drawContactAvatar(card1X, rsmContact?.avatarUrl ?? undefined);
     doc.fontSize(10).fillColor('#6b7280').text('Your WAGO Contact', card1X + 56, contactStartY);
     doc.fontSize(12).fillColor('#111827').text(rsmName, card1X + 56, contactStartY + 12);
     doc.fontSize(10).fillColor('#4b5563').text(rsmEmail, card1X + 56, contactStartY + 26);
     doc.text(rsmPhone, card1X + 56, contactStartY + 40);
     const card2X = MARGIN + 270;
-    doc.circle(card2X + 24, contactStartY + 24, 24).fill('#e5e7eb');
+    drawContactAvatar(card2X, distContact?.avatarUrl ?? undefined);
     doc.fontSize(10).fillColor('#6b7280').text('Your Distributor', card2X + 56, contactStartY);
     doc.fontSize(12).fillColor('#111827').text(distName, card2X + 56, contactStartY + 12);
     doc.fontSize(10).fillColor('#4b5563').text(distEmail, card2X + 56, contactStartY + 26);
