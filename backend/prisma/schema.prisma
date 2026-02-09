@@ -247,6 +247,7 @@ model Catalog {
   parts           Part[]
   assignments     CatalogAssignment[]
   catalogItems    CatalogItem[] // User-selected products for this catalog
+  projects        Project[]
 
   @@map("catalogs")
 }
@@ -750,21 +751,24 @@ enum ProjectStatus {
 }
 
 model Project {
-  id            String    @id @default(uuid())
-  userId        String    @map("user_id")
-  name          String
-  description   String?   @db.Text
-  status        ProjectStatus @default(DRAFT)
-  currentRevision Int     @default(1) @map("current_revision")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  catalogId       String?   @map("catalog_id") // Catalog to search for parts in this project
+  name            String
+  description     String?   @db.Text
+  status          ProjectStatus @default(DRAFT)
+  currentRevision Int       @default(1) @map("current_revision")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items         ProjectItem[]
-  revisions     ProjectRevision[]
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  catalog         Catalog?  @relation(fields: [catalogId], references: [id], onDelete: SetNull)
+  items           ProjectItem[]
+  revisions       ProjectRevision[]
 
   @@index([userId])
+  @@index([catalogId])
   @@index([status])
   @@map("projects")
 }

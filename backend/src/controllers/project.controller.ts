@@ -15,6 +15,17 @@ async function canAccessProject(currentUserId: string, currentUserRole: string, 
   return subordinateIds.includes(projectUserId);
 }
 
+/** Get catalog IDs the user is allowed to use (assigned or master). */
+async function getAllowedCatalogIds(userId: string): Promise<string[]> {
+  const [assignments, master] = await Promise.all([
+    prisma.catalogAssignment.findMany({ where: { userId }, select: { catalogId: true } }),
+    prisma.catalog.findFirst({ where: { isMaster: true, isActive: true }, select: { id: true } }),
+  ]);
+  const ids = [...new Set(assignments.map((a) => a.catalogId))];
+  if (master && !ids.includes(master.id)) ids.push(master.id);
+  return ids;
+}
+
 const BOM_SAMPLE = 'manufacturer,partNumber,description,quantity,unitPrice\nWAGO,221-413,PCB terminal block 2.5mm,10,0.85\nPhoenix Contact,1234567,Competitor terminal,5,\n';
 
 const DEFAULT_PAGE = 1;
@@ -41,6 +52,7 @@ export const getProjects = async (req: AuthRequest, res: Response): Promise<void
           id: true,
           name: true,
           description: true,
+          catalogId: true,
           status: true,
           currentRevision: true,
           updatedAt: true,
@@ -50,6 +62,7 @@ export const getProjects = async (req: AuthRequest, res: Response): Promise<void
           user: {
             select: { id: true, email: true, firstName: true, lastName: true },
           },
+          catalog: { select: { id: true, name: true } },
         },
         orderBy: { updatedAt: 'desc' },
         skip,
@@ -83,6 +96,7 @@ export const getProjectById = async (req: AuthRequest, res: Response): Promise<v
     const project = await prisma.project.findUnique({
       where: { id },
       include: {
+        catalog: { select: { id: true, name: true } },
         items: {
           where: { projectId: id },
           include: {
@@ -127,11 +141,21 @@ export const createProject = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const { name, description } = req.body;
+    const { name, description, catalogId } = req.body;
 
     if (!name) {
       res.status(400).json({ error: 'Name is required' });
       return;
+    }
+
+    let resolvedCatalogId: string | null = null;
+    if (catalogId && typeof catalogId === 'string') {
+      const allowed = await getAllowedCatalogIds(req.user.id);
+      if (!allowed.includes(catalogId)) {
+        res.status(400).json({ error: 'You do not have access to the selected catalog' });
+        return;
+      }
+      resolvedCatalogId = catalogId;
     }
 
     const project = await prisma.project.create({
@@ -139,8 +163,10 @@ export const createProject = async (req: AuthRequest, res: Response): Promise<vo
         userId: req.user.id,
         name,
         description,
+        catalogId: resolvedCatalogId,
         status: 'DRAFT'
-      }
+      },
+      include: { catalog: { select: { id: true, name: true } } }
     });
 
     res.status(201).json(project);
@@ -153,7 +179,7 @@ export const createProject = async (req: AuthRequest, res: Response): Promise<vo
 export const updateProject = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, description } = req.body;
+    const { name, description, catalogId } = req.body;
 
     const existing = await prisma.project.findUnique({
       where: { id },
@@ -169,12 +195,26 @@ export const updateProject = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
+    const data: { name?: string; description?: string; catalogId?: string | null } = {};
+    if (name !== undefined) data.name = name;
+    if (description !== undefined) data.description = description;
+    if (catalogId !== undefined) {
+      if (catalogId === null || catalogId === '') {
+        data.catalogId = null;
+      } else {
+        const allowedCatalogs = await getAllowedCatalogIds(req.user!.id);
+        if (!allowedCatalogs.includes(catalogId)) {
+          res.status(400).json({ error: 'You do not have access to the selected catalog' });
+          return;
+        }
+        data.catalogId = catalogId;
+      }
+    }
+
     const project = await prisma.project.update({
       where: { id },
-      data: {
-        ...(name && { name }),
-        ...(description !== undefined && { description })
-      }
+      data,
+      include: { catalog: { select: { id: true, name: true } } }
     });
 
     res.json(project);
@@ -210,6 +250,83 @@ export const deleteProject = async (req: AuthRequest, res: Response): Promise<vo
   } catch (error) {
     console.error('Delete project error:', error);
     res.status(500).json({ error: 'Failed to delete project' });
+  }
+};
+
+/**
+ * GET /api/projects/:id/parts/search?q=...&limit=20
+ * Search parts in the project's catalog (or user's allowed catalogs). Uses project.catalogId when set.
+ */
+export const searchProjectParts = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const { id } = req.params;
+    const { q, limit = '20' } = req.query;
+
+    if (!q || typeof q !== 'string' || q.length < 2) {
+      res.status(400).json({ error: 'Search query must be at least 2 characters' });
+      return;
+    }
+
+    const project = await prisma.project.findUnique({
+      where: { id },
+      select: { userId: true, catalogId: true },
+    });
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+    const allowed = await canAccessProject(req.user.id, req.user.role, project.userId);
+    if (!allowed) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    const allowedCatalogIds = await getAllowedCatalogIds(req.user.id);
+    const catalogIds = project.catalogId && allowedCatalogIds.includes(project.catalogId)
+      ? [project.catalogId]
+      : allowedCatalogIds;
+
+    if (catalogIds.length === 0) {
+      res.json({ results: [], total: 0 });
+      return;
+    }
+
+    const parts = await prisma.part.findMany({
+      where: {
+        catalogId: { in: catalogIds },
+        catalog: { isActive: true },
+        OR: [
+          { partNumber: { contains: q, mode: 'insensitive' } },
+          { description: { contains: q, mode: 'insensitive' } },
+          { englishDescription: { contains: q, mode: 'insensitive' } },
+        ],
+      },
+      include: {
+        category: { select: { id: true, name: true } },
+        catalog: { select: { id: true, name: true } },
+      },
+      take: Math.min(50, Math.max(1, parseInt(String(limit), 10) || 20)),
+      orderBy: { partNumber: 'asc' },
+    });
+
+    res.json({
+      results: parts.map((part) => ({
+        id: part.id,
+        partNumber: part.partNumber,
+        description: part.englishDescription ?? part.description,
+        category: part.category.name,
+        catalogName: part.catalog.name,
+        thumbnailUrl: part.thumbnailUrl,
+      })),
+      total: parts.length,
+    });
+  } catch (error) {
+    console.error('Search project parts error:', error);
+    res.status(500).json({ error: 'Failed to search parts' });
   }
 };
 

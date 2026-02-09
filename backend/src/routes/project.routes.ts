@@ -27,6 +27,7 @@ router.use(authenticate);
 
 router.get('/', projectController.getProjects);
 router.get('/sample-bom', projectController.getBOMSample);
+router.get('/:id/parts/search', projectController.searchProjectParts);
 router.get('/:id', projectController.getProjectById);
 router.post('/', projectController.createProject);
 router.patch('/:id', projectController.updateProject);

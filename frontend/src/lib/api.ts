@@ -209,11 +209,14 @@ export const projectApi = {
   getById: (id: string) =>
     api.get(`/projects/${id}`),
   
-  create: (data: { name: string; description?: string }) =>
+  create: (data: { name: string; description?: string; catalogId?: string }) =>
     api.post('/projects', data),
   
-  update: (id: string, data: { name?: string; description?: string }) =>
+  update: (id: string, data: { name?: string; description?: string; catalogId?: string | null }) =>
     api.patch(`/projects/${id}`, data),
+
+  searchParts: (projectId: string, params: { q: string; limit?: number }) =>
+    api.get(`/projects/${projectId}/parts/search`, { params: { q: params.q, limit: params.limit ?? 50 } }),
   
   delete: (id: string) =>
     api.delete(`/projects/${id}`),

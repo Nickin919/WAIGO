@@ -3,7 +3,6 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useProjectStore, type ProjectItem } from '@/stores/projectStore';
 import { projectApi } from '@/lib/api';
-import { publicApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 import {
   useProjectQuery,
@@ -242,9 +241,10 @@ export default function ProjectDetail() {
       toast.error('Enter at least 2 characters');
       return;
     }
+    if (!projectId) return;
     setFinderLoading(true);
     try {
-      const { data } = await publicApi.searchParts(q, { limit: 50 });
+      const { data } = await projectApi.searchParts(projectId, { q, limit: 50 });
       const res = data as { results?: typeof finderResults };
       setFinderResults(res.results || []);
     } catch {
@@ -328,10 +328,10 @@ export default function ProjectDetail() {
   const handleResolveSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     const q = resolveSearchQuery.trim();
-    if (q.length < 2) return;
+    if (q.length < 2 || !projectId) return;
     setResolveSearching(true);
     try {
-      const { data } = await publicApi.searchParts(q, { limit: 20 });
+      const { data } = await projectApi.searchParts(projectId, { q, limit: 20 });
       const res = data as { results?: typeof resolveSearchResults };
       setResolveSearchResults(res.results ?? []);
     } catch {
