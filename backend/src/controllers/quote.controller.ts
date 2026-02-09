@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import { getSubordinateUserIds } from '../lib/hierarchy';
 import { effectiveRole, isInternal } from '../lib/roles';
 import { sendQuoteEmail } from '../lib/emailService';
+import { buildQuotePdfBuffer } from '../lib/quotePdf';
 import {
   getSuggestedLiteratureForQuote,
   attachToQuote,
@@ -657,17 +658,83 @@ export const sendQuoteEmailHandler = async (req: AuthRequest, res: Response): Pr
 };
 
 /**
- * Generate quote PDF - stub
- */
-/**
  * GET /quotes/:id/pdf – generate Pricing Proposal PDF (Style B).
- * When implementing: load quote with user { include: { assignedToRsm: { select: { logoUrl: true } }, assignedToDistributor: { select: { logoUrl: true } } } }.
- * RSM logo (left, 180×60 px): quote.user.role === 'RSM' ? quote.user.logoUrl : quote.user.assignedToRsm?.logoUrl.
- * Distributor logo (right, 120×40 px): quote.user.role === 'DISTRIBUTOR_REP' ? quote.user.logoUrl : quote.user.assignedToDistributor?.logoUrl.
- * See docs/quote-pdf-design-guide.md and backend/scripts/generate-sample-pricing-proposal-pdf.ts (Style B).
  */
 export const generateQuotePDF = async (req: AuthRequest, res: Response): Promise<void> => {
-  res.status(501).json({ error: 'PDF generation not yet implemented' });
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const { id } = req.params;
+    const quote = await prisma.quote.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            role: true,
+            logoUrl: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+            assignedToRsm: {
+              select: { firstName: true, lastName: true, email: true, phone: true, logoUrl: true },
+            },
+            assignedToDistributor: {
+              select: { firstName: true, lastName: true, email: true, phone: true, logoUrl: true },
+            },
+          },
+        },
+        customer: { select: { name: true, address: true, city: true, state: true, zipCode: true, email: true } },
+        priceContract: { select: { name: true } },
+        items: true,
+      },
+    });
+    if (!quote) {
+      res.status(404).json({ error: 'Quote not found' });
+      return;
+    }
+    const allowed = await canAccessQuote(req.user.id, req.user.role, quote.userId);
+    if (!allowed) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+    const pdfPayload = {
+      quoteNumber: quote.quoteNumber,
+      customerName: quote.customerName,
+      customerCompany: quote.customerCompany,
+      customerEmail: quote.customerEmail,
+      notes: quote.notes,
+      terms: quote.terms,
+      total: quote.total,
+      validUntil: quote.validUntil,
+      createdAt: quote.createdAt,
+      priceContract: quote.priceContract,
+      customer: quote.customer,
+      items: quote.items.map((it) => ({
+        partNumber: it.partNumber,
+        snapshotPartNumber: it.snapshotPartNumber,
+        description: it.description,
+        snapshotDescription: it.snapshotDescription,
+        quantity: it.quantity,
+        sellPrice: it.sellPrice,
+        lineTotal: it.lineTotal,
+        isCostAffected: it.isCostAffected,
+        isSellAffected: it.isSellAffected,
+      })),
+      user: quote.user,
+    };
+    const buffer = await buildQuotePdfBuffer(pdfPayload);
+    const filename = `PricingProposal_${quote.quoteNumber}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
+  } catch (error) {
+    console.error('Generate quote PDF error:', error);
+    res.status(500).json({ error: 'Failed to generate quote PDF' });
+  }
 };
 
 /**
