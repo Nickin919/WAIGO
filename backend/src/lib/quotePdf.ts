@@ -11,11 +11,13 @@ import { getUploadDir } from './uploadPath';
 const MARGIN = 50;
 const PAGE_WIDTH = 595;
 const CONTENT_WIDTH = PAGE_WIDTH - 2 * MARGIN;
-const HEADER_BAR_HEIGHT = 56;
-const RSM_LOGO_WIDTH_PT = 120;
-const RSM_LOGO_HEIGHT_PT = 40;
-const DIST_LOGO_WIDTH_PT = 96;
-const DIST_LOGO_HEIGHT_PT = 28;
+const HEADER_BAR_HEIGHT = 72;
+const HEADER_ROW1_HEIGHT = 46;
+const RSM_LOGO_WIDTH_PT = 112;
+const RSM_LOGO_HEIGHT_PT = 36;
+const DIST_LOGO_WIDTH_PT = 88;
+const DIST_LOGO_HEIGHT_PT = 26;
+const HEADER_GAP = 14;
 const META_HEIGHT = 36;
 const FOOTER_Y = 798;
 const FOOTER_HEIGHT = 36;
@@ -102,8 +104,15 @@ function drawHeader(
   doc.rect(0, y0, PAGE_WIDTH, HEADER_BAR_HEIGHT).fill('#f0fdf4');
   doc.moveTo(0, y0 + HEADER_BAR_HEIGHT).lineTo(PAGE_WIDTH, y0 + HEADER_BAR_HEIGHT).strokeColor('#059669').lineWidth(2).stroke();
 
-  const rsmX = MARGIN + 4;
-  const rsmY = y0 + (HEADER_BAR_HEIGHT - RSM_LOGO_HEIGHT_PT) / 2;
+  // Row 1: left = RSM logo, center = title, right = Distributor logo (no overlap)
+  const rsmX = MARGIN;
+  const rsmY = y0 + (HEADER_ROW1_HEIGHT - RSM_LOGO_HEIGHT_PT) / 2;
+  const centerLeft = rsmX + RSM_LOGO_WIDTH_PT + HEADER_GAP;
+  const centerRight = COL.end - DIST_LOGO_WIDTH_PT - HEADER_GAP;
+  const centerWidth = Math.max(80, centerRight - centerLeft);
+  const distX = COL.end - DIST_LOGO_WIDTH_PT;
+  const distY = y0 + (HEADER_ROW1_HEIGHT - DIST_LOGO_HEIGHT_PT) / 2;
+
   if (opts.rsmLogoPath) {
     try {
       doc.image(opts.rsmLogoPath, rsmX, rsmY, { width: RSM_LOGO_WIDTH_PT, height: RSM_LOGO_HEIGHT_PT, fit: [RSM_LOGO_WIDTH_PT, RSM_LOGO_HEIGHT_PT] });
@@ -114,19 +123,26 @@ function drawHeader(
     doc.rect(rsmX, rsmY, RSM_LOGO_WIDTH_PT, RSM_LOGO_HEIGHT_PT).fillAndStroke('#e5e7eb', '#d1d5db');
   }
 
-  const rightX = COL.end - DIST_LOGO_WIDTH_PT;
-  doc.fontSize(18).fillColor('#111827').text('PRICING PROPOSAL', MARGIN, y0 + 6, { width: CONTENT_WIDTH, align: 'right' });
-  const distY = y0 + 26;
+  doc.fontSize(17).fillColor('#111827').text('PRICING PROPOSAL', centerLeft, y0 + 10, { width: centerWidth, align: 'center' });
+
   if (opts.distLogoPath) {
     try {
-      doc.image(opts.distLogoPath, rightX, distY, { width: DIST_LOGO_WIDTH_PT, height: DIST_LOGO_HEIGHT_PT, fit: [DIST_LOGO_WIDTH_PT, DIST_LOGO_HEIGHT_PT] });
+      doc.image(opts.distLogoPath, distX, distY, { width: DIST_LOGO_WIDTH_PT, height: DIST_LOGO_HEIGHT_PT, fit: [DIST_LOGO_WIDTH_PT, DIST_LOGO_HEIGHT_PT] });
     } catch {
-      doc.rect(rightX, distY, DIST_LOGO_WIDTH_PT, DIST_LOGO_HEIGHT_PT).fillAndStroke('#e5e7eb', '#d1d5db');
+      doc.rect(distX, distY, DIST_LOGO_WIDTH_PT, DIST_LOGO_HEIGHT_PT).fillAndStroke('#e5e7eb', '#d1d5db');
     }
   } else {
-    doc.rect(rightX, distY, DIST_LOGO_WIDTH_PT, DIST_LOGO_HEIGHT_PT).fillAndStroke('#e5e7eb', '#d1d5db');
+    doc.rect(distX, distY, DIST_LOGO_WIDTH_PT, DIST_LOGO_HEIGHT_PT).fillAndStroke('#e5e7eb', '#d1d5db');
   }
-  doc.fontSize(9).fillColor('#6b7280').text(`Proposal # ${opts.proposalNumber} · ${opts.dateStr} · Page ${pageNum} of ${totalPages}`, MARGIN, y0 + HEADER_BAR_HEIGHT - 14, { width: CONTENT_WIDTH, align: 'right' });
+
+  // Row 2: meta line only (below logos, no overlap)
+  const metaY = y0 + HEADER_ROW1_HEIGHT + 8;
+  doc.fontSize(9).fillColor('#6b7280').text(
+    `Proposal # ${opts.proposalNumber} · ${opts.dateStr} · Page ${pageNum} of ${totalPages}`,
+    MARGIN,
+    metaY,
+    { width: CONTENT_WIDTH, align: 'right' }
+  );
   doc.y = CONTENT_TOP;
 }
 
