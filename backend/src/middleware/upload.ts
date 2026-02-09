@@ -1,17 +1,10 @@
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 import { Request } from 'express';
+import { getUploadDir, ensureUploadDirs } from '../lib/uploadPath';
 
-// Use absolute path so read/write resolve the same file (avoids ENOENT when cwd differs, e.g. on Railway)
-const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
-const subdirs = ['videos', 'images', 'csv', 'documents', 'misc', 'pdf', 'literature', 'avatars', 'logos'];
-for (const subdir of subdirs) {
-  const dirPath = path.join(uploadDir, subdir);
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-}
+ensureUploadDirs();
+const uploadDir = getUploadDir();
 
 // Configure storage
 const storage = multer.diskStorage({

@@ -105,6 +105,21 @@ Railway will automatically provide URLs for both services. Update:
 2. Click "Generate Domain" or add a custom domain
 3. Follow DNS configuration instructions
 
+### 9. Persistent storage for uploads (recommended)
+
+Profile photos, company logos, and other uploads are stored on the backend. By default they live on the container filesystem and **are lost on every deploy**. To keep them across deploys, attach a Railway Volume to the **backend (WAIGO)** service:
+
+1. In the Railway project, open the **Command Palette** (⌘K or Ctrl+K) or right‑click the canvas.
+2. Choose **Add Volume** (or **Create volume**).
+3. When prompted, **connect the volume to the WAIGO service** (your backend).
+4. Set the **mount path** to `/data`.
+   - The app will use `RAILWAY_VOLUME_MOUNT_PATH` (set by Railway) and store uploads under `/data/uploads` (avatars, logos, literature, etc.).
+5. Redeploy the WAIGO service so it starts with the volume mounted.
+
+No extra environment variables are required. When `RAILWAY_VOLUME_MOUNT_PATH` is set, the backend uses it automatically. To use a custom path instead, set `UPLOAD_DIR` (e.g. `UPLOAD_DIR=/data/uploads`) and mount the volume to the parent path.
+
+**Note:** Volumes are mounted at **runtime**, not at build time. Any files written during build are not on the volume. Backups: use Railway’s volume backup options from the volume settings.
+
 ## Database Management
 
 ### Running Migrations

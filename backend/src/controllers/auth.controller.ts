@@ -7,6 +7,7 @@ import { prisma } from '../lib/prisma';
 import { generateToken } from '../lib/jwt';
 import { sendWelcomeEmail } from '../lib/email';
 import { AuthRequest } from '../middleware/auth';
+import { getUploadDir } from '../lib/uploadPath';
 
 /**
  * Register a new user
@@ -406,8 +407,6 @@ export const getMyActivity = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
-const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
-
 /**
  * Upload avatar for current user. Expects multipart field "avatar" (image file).
  * Stores file in uploads/avatars and sets user.avatarUrl to /uploads/avatars/filename.
@@ -446,7 +445,7 @@ export const uploadAvatar = async (req: AuthRequest, res: Response): Promise<voi
       }
     });
     if (previous?.avatarUrl) {
-      const oldPath = path.join(uploadDir, previous.avatarUrl.replace(/^\/uploads\/?/, ''));
+      const oldPath = path.join(getUploadDir(), previous.avatarUrl.replace(/^\/uploads\/?/, ''));
       if (fs.existsSync(oldPath)) {
         try {
           fs.unlinkSync(oldPath);
@@ -501,7 +500,7 @@ export const uploadLogo = async (req: AuthRequest, res: Response): Promise<void>
       }
     });
     if (previous?.logoUrl) {
-      const oldPath = path.join(uploadDir, previous.logoUrl.replace(/^\/uploads\/?/, ''));
+      const oldPath = path.join(getUploadDir(), previous.logoUrl.replace(/^\/uploads\/?/, ''));
       if (fs.existsSync(oldPath)) {
         try {
           fs.unlinkSync(oldPath);

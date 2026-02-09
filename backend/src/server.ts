@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import path from 'path';
+import { getUploadDir, ensureUploadDirs } from './lib/uploadPath';
 
 // Load environment variables
 dotenv.config();
@@ -80,8 +81,9 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('combined'));
 }
 
-// Static files (uploads)
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Static files (uploads) – same path as multer; uses Railway volume when RAILWAY_VOLUME_MOUNT_PATH is set
+ensureUploadDirs();
+app.use('/uploads', express.static(getUploadDir()));
 
 // Rate limiting: general API (200 req/15 min per IP), stricter for auth (20 req/15 min)
 app.use('/api', rateLimit({

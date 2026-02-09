@@ -4,6 +4,7 @@ import archiver from 'archiver';
 import PDFDocument from 'pdfkit';
 import Papa from 'papaparse';
 import { prisma } from './prisma';
+import { getUploadDir } from './uploadPath';
 import type { LiteratureType as PrismaLiteratureType } from '@prisma/client';
 
 const MAX_PARTS = 100;
@@ -11,12 +12,8 @@ const MAX_SERIES = 50;
 const DEFAULT_ZIP_MILESTONE = 15 * 1024 * 1024; // 15MB
 const MAX_PACK_BYTES = 25 * 1024 * 1024; // 25MB
 
-function getUploadDir(): string {
-  return path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
-}
-
 function resolveFilePath(filePath: string): string {
-  const base = path.resolve(getUploadDir());
+  const base = getUploadDir();
   const resolved = path.resolve(filePath);
   const relative = path.relative(base, resolved);
   if (relative.startsWith('..') || path.isAbsolute(relative)) {

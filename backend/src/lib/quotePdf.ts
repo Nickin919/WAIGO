@@ -6,6 +6,7 @@
 import PDFDocument from 'pdfkit';
 import path from 'path';
 import fs from 'fs';
+import { getUploadDir } from './uploadPath';
 
 const MARGIN = 50;
 const PAGE_WIDTH = 595;
@@ -75,10 +76,13 @@ export interface QuoteForPdf {
   } & ContactForPdf;
 }
 
+/** Resolve user logo URL (e.g. /uploads/logos/xxx.png) to filesystem path. Uses same upload base as multer (Railway volume-aware). */
 function resolveLogoPath(logoUrl: string | null | undefined): string | null {
   if (!logoUrl || typeof logoUrl !== 'string') return null;
-  const relative = logoUrl.replace(/^[/\\]+/, '');
-  const full = path.join(process.cwd(), relative);
+  const uploadBase = getUploadDir();
+  const basename = path.basename(logoUrl);
+  if (!basename) return null;
+  const full = path.join(uploadBase, 'logos', basename);
   return fs.existsSync(full) ? full : null;
 }
 
