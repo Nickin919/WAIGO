@@ -10,6 +10,7 @@ const QuoteDetail = () => {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [sending, setSending] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [attachedLiterature, setAttachedLiterature] = useState<any[]>([]);
   const [suggestedLiterature, setSuggestedLiterature] = useState<any[]>([]);
   const [attachingId, setAttachingId] = useState<string | null>(null);
@@ -52,6 +53,24 @@ const QuoteDetail = () => {
       a.click();
       URL.revokeObjectURL(url);
     }).catch(() => toast.error('Download failed'));
+  };
+
+  const handleDownloadPdf = () => {
+    if (!quoteId) return;
+    setDownloadingPdf(true);
+    quoteApi.generatePDF(quoteId)
+      .then((res) => {
+        const blob = res.data as Blob;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `PricingProposal_${quote?.quoteNumber || quoteId}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast.success('PDF downloaded');
+      })
+      .catch(() => toast.error('Failed to download PDF'))
+      .finally(() => setDownloadingPdf(false));
   };
 
   const handleEmailQuote = () => {
@@ -123,7 +142,15 @@ const QuoteDetail = () => {
             )}
             Email quote
           </button>
-          <button onClick={handleDownload} className="btn bg-gray-200 flex items-center gap-2">
+          <button onClick={handleDownloadPdf} disabled={downloadingPdf} className="btn btn-primary flex items-center gap-2 disabled:opacity-60" title="Download as Pricing Proposal PDF">
+            {downloadingPdf ? (
+              <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            {downloadingPdf ? 'Downloading…' : 'Download PDF'}
+          </button>
+          <button onClick={handleDownload} className="btn bg-gray-200 flex items-center gap-2" title="Download line items as CSV">
             <Download className="w-4 h-4" /> CSV
           </button>
           <button onClick={handleDelete} disabled={deleting} className="btn bg-red-50 text-red-600 hover:bg-red-100 flex items-center gap-2 disabled:opacity-60">
