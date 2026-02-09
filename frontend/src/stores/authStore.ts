@@ -7,7 +7,7 @@ interface User {
   firstName?: string;
   lastName?: string;
   companyName?: string;
-  role: 'FREE' | 'BASIC' | 'TURNKEY' | 'DISTRIBUTOR' | 'RSM' | 'ADMIN';
+  role: 'FREE' | 'BASIC' | 'TURNKEY' | 'DISTRIBUTOR' | 'RSM' | 'ADMIN' | 'DISTRIBUTOR_REP' | 'DIRECT_USER' | 'BASIC_USER';
   catalogId?: string | null;
   sessionId?: string;
   avatarUrl?: string | null;
