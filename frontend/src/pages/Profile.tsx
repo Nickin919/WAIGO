@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { LogOut, User, Mail, Lock, FileText, FolderKanban, Users, Loader2, Camera, MapPin, Phone, FileSignature } from 'lucide-react';
+import { LogOut, User, Mail, Lock, FileText, FolderKanban, Users, Loader2, Camera, MapPin, Phone, FileSignature, Image } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 import { authApi } from '@/lib/api';
@@ -22,6 +22,7 @@ const Profile = () => {
   const { user, logout, updateUser } = useAuthStore();
   const navigate = useNavigate();
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [firstName, setFirstName] = useState(user?.firstName ?? '');
   const [lastName, setLastName] = useState(user?.lastName ?? '');
@@ -39,6 +40,7 @@ const Profile = () => {
   const [savingTerms, setSavingTerms] = useState(false);
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -59,6 +61,9 @@ const Profile = () => {
     setPhone(user?.phone ?? '');
     setDefaultTerms(user?.defaultTerms ?? '');
   }, [user?.email, user?.address, user?.phone, user?.defaultTerms]);
+
+  const showLogoSection = user?.role === 'RSM' || user?.role === 'DISTRIBUTOR_REP' || user?.role === 'ADMIN';
+  const logoSizeHint = user?.role === 'RSM' ? '180×60 px recommended' : user?.role === 'DISTRIBUTOR_REP' ? '120×40 px recommended' : '180×60 (RSM) or 120×40 (Distributor) px';
 
   useEffect(() => {
     let cancelled = false;
@@ -113,6 +118,30 @@ const Profile = () => {
       toast.error(msg);
     } finally {
       setUploadingAvatar(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) {
+      toast.error('Please select an image (JPEG, PNG, GIF, or WebP)');
+      return;
+    }
+    setUploadingLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append('logo', file);
+      const res = await authApi.uploadLogo(formData);
+      updateUser(res.data);
+      toast.success('Company logo updated');
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'response' in err && typeof (err as { response: { data?: { error?: string } } }).response?.data?.error === 'string'
+        ? (err as { response: { data: { error: string } } }).response.data.error
+        : 'Failed to upload logo';
+      toast.error(msg);
+    } finally {
+      setUploadingLogo(false);
       e.target.value = '';
     }
   };
@@ -393,6 +422,49 @@ const Profile = () => {
               {savingTerms ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Terms'}
             </button>
           </div>
+
+          {/* Company logo (Pricing Proposal header) – RSM / Distributor */}
+          {showLogoSection && (
+            <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
+              <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                <Image className="w-4 h-4" /> Company logo
+              </h3>
+              <p className="text-xs text-gray-500">
+                Used in the Pricing Proposal PDF header. {user?.role === 'RSM' ? 'Your logo appears as the primary (left) logo.' : user?.role === 'DISTRIBUTOR_REP' ? 'Your logo appears as the distributor (right) logo.' : 'RSM and Distributor logos appear when quotes are built by users in your hierarchy.'} Recommended: {logoSizeHint}.
+              </p>
+              <div className="flex flex-wrap items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => logoInputRef.current?.click()}
+                  disabled={uploadingLogo}
+                  className="flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-wago-green focus:ring-offset-2 overflow-hidden"
+                  style={{ width: 180, height: 60 }}
+                >
+                  {user?.logoUrl ? (
+                    <img
+                      src={user.logoUrl.startsWith('http') ? user.logoUrl : `${API_URL}${user.logoUrl}`}
+                      alt="Company logo"
+                      className="max-w-full max-h-full object-contain"
+                    />
+                  ) : (
+                    <span className="text-gray-400 text-xs text-center px-2">
+                      {uploadingLogo ? <Loader2 className="w-6 h-6 animate-spin mx-auto" /> : 'Upload logo'}
+                    </span>
+                  )}
+                </button>
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  className="hidden"
+                  onChange={handleLogoChange}
+                />
+                <div className="text-sm text-gray-500">
+                  {logoSizeHint}. PNG or JPG.
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Change password */}

@@ -99,6 +99,7 @@ model User {
   
   // Profile (optional)
   avatarUrl       String?   @map("avatar_url")
+  logoUrl         String?   @map("logo_url")   // Company logo for Pricing Proposal header (RSM / Distributor)
   address         String?   @db.Text
   phone           String?
   defaultTerms    String?   @map("default_terms") @db.Text // Default Terms text for Pricing Proposal PDF (RSM/Distributor)

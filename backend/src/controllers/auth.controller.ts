@@ -101,6 +101,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
         catalogId: true,
         isActive: true,
         avatarUrl: true,
+        logoUrl: true,
         address: true,
         phone: true,
         defaultTerms: true
@@ -168,6 +169,7 @@ export const getCurrentUser = async (req: AuthRequest, res: Response): Promise<v
         distributorMarginPercent: true,
         isActive: true,
         avatarUrl: true,
+        logoUrl: true,
         address: true,
         phone: true,
         defaultTerms: true,
@@ -457,5 +459,60 @@ export const uploadAvatar = async (req: AuthRequest, res: Response): Promise<voi
   } catch (error) {
     console.error('Upload avatar error:', error);
     res.status(500).json({ error: 'Failed to upload avatar' });
+  }
+};
+
+/**
+ * Upload company logo for current user (RSM / Distributor). Used in Pricing Proposal header.
+ * Expects multipart field "logo" (image file). Stores in uploads/logos, sets user.logoUrl.
+ */
+export const uploadLogo = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    if (!req.file || !req.file.path) {
+      res.status(400).json({ error: 'No logo file uploaded' });
+      return;
+    }
+    const relativePath = `/uploads/logos/${path.basename(req.file.path)}`;
+    const previous = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { logoUrl: true }
+    });
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { logoUrl: relativePath },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        companyName: true,
+        role: true,
+        catalogId: true,
+        avatarUrl: true,
+        logoUrl: true,
+        address: true,
+        phone: true,
+        defaultTerms: true,
+        updatedAt: true
+      }
+    });
+    if (previous?.logoUrl) {
+      const oldPath = path.join(uploadDir, previous.logoUrl.replace(/^\/uploads\/?/, ''));
+      if (fs.existsSync(oldPath)) {
+        try {
+          fs.unlinkSync(oldPath);
+        } catch {
+          // ignore
+        }
+      }
+    }
+    res.json(updatedUser);
+  } catch (error) {
+    console.error('Upload logo error:', error);
+    res.status(500).json({ error: 'Failed to upload logo' });
   }
 };

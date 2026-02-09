@@ -5,7 +5,7 @@ import { Request } from 'express';
 
 // Use absolute path so read/write resolve the same file (avoids ENOENT when cwd differs, e.g. on Railway)
 const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
-const subdirs = ['videos', 'images', 'csv', 'documents', 'misc', 'pdf', 'literature', 'avatars'];
+const subdirs = ['videos', 'images', 'csv', 'documents', 'misc', 'pdf', 'literature', 'avatars', 'logos'];
 for (const subdir of subdirs) {
   const dirPath = path.join(uploadDir, subdir);
   if (!fs.existsSync(dirPath)) {
@@ -26,6 +26,7 @@ const storage = multer.diskStorage({
     else if (file.fieldname === 'pdf') subDir = 'pdf';
     else if (file.fieldname === 'file') subDir = 'literature'; // literature PDF upload
     else if (file.fieldname === 'avatar') subDir = 'avatars';
+    else if (file.fieldname === 'logo') subDir = 'logos';
     cb(null, path.join(uploadDir, subDir));
   },
   filename: (req, file, cb) => {
@@ -42,6 +43,10 @@ const storage = multer.diskStorage({
       const ext = path.extname(file.originalname) || '.jpg';
       const uid = (req as Request & { user?: { id: string } }).user?.id || 'anon';
       cb(null, `${uid}-${Date.now()}${ext}`);
+    } else if (file.fieldname === 'logo') {
+      const ext = path.extname(file.originalname) || '.png';
+      const uid = (req as Request & { user?: { id: string } }).user?.id || 'anon';
+      cb(null, `${uid}-logo-${Date.now()}${ext}`);
     } else {
       const basename = path.basename(file.originalname, path.extname(file.originalname)).replace(/[^a-zA-Z0-9._-]/g, '_');
       cb(null, `${basename}-${uniqueSuffix}${ext}`);
@@ -62,7 +67,8 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
     document: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
     pdf: ['application/pdf'],
     file: ['application/pdf'], // literature: PDF only
-    avatar: ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    avatar: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+    logo: ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
   };
 
   const fieldAllowedTypes = allowedTypes[file.fieldname] || [];
@@ -93,6 +99,7 @@ export const uploadDocument = upload.single('document');
 export const uploadPDF = upload.single('pdf');
 export const uploadLiterature = upload.single('file');
 export const uploadAvatar = upload.single('avatar');
+export const uploadLogo = upload.single('logo');
 export const uploadMultiple = upload.array('files', 10);
 
 export default upload;

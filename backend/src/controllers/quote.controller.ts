@@ -659,6 +659,13 @@ export const sendQuoteEmailHandler = async (req: AuthRequest, res: Response): Pr
 /**
  * Generate quote PDF - stub
  */
+/**
+ * GET /quotes/:id/pdf – generate Pricing Proposal PDF (Style B).
+ * When implementing: load quote with user { include: { assignedToRsm: { select: { logoUrl: true } }, assignedToDistributor: { select: { logoUrl: true } } } }.
+ * RSM logo (left, 180×60 px): quote.user.role === 'RSM' ? quote.user.logoUrl : quote.user.assignedToRsm?.logoUrl.
+ * Distributor logo (right, 120×40 px): quote.user.role === 'DISTRIBUTOR_REP' ? quote.user.logoUrl : quote.user.assignedToDistributor?.logoUrl.
+ * See docs/quote-pdf-design-guide.md and backend/scripts/generate-sample-pricing-proposal-pdf.ts (Style B).
+ */
 export const generateQuotePDF = async (req: AuthRequest, res: Response): Promise<void> => {
   res.status(501).json({ error: 'PDF generation not yet implemented' });
 };

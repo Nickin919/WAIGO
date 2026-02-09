@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { body } from 'express-validator';
 import * as authController from '../controllers/auth.controller';
 import { authenticate } from '../middleware/auth';
-import { uploadAvatar as uploadAvatarMiddleware } from '../middleware/upload';
+import { uploadAvatar as uploadAvatarMiddleware, uploadLogo as uploadLogoMiddleware } from '../middleware/upload';
 
 const router = Router();
 
@@ -39,6 +39,9 @@ router.patch('/me', authenticate, authController.updateProfile);
 
 // Upload avatar (multipart: avatar = image file)
 router.post('/me/avatar', authenticate, uploadAvatarMiddleware, authController.uploadAvatar);
+
+// Upload company logo (multipart: logo = image file; used in Pricing Proposal header for RSM/Distributor)
+router.post('/me/logo', authenticate, uploadLogoMiddleware, authController.uploadLogo);
 
 // Change password
 router.patch(

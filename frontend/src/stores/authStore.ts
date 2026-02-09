@@ -11,6 +11,7 @@ interface User {
   catalogId?: string | null;
   sessionId?: string;
   avatarUrl?: string | null;
+  logoUrl?: string | null;
   address?: string | null;
   phone?: string | null;
   defaultTerms?: string | null;

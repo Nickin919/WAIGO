@@ -90,6 +90,9 @@ export const authApi = {
   
   uploadAvatar: (formData: FormData) =>
     api.post('/auth/me/avatar', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+
+  uploadLogo: (formData: FormData) =>
+    api.post('/auth/me/logo', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   
   changePassword: (currentPassword: string, newPassword: string) =>
     api.patch('/auth/change-password', { currentPassword, newPassword }),
