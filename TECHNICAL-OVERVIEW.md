@@ -188,7 +188,7 @@ VITE_API_URL=https://your-backend.railway.app
 - **Price Contracts** = Separate concept for ADMIN/RSM-assigned pricing overlays
 - Guest users: no JWT; synthetic `user: { id: 'guest', role: 'FREE' }`; public API only
 - Public catalogs: `Catalog.isPublic === true` for guest access
-- Quote discount limits: role-based via `ROLE_MAX_DISCOUNT` in `quoteConstants.ts`
+- Quote discount limits: removed; no role-based max discount is enforced
 
 ---
 

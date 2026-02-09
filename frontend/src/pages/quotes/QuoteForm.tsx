@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { quoteApi, catalogApi, customerApi, partApi, assignmentsApi, priceContractApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
-import { ROLE_MAX_DISCOUNT, effectiveRole } from '@/lib/quoteConstants';
+import { effectiveRole } from '@/lib/quoteConstants';
 
 interface LineItem {
   partId: string;
@@ -118,7 +118,6 @@ const QuoteForm = () => {
   const [bulkMarginValue, setBulkMarginValue] = useState('');
   const [bulkDiscountValue, setBulkDiscountValue] = useState('');
 
-  const maxDiscount = ROLE_MAX_DISCOUNT[effectiveRole(user?.role || 'BASIC')] ?? 10;
   const allMarginSelected = items.length > 0 && items.every((i) => i.marginSelected);
   const allDiscountSelected = items.length > 0 && items.every((i) => i.discountSelected);
   const someMarginSelected = items.some((i) => i.marginSelected);
@@ -602,8 +601,7 @@ const QuoteForm = () => {
     setItems(items.map((i) => (i.marginSelected ? { ...i, marginPct: value } : i)));
   };
   const applyBulkDiscount = (value: number) => {
-    const clamped = Math.min(value, maxDiscount);
-    setItems(items.map((i) => (i.discountSelected ? { ...i, discountPct: clamped, isCostAffected: clamped > 0 } : i)));
+    setItems(items.map((i) => (i.discountSelected ? { ...i, discountPct: value, isCostAffected: value > 0 } : i)));
   };
 
   const removeItem = (index: number) => {
@@ -908,7 +906,7 @@ const QuoteForm = () => {
                     <th className="px-4 py-2">
                       <div className="flex items-center gap-2 justify-end">
                         <input type="checkbox" checked={allDiscountSelected} ref={discountSelectAllRef} onChange={toggleDiscountSelectAll} className="rounded border-gray-300" title="Select all" />
-                        <input type="number" min={0} max={maxDiscount} step={0.5} value={bulkDiscountValue} onChange={(e) => { const v = e.target.value; setBulkDiscountValue(v); const n = parseFloat(v); if (!isNaN(n)) applyBulkDiscount(n); }} placeholder="Apply %" className="input py-1 w-16 text-right" title="Apply to selected" />
+                        <input type="number" min={0} max={100} step={0.5} value={bulkDiscountValue} onChange={(e) => { const v = e.target.value; setBulkDiscountValue(v); const n = parseFloat(v); if (!isNaN(n)) applyBulkDiscount(n); }} placeholder="Apply %" className="input py-1 w-16 text-right" title="Apply to selected" />
                       </div>
                       <div className="text-xs font-normal text-gray-500 mt-0.5">Disc %</div>
                     </th>
@@ -945,7 +943,7 @@ const QuoteForm = () => {
                       <td className="px-4 py-2">
                         <div className="flex items-center gap-2 justify-end">
                           <input type="checkbox" checked={!!item.discountSelected} onChange={() => toggleDiscountSelected(idx)} className="rounded border-gray-300" />
-                          <input type="number" min={0} max={maxDiscount} step={0.5} value={item.discountPct} onChange={(e) => updateItem(idx, { discountPct: parseFloat(e.target.value) || 0 })} className="input py-1 w-16 text-right" />
+                          <input type="number" min={0} max={100} step={0.5} value={item.discountPct} onChange={(e) => updateItem(idx, { discountPct: parseFloat(e.target.value) || 0 })} className="input py-1 w-16 text-right" />
                         </div>
                       </td>
                     )}
@@ -977,7 +975,6 @@ const QuoteForm = () => {
             </div>
           )}
 
-          <p className="text-xs text-gray-500 mt-2">Max discount for your role: {maxDiscount}%</p>
           {(items.some((i) => i.isCostAffected) || items.some((i) => i.isSellAffected)) && (
             <p className="text-xs text-gray-500 mt-1">
               <span className="font-medium text-gray-600">*</span> Cost affected by SPA/discount &nbsp;
