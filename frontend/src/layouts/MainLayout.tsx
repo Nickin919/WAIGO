@@ -1,11 +1,24 @@
 import { Outlet } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import Sidebar from '@/components/layout/Sidebar';
 import BottomNav from '@/components/layout/BottomNav';
+import { useAuthStore, isGuestUser } from '@/stores/authStore';
+import { authApi } from '@/lib/api';
 
 const MainLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const token = useAuthStore((s) => s.token);
+  const isGuest = useAuthStore(isGuestUser);
+  const updateUser = useAuthStore((s) => s.updateUser);
+
+  // Refetch current user on load so header has fresh profile (e.g. avatarUrl) after refresh or new tab
+  useEffect(() => {
+    if (!token || isGuest) return;
+    authApi.getCurrentUser().then((res) => {
+      if (res.data && typeof res.data === 'object') updateUser(res.data as Record<string, unknown>);
+    }).catch(() => {});
+  }, [token, isGuest, updateUser]);
 
   return (
     <div className="min-h-screen bg-gray-50">

@@ -6,6 +6,15 @@ import { notificationApi } from '@/lib/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+/** Build full URL for avatar (backend path like /uploads/avatars/xxx). */
+function avatarImageUrl(avatarUrl: string | null | undefined): string | null {
+  if (!avatarUrl || typeof avatarUrl !== 'string') return null;
+  if (avatarUrl.startsWith('http')) return avatarUrl;
+  const base = API_URL.replace(/\/$/, '');
+  const path = avatarUrl.startsWith('/') ? avatarUrl : `/${avatarUrl}`;
+  return `${base}${path}`;
+}
+
 interface Notification {
   id: string;
   type: string;
@@ -27,6 +36,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const fetchNotifications = (unreadOnly?: boolean) => {
@@ -56,6 +66,10 @@ const Header = ({ onMenuClick }: HeaderProps) => {
       })
       .catch(() => setUnreadCount(0));
   };
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [user?.avatarUrl]);
 
   useEffect(() => {
     if (!isGuest && notificationsOpen) {
@@ -229,12 +243,13 @@ const Header = ({ onMenuClick }: HeaderProps) => {
               to="/profile"
               className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
             >
-              <div className="w-8 h-8 bg-wago-blue rounded-full flex items-center justify-center overflow-hidden flex-shrink-0">
-                {user?.avatarUrl ? (
+              <div className="w-10 h-10 bg-wago-blue rounded-full flex items-center justify-center overflow-hidden flex-shrink-0">
+                {user?.avatarUrl && !avatarError ? (
                   <img
-                    src={user.avatarUrl.startsWith('http') ? user.avatarUrl : `${API_URL}${user.avatarUrl}`}
+                    src={avatarImageUrl(user.avatarUrl) ?? ''}
                     alt=""
                     className="w-full h-full object-cover"
+                    onError={() => setAvatarError(true)}
                   />
                 ) : (
                   <User className="w-5 h-5 text-white" />
