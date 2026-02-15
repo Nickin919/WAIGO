@@ -22,8 +22,46 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
 
     const { email, password, firstName, lastName, role } = req.body;
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const trimmedEmail = String(email).trim().toLowerCase();
+    const existingUser = await prisma.user.findUnique({ where: { email: trimmedEmail } });
+
+    // Reclaim: if existing user is FREE (e.g. downgraded by admin), allow re-registration to restore account
+    if (existingUser?.role === 'FREE') {
+      const passwordHash = await bcrypt.hash(password, 10);
+      const user = await prisma.user.update({
+        where: { id: existingUser.id },
+        data: {
+          email: trimmedEmail,
+          passwordHash,
+          firstName: firstName ?? existingUser.firstName,
+          lastName: lastName ?? existingUser.lastName,
+          role: role || 'BASIC',
+          isActive: true,
+        },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          catalogId: true,
+          avatarUrl: true,
+          address: true,
+          phone: true,
+          createdAt: true,
+        },
+      });
+      const token = generateToken({
+        userId: user.id,
+        email: user.email ?? '',
+        role: user.role,
+        catalogId: user.catalogId,
+      });
+      sendWelcomeEmail(user.email ?? '', user.firstName ?? undefined).catch(console.error);
+      res.status(200).json({ user, token });
+      return;
+    }
+
     if (existingUser) {
       res.status(409).json({ error: 'User with this email already exists' });
       return;
@@ -35,7 +73,7 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
     // Create user (full schema: passwordHash, firstName, lastName, catalogId, etc.)
     const user = await prisma.user.create({
       data: {
-        email,
+        email: trimmedEmail,
         passwordHash,
         firstName,
         lastName,

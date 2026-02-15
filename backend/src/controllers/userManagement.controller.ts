@@ -331,9 +331,15 @@ export const updateUserRole = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
+    // When demoting to FREE: revoke login so the user cannot sign in until they re-register (reclaim)
+    const data: { role: string; passwordHash?: null } = { role };
+    if (role === 'FREE') {
+      data.passwordHash = null;
+    }
+
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: { role }
+      data,
     });
 
     res.json(updatedUser);

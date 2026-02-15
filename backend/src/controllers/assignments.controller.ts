@@ -108,7 +108,8 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
     const limit = Math.min(50, Math.max(10, parseInt(String(req.query.limit), 10) || 20));
     const skip = (page - 1) * limit;
 
-    const where: any = { id: { in: subordinateIds }, role: { not: 'FREE' } };
+    // Include all roles (including FREE) so admins can see downgraded users and restore or manage them
+    const where: any = { id: { in: subordinateIds } };
     if (search) {
       where.OR = [
         { firstName: { contains: search, mode: 'insensitive' } },
