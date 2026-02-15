@@ -1,6 +1,6 @@
 import React from 'react';
 import { Resend } from 'resend';
-import { renderAsync } from '@react-email/render';
+import { render } from '@react-email/render';
 import QuoteEmail from '../emails/QuoteEmail';
 import { prisma } from './prisma';
 
@@ -43,7 +43,7 @@ export async function sendQuoteEmail(params: SendQuoteEmailParams): Promise<{ id
   } = params;
 
   const viewQuoteUrl = `${FRONTEND_URL}/quotes/${quoteId}`;
-  const html = await renderAsync(
+  const html = await render(
     React.createElement(QuoteEmail, {
       customerName,
       quoteId,

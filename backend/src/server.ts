@@ -61,6 +61,9 @@ const PORT = process.env.PORT || 3001;
 // Security
 app.use(helmet());
 
+// Trust Railway reverse proxy (required for rate limiting)
+app.set('trust proxy', 1);
+
 // CORS
 const corsOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
