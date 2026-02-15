@@ -25,6 +25,7 @@ import ManageCustomers from './pages/customers/ManageCustomers';
 import Profile from './pages/Profile';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ProductImport from './pages/admin/ProductImport';
+import CrossReferenceImport from './pages/admin/CrossReferenceImport';
 import DataManagement from './pages/admin/DataManagement';
 import LiteratureLibrary from './pages/admin/LiteratureLibrary';
 import CatalogList from './pages/catalog/CatalogList';
@@ -143,6 +144,7 @@ function App() {
       <Route element={<AdminRoute><MainLayout /></AdminRoute>}>
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/import-products" element={<ProductImport />} />
+        <Route path="/admin/import-cross-references" element={<CrossReferenceImport />} />
         <Route path="/admin/data-management" element={<DataManagement />} />
         <Route path="/admin/literature" element={<LiteratureLibrary />} />
       </Route>

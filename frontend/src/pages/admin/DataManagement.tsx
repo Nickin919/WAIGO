@@ -107,9 +107,16 @@ export default function DataManagement() {
             Cross-References
           </h2>
           <p className="text-sm text-gray-600 mb-4">
-            Maps competitor manufacturer + part number to WAGO Part. Columns: originalManufacturer, originalPartNumber, wagoPartNumber, compatibilityScore, notes.
+            Maps competitor manufacturer + part number to WAGO Part. Use <strong>MASTER Cross Reference Import</strong> to upload with column mapping (recommended). Or use the fixed template below to add/replace quickly.
           </p>
           <div className="space-y-4">
+            <Link
+              to="/admin/import-cross-references"
+              className="btn btn-primary flex items-center gap-2 w-fit"
+            >
+              <Upload className="w-5 h-5" />
+              MASTER Cross Reference Import (with column mapping)
+            </Link>
             <button
               type="button"
               onClick={handleDownloadCrossRefSample}

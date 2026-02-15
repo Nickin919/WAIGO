@@ -109,6 +109,13 @@ const AdminDashboard = () => {
             <span>Product Import</span>
           </button>
           <button
+            onClick={() => navigate('/admin/import-cross-references')}
+            className="btn btn-primary flex items-center justify-center space-x-2"
+          >
+            <Upload className="w-5 h-5" />
+            <span>Cross Reference Import</span>
+          </button>
+          <button
             onClick={() => navigate('/admin/data-management')}
             className="btn btn-primary flex items-center justify-center space-x-2"
           >

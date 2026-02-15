@@ -283,3 +283,191 @@ export const importNonWagoProducts = async (req: AuthRequest, res: Response): Pr
     res.status(500).json({ error: 'Failed to import non-WAGO products' });
   }
 };
+
+// ---------------------------------------------------------------------------
+// MASTER Cross Reference Import (column-mapped, replace or add/merge)
+// ---------------------------------------------------------------------------
+
+const MAX_CROSS_REF_ROWS = 25_000;
+
+interface MappedCrossReferenceRow {
+  partNumberA?: string | null;
+  partNumberB?: string | null;
+  manufactureName?: string | null;
+  activeItem?: boolean | null;
+  estimatedPrice?: number | string | null;
+  wagoCrossA?: string | null;
+  wagoCrossB?: string | null;
+  notesA?: string | null;
+  notesB?: string | null;
+  author?: string | null;
+  lastDateModified?: string | null;
+}
+
+function parseOptionalBoolean(v: unknown): boolean | null {
+  if (v === undefined || v === null || v === '') return null;
+  if (typeof v === 'boolean') return v;
+  const s = String(v).toLowerCase().trim();
+  if (s === '1' || s === 'true' || s === 'yes') return true;
+  if (s === '0' || s === 'false' || s === 'no') return false;
+  return null;
+}
+
+function parseOptionalDecimal(v: unknown): number | null {
+  if (v === undefined || v === null || v === '') return null;
+  if (typeof v === 'number' && !Number.isNaN(v)) return v;
+  const n = parseFloat(String(v).replace(/[^0-9.-]/g, ''));
+  return Number.isNaN(n) ? null : n;
+}
+
+function parseOptionalDate(v: unknown): Date | null {
+  if (v === undefined || v === null || v === '') return null;
+  if (v instanceof Date) return v;
+  const d = new Date(String(v));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export const importCrossReferencesMaster = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { rows: rawRows, replace = false } = req.body as { rows?: MappedCrossReferenceRow[]; replace?: boolean };
+
+    if (!Array.isArray(rawRows)) {
+      res.status(400).json({ error: 'rows must be an array' });
+      return;
+    }
+    if (rawRows.length === 0) {
+      res.status(400).json({ error: 'No rows to import' });
+      return;
+    }
+    if (rawRows.length > MAX_CROSS_REF_ROWS) {
+      res.status(400).json({ error: `Maximum ${MAX_CROSS_REF_ROWS} rows per import` });
+      return;
+    }
+
+    const userId = req.user?.id ?? null;
+    const importBatchId = `cross_ref_${Date.now()}`;
+    let created = 0;
+    let updated = 0;
+    const errors: string[] = [];
+
+    if (replace) {
+      await prisma.crossReference.deleteMany({});
+    }
+
+    for (let i = 0; i < rawRows.length; i++) {
+      const row = rawRows[i] as Record<string, unknown>;
+      const partNumberA = (row.partNumberA ?? row.part_number_a ?? '').toString().trim();
+      const partNumberB = (row.partNumberB ?? row.part_number_b ?? '').toString().trim();
+      const manufactureName = (row.manufactureName ?? row.manufacture_name ?? '').toString().trim();
+      const wagoCrossA = (row.wagoCrossA ?? row.wago_cross_a ?? '').toString().trim();
+      const wagoCrossB = (row.wagoCrossB ?? row.wago_cross_b ?? '').toString().trim();
+
+      const originalPartNumber = partNumberA || partNumberB;
+      if (!originalPartNumber || !manufactureName) {
+        errors.push(`Row ${i + 1}: PartNumberA or PartNumberB and ManufactureName are required`);
+        continue;
+      }
+      if (!wagoCrossA && !wagoCrossB) {
+        errors.push(`Row ${i + 1}: At least one of WAGOCrossA or WAGOCrossB is required`);
+        continue;
+      }
+
+      const wagoPartNumbers = [wagoCrossA, wagoCrossB].filter(Boolean);
+      for (const wagoPn of wagoPartNumbers) {
+        const wagoPart = await prisma.part.findFirst({
+          where: { partNumber: wagoPn },
+          select: { id: true }
+        });
+        if (!wagoPart) {
+          errors.push(`Row ${i + 1}: WAGO part not found: ${wagoPn}`);
+          continue;
+        }
+
+        const notesA = (row.notesA ?? row.notes_a ?? '').toString().trim() || null;
+        const notesB = (row.notesB ?? row.notes_b ?? '').toString().trim() || null;
+        const notes = notesA || notesB || null;
+        const activeItem = parseOptionalBoolean(row.activeItem ?? row.active_item);
+        const estimatedPrice = parseOptionalDecimal(row.estimatedPrice ?? row.estimated_price);
+        const author = (row.author ?? '').toString().trim() || null;
+        const lastDateModified = parseOptionalDate(row.lastDateModified ?? row.last_date_modified);
+
+        const data = {
+          originalManufacturer: manufactureName,
+          originalPartNumber,
+          wagoPartId: wagoPart.id,
+          compatibilityScore: 1.0,
+          notes,
+          partNumberA: partNumberA || null,
+          partNumberB: partNumberB || null,
+          manufactureName: manufactureName || null,
+          activeItem,
+          estimatedPrice: estimatedPrice != null ? estimatedPrice : undefined,
+          wagoCrossA: wagoCrossA || null,
+          wagoCrossB: wagoCrossB || null,
+          notesA,
+          notesB,
+          author,
+          lastDateModified,
+          importBatchId,
+          createdById: userId,
+          sourceFilename: null
+        };
+
+        try {
+          if (replace) {
+            await prisma.crossReference.create({ data });
+            created++;
+          } else {
+            const existing = await prisma.crossReference.findUnique({
+              where: {
+                originalManufacturer_originalPartNumber_wagoPartId: {
+                  originalManufacturer: manufactureName,
+                  originalPartNumber,
+                  wagoPartId: wagoPart.id
+                }
+              }
+            });
+            if (existing) {
+              await prisma.crossReference.update({
+                where: { id: existing.id },
+                data: {
+                  notes: data.notes,
+                  partNumberA: data.partNumberA,
+                  partNumberB: data.partNumberB,
+                  manufactureName: data.manufactureName,
+                  activeItem: data.activeItem,
+                  estimatedPrice: data.estimatedPrice,
+                  wagoCrossA: data.wagoCrossA,
+                  wagoCrossB: data.wagoCrossB,
+                  notesA: data.notesA,
+                  notesB: data.notesB,
+                  author: data.author,
+                  lastDateModified: data.lastDateModified,
+                  importBatchId: data.importBatchId,
+                  createdById: data.createdById
+                }
+              });
+              updated++;
+            } else {
+              await prisma.crossReference.create({ data });
+              created++;
+            }
+          }
+        } catch (e) {
+          errors.push(`Row ${i + 1} (${manufactureName}/${originalPartNumber}/${wagoPn}): ${(e as Error).message}`);
+        }
+      }
+    }
+
+    res.json({
+      created,
+      updated,
+      totalRows: rawRows.length,
+      errors: errors.length ? errors : undefined,
+      importBatchId
+    });
+  } catch (error) {
+    console.error('Import cross-references (master) error:', error);
+    res.status(500).json({ error: 'Failed to import cross-references' });
+  }
+};

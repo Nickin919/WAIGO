@@ -19,6 +19,7 @@ router.post('/bulk-approve-videos', adminController.bulkApproveVideos);
 // BOM Data Management (cross-references, non-WAGO products)
 router.get('/cross-references/sample', adminController.getCrossReferencesSample);
 router.post('/cross-references/import', uploadCSV, adminController.importCrossReferences);
+router.post('/cross-references/import-master', adminController.importCrossReferencesMaster);
 router.get('/non-wago-products/sample', adminController.getNonWagoProductsSample);
 router.post('/non-wago-products/import', uploadCSV, adminController.importNonWagoProducts);
 

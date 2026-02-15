@@ -511,6 +511,9 @@ export const adminApi = {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
+  /** MASTER Cross Reference Import: column-mapped rows, replace (wipe) or add/merge */
+  importCrossReferencesMaster: (rows: Record<string, unknown>[], replace: boolean) =>
+    api.post('/admin/cross-references/import-master', { rows, replace }),
   getNonWagoProductsSample: () =>
     api.get('/admin/non-wago-products/sample', { responseType: 'blob' }),
   importNonWagoProducts: (file: File, replace: boolean) => {

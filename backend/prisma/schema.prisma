@@ -139,6 +139,7 @@ model User {
   priceChanges    PriceHistory[] @relation("PriceChanges")
   salesCustomers  SalesCustomer[] @relation("SalesCustomerRsm")
   literatureUploaded Literature[] @relation("LiteratureUploader")
+  crossReferencesCreated CrossReference[] @relation("CrossReferenceCreator")
 
   @@map("users")
 }
@@ -851,12 +852,30 @@ model CrossReference {
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
+  // MASTER import extended columns (nullable for backward compatibility)
+  partNumberA           String?   @map("part_number_a")
+  partNumberB           String?   @map("part_number_b")
+  manufactureName       String?   @map("manufacture_name")
+  activeItem            Boolean?  @map("active_item")
+  estimatedPrice        Decimal?  @map("estimated_price") @db.Decimal(12, 4)
+  wagoCrossA            String?   @map("wago_cross_a")
+  wagoCrossB            String?   @map("wago_cross_b")
+  notesA                String?   @map("notes_a") @db.Text
+  notesB                String?   @map("notes_b") @db.Text
+  author                String?   @map("author")
+  lastDateModified      DateTime? @map("last_date_modified")
+  importBatchId         String?   @map("import_batch_id")
+  createdById           String?   @map("created_by_id")
+  sourceFilename        String?   @map("source_filename")
+
   // Relations (originalPart omitted - partNumber is not globally unique)
   wagoPart              Part      @relation("WagoPart", fields: [wagoPartId], references: [id], onDelete: Cascade)
+  createdBy             User?     @relation("CrossReferenceCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@unique([originalManufacturer, originalPartNumber, wagoPartId])
   @@index([originalManufacturer, originalPartNumber])
   @@index([wagoPartId])
+  @@index([importBatchId])
   @@map("cross_references")
 }
 
