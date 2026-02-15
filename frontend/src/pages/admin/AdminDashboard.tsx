@@ -120,7 +120,7 @@ const AdminDashboard = () => {
             className="btn btn-primary flex items-center justify-center space-x-2"
           >
             <FolderKanban className="w-5 h-5" />
-            <span>BOM Data</span>
+            <span>Reference Data</span>
           </button>
           <button
             onClick={() => navigate('/admin/literature')}
