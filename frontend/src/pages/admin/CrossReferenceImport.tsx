@@ -142,8 +142,8 @@ function validateMappings(columnMapping: Record<number, CrossReferenceField>): {
     errors.push('At least one of WAGO Cross A or WAGO Cross B must be mapped');
   }
 
-  const nonSkipped = mappedFields.filter((f) => f !== 'skip');
-  if (new Set(nonSkipped).size !== nonSkipped.length) {
+  // Check for duplicate field mappings (mappedFields already excludes 'skip')
+  if (new Set(mappedFields).size !== mappedFields.length) {
     errors.push('Each field can only be mapped once');
   }
 
