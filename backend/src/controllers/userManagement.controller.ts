@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { effectiveRole, isInternal } from '../lib/roles';
 import { getSubordinateUserIds } from '../lib/hierarchy';
+import { UserRole } from '@prisma/client';
 
 /**
  * Get users based on current user's role and permissions
@@ -332,7 +333,7 @@ export const updateUserRole = async (req: AuthRequest, res: Response): Promise<v
     }
 
     // When demoting to FREE: revoke login so the user cannot sign in until they re-register (reclaim)
-    const data: { role: string; passwordHash?: null } = { role };
+    const data: { role: UserRole; passwordHash?: null } = { role: role as UserRole };
     if (role === 'FREE') {
       data.passwordHash = null;
     }
