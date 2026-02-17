@@ -114,8 +114,8 @@ function drawHeader(
   opts: { proposalNumber: string; dateStr: string; rsmLogoPath: string | null; distLogoPath: string | null }
 ) {
   const y0 = MARGIN;
-  doc.rect(0, y0, PAGE_WIDTH, HEADER_BAR_HEIGHT).fill('#f0fdf4');
-  doc.moveTo(0, y0 + HEADER_BAR_HEIGHT).lineTo(PAGE_WIDTH, y0 + HEADER_BAR_HEIGHT).strokeColor('#059669').lineWidth(2).stroke();
+  doc.rect(0, y0, PAGE_WIDTH, HEADER_BAR_HEIGHT).fill('#ffffff');
+  doc.moveTo(0, y0 + HEADER_BAR_HEIGHT).lineTo(PAGE_WIDTH, y0 + HEADER_BAR_HEIGHT).strokeColor('#e5e7eb').lineWidth(1).stroke();
 
   // Row 1: left = RSM logo, center = title, right = Distributor logo (no overlap)
   const rsmX = MARGIN;

@@ -704,7 +704,7 @@ const QuoteForm = () => {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center gap-4 mb-6">
         <button onClick={() => navigate('/quotes')} className="text-green-600 hover:underline flex items-center gap-1">
           <ArrowLeft className="w-5 h-5" /> Back
@@ -930,42 +930,42 @@ const QuoteForm = () => {
             </div>
           )}
 
-          {/* Items Table */}
-          <div className="border rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
+          {/* Items Table - spacious layout for PC browser */}
+          <div className="border rounded-lg overflow-x-auto">
+            <table className="w-full min-w-[800px] text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-2 text-left">Product</th>
-                  <th className="px-4 py-2 text-right">List Price</th>
-                  <th className="px-4 py-2 text-center">Min Qty</th>
+                  <th className="px-4 py-3 text-left min-w-[200px]">Product</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">List Price</th>
+                  <th className="px-4 py-3 text-center whitespace-nowrap">Min Qty</th>
                   {isDistributorOrHigher && (
-                    <th className="px-4 py-2">
-                      <div className="flex items-center gap-2 justify-end">
-                        <input type="checkbox" checked={allDiscountSelected} ref={discountSelectAllRef} onChange={toggleDiscountSelectAll} className="rounded border-gray-300" title="Select all" />
-                        <input type="number" min={0} max={100} step={0.5} value={bulkDiscountValue} onChange={(e) => { const v = e.target.value; setBulkDiscountValue(v); const n = parseFloat(v); if (!isNaN(n)) applyBulkDiscount(n); }} placeholder="Apply %" className="input py-1 w-16 text-right" title="Apply to selected" />
+                    <th className="px-5 py-3 min-w-[140px]">
+                      <div className="flex items-center gap-3 justify-end">
+                        <input type="checkbox" checked={allDiscountSelected} ref={discountSelectAllRef} onChange={toggleDiscountSelectAll} className="rounded border-gray-300 shrink-0" title="Select all" />
+                        <input type="number" min={0} max={100} step={0.5} value={bulkDiscountValue} onChange={(e) => { const v = e.target.value; setBulkDiscountValue(v); const n = parseFloat(v); if (!isNaN(n)) applyBulkDiscount(n); }} placeholder="Apply %" className="input py-2 w-24 text-right text-base" title="Apply to selected" />
                       </div>
-                      <div className="text-xs font-normal text-gray-500 mt-0.5">Disc %</div>
+                      <div className="text-xs font-normal text-gray-500 mt-1">Disc %</div>
                     </th>
                   )}
                   {isDistributorOrHigher && (
-                    <th className="px-4 py-2">
-                      <div className="flex items-center gap-2 justify-end">
-                        <input type="checkbox" checked={allMarginSelected} ref={marginSelectAllRef} onChange={toggleMarginSelectAll} className="rounded border-gray-300" title="Select all" />
-                        <input type="number" min={0} step={0.5} value={bulkMarginValue} onChange={(e) => { const v = e.target.value; setBulkMarginValue(v); const n = parseFloat(v); if (!isNaN(n)) applyBulkMargin(n); }} placeholder="Apply %" className="input py-1 w-16 text-right" title="Apply to selected" />
+                    <th className="px-5 py-3 min-w-[140px]">
+                      <div className="flex items-center gap-3 justify-end">
+                        <input type="checkbox" checked={allMarginSelected} ref={marginSelectAllRef} onChange={toggleMarginSelectAll} className="rounded border-gray-300 shrink-0" title="Select all" />
+                        <input type="number" min={0} step={0.5} value={bulkMarginValue} onChange={(e) => { const v = e.target.value; setBulkMarginValue(v); const n = parseFloat(v); if (!isNaN(n)) applyBulkMargin(n); }} placeholder="Apply %" className="input py-2 w-24 text-right text-base" title="Apply to selected" />
                       </div>
-                      <div className="text-xs font-normal text-gray-500 mt-0.5">Margin %</div>
+                      <div className="text-xs font-normal text-gray-500 mt-1">Margin %</div>
                     </th>
                   )}
-                  <th className="px-4 py-2 text-right">Sell</th>
-                  <th className="px-4 py-2 text-center">Qty</th>
-                  <th className="px-4 py-2 text-right">Total</th>
-                  <th className="w-10" />
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Sell</th>
+                  <th className="px-4 py-3 text-center whitespace-nowrap">Qty</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Total</th>
+                  <th className="w-12 px-2" />
                 </tr>
               </thead>
               <tbody>
                 {items.map((item, idx) => (
                   <tr key={idx} className={`border-t ${(item.marginSelected || item.discountSelected) ? 'bg-green-50/50' : ''} ${item.isSellAffected ? 'bg-emerald-50/40' : ''}`}>
-                    <td className="px-4 py-2">
+                    <td className="px-4 py-3 min-w-[200px]">
                       <div className={`font-medium ${(item.isCostAffected || item.isSellAffected) ? 'font-bold' : ''} ${item.isSellAffected ? 'text-emerald-800' : ''}`}>
                         {item.productPartNumber}
                         {item.isCostAffected && <span className="text-gray-600 ml-0.5">*</span>}
@@ -973,31 +973,31 @@ const QuoteForm = () => {
                       </div>
                       <div className="text-gray-500 truncate max-w-xs">{item.productDescription.slice(0, 40)}...</div>
                     </td>
-                    <td className="px-4 py-2 text-right">{formatCurrency(item.productPrice)}</td>
-                    <td className="px-4 py-2 text-center">{item.minQty ?? '—'}</td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">{formatCurrency(item.productPrice)}</td>
+                    <td className="px-4 py-3 text-center">{item.minQty ?? '—'}</td>
                     {isDistributorOrHigher && (
-                      <td className="px-4 py-2">
-                        <div className="flex items-center gap-2 justify-end">
-                          <input type="checkbox" checked={!!item.discountSelected} onChange={() => toggleDiscountSelected(idx)} disabled={!!item.discountLocked} className="rounded border-gray-300" title={item.discountLocked ? 'Locked by price contract' : undefined} />
-                          <input type="number" min={0} max={100} step={0.5} value={item.discountPct} onChange={(e) => updateItem(idx, { discountPct: parseFloat(e.target.value) || 0 })} className="input py-1 w-16 text-right" disabled={!!item.discountLocked} title={item.discountLocked ? 'Locked by price contract' : undefined} readOnly={!!item.discountLocked} />
+                      <td className="px-5 py-3 min-w-[140px]">
+                        <div className="flex items-center gap-3 justify-end">
+                          <input type="checkbox" checked={!!item.discountSelected} onChange={() => toggleDiscountSelected(idx)} disabled={!!item.discountLocked} className="rounded border-gray-300 shrink-0" title={item.discountLocked ? 'Locked by price contract' : undefined} />
+                          <input type="number" min={0} max={100} step={0.5} value={item.discountPct} onChange={(e) => updateItem(idx, { discountPct: parseFloat(e.target.value) || 0 })} className="input py-2 w-24 text-right text-base tabular-nums" disabled={!!item.discountLocked} title={item.discountLocked ? 'Locked by price contract' : undefined} readOnly={!!item.discountLocked} />
                         </div>
                       </td>
                     )}
                     {isDistributorOrHigher && (
-                      <td className="px-4 py-2">
-                        <div className="flex items-center gap-2 justify-end">
-                          <input type="checkbox" checked={!!item.marginSelected} onChange={() => toggleMarginSelected(idx)} className="rounded border-gray-300" />
-                          <input type="number" min={0} step={0.5} value={item.marginPct} onChange={(e) => updateItem(idx, { marginPct: parseFloat(e.target.value) || 0 })} className="input py-1 w-16 text-right" />
+                      <td className="px-5 py-3 min-w-[140px]">
+                        <div className="flex items-center gap-3 justify-end">
+                          <input type="checkbox" checked={!!item.marginSelected} onChange={() => toggleMarginSelected(idx)} className="rounded border-gray-300 shrink-0" />
+                          <input type="number" min={0} step={0.5} value={item.marginPct} onChange={(e) => updateItem(idx, { marginPct: parseFloat(e.target.value) || 0 })} className="input py-2 w-24 text-right text-base tabular-nums" />
                         </div>
                       </td>
                     )}
-                    <td className={`px-4 py-2 text-right ${item.isSellAffected ? 'font-bold text-emerald-800' : 'font-medium'}`}>{formatCurrency(calculateSellPrice(item))}</td>
-                    <td className="px-4 py-2">
-                      <input type="number" min={1} value={item.quantity} onChange={(e) => updateItem(idx, { quantity: parseInt(e.target.value, 10) || 1 })} className="input py-1 min-w-[5rem] w-24 text-center" placeholder="Qty" />
+                    <td className={`px-4 py-3 text-right whitespace-nowrap ${item.isSellAffected ? 'font-bold text-emerald-800' : 'font-medium'}`}>{formatCurrency(calculateSellPrice(item))}</td>
+                    <td className="px-4 py-3">
+                      <input type="number" min={1} value={item.quantity} onChange={(e) => updateItem(idx, { quantity: parseInt(e.target.value, 10) || 1 })} className="input py-2 min-w-[5rem] w-28 text-center" placeholder="Qty" />
                     </td>
-                    <td className="px-4 py-2 text-right font-medium">{formatCurrency(calculateLineTotal(item))}</td>
-                    <td className="px-4 py-2">
-                      <button type="button" onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4" /></button>
+                    <td className="px-4 py-3 text-right font-medium whitespace-nowrap">{formatCurrency(calculateLineTotal(item))}</td>
+                    <td className="px-4 py-3">
+                      <button type="button" onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700 p-1"><Trash2 className="w-5 h-5" /></button>
                     </td>
                   </tr>
                 ))}
