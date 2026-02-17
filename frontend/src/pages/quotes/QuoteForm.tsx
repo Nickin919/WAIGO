@@ -76,7 +76,7 @@ const QuoteForm = () => {
   const [masterCatalogId, setMasterCatalogId] = useState<string | null>(null);
   const [priceContractId, setPriceContractId] = useState('');
   const [priceContracts, setPriceContracts] = useState<{ id: string; name: string }[]>([]);
-  const [contractDetails, setContractDetails] = useState<{ items: PriceContractItemRow[] } | null>(null);
+  const [contractDetails, setContractDetails] = useState<{ contractId: string; items: PriceContractItemRow[] } | null>(null);
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState('');
   const [notes, setNotes] = useState('');
@@ -164,7 +164,7 @@ const QuoteForm = () => {
       setContractDetails(null);
       return;
     }
-    setContractDetails(null); // clear stale data so refresh effect does not use previous contract's items
+    setContractDetails(null); // clear so refresh does not use previous contract's items
     priceContractApi.getById(priceContractId).then((res) => {
       const contract = res.data as { items?: { id: string; partId: string | null; seriesOrGroup: string | null; costPrice: number; suggestedSellPrice: number | null; discountPercent: number | null; minQuantity: number }[] };
       const items = (contract.items || []).map((i) => ({
@@ -176,13 +176,14 @@ const QuoteForm = () => {
         discountPercent: i.discountPercent ?? null,
         minQuantity: i.minQuantity ?? 1,
       }));
-      setContractDetails({ items });
+      setContractDetails({ contractId: priceContractId, items });
     }).catch(() => setContractDetails(null));
   }, [priceContractId]);
 
-  // When price contract selection (or contract details) changes, refresh pricing for all line items
+  // When price contract selection (or contract details) changes, refresh pricing for all line items.
+  // Only refresh when selected contract has no details (standard pricing) or when loaded details match selected contract.
   useEffect(() => {
-    if (priceContractId && !contractDetails) return; // wait for contract details when a contract is selected
+    if (priceContractId && (!contractDetails || contractDetails.contractId !== priceContractId)) return;
     setItems((current) => {
       if (current.length === 0) return current;
       return current.map((item) => {
