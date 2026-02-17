@@ -179,6 +179,7 @@ const PricingContractsPage = () => {
                   warnings: (Array.isArray(data.warnings) ? data.warnings : []) as Array<{ type: string; message: string; partNumber?: string }>,
                   metadata: (data.metadata ?? {}) as { quoteNumber?: string; customerName?: string },
                   stats: (data.stats ?? {}) as { totalLinesProcessed?: number; productRows?: number; discountRows?: number },
+                  parseDebug: data.parseDebug as { rawTextLength: number; linesCount: number; usedPages: boolean; last200Chars: string; last3ProductPartNumbers: string[] } | undefined,
                 });
               })
               .catch((err: unknown) => {
@@ -562,7 +563,7 @@ const PricingContractsPage = () => {
 
             {/* Parse debug (live-app troubleshooting) */}
             {parseDebug && (
-              <details className="border-t pt-3 mt-3">
+              <details className="border-t pt-3 mt-3" open>
                 <summary className="cursor-pointer text-sm font-medium text-gray-600 hover:text-gray-800">
                   Parse debug (for troubleshooting)
                 </summary>
