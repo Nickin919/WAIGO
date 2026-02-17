@@ -1,6 +1,6 @@
 {
   "name": "wago-project-hub",
-  "version": "1.4.3",
+  "version": "1.5.1",
   "description": "Industrial catalog and engagement platform for WAGO products",
   "private": true,
   "workspaces": [
