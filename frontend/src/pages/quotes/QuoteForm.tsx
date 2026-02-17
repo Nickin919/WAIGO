@@ -179,6 +179,39 @@ const QuoteForm = () => {
     }).catch(() => setContractDetails(null));
   }, [priceContractId]);
 
+  // When price contract selection (or contract details) changes, refresh pricing for all line items
+  useEffect(() => {
+    if (priceContractId && !contractDetails) return; // wait for contract details when a contract is selected
+    setItems((current) => {
+      if (current.length === 0) return current;
+      return current.map((item) => {
+        const partLike: Part = { id: item.partId, partNumber: item.productPartNumber, series: item.productSeries ?? null, description: '' };
+        const contractItem = findContractItem(partLike);
+        const contractApplies = Boolean(priceContractId && contractItem && item.quantity >= contractItem.minQuantity);
+        let discountPct = 0;
+        let marginPct = 0;
+        let costPrice: number | undefined;
+        let discountLocked = false;
+        let isSellAffected = false;
+        if (contractApplies) {
+          costPrice = contractItem.costPrice;
+          discountPct = contractItem.discountPercent ?? (item.productPrice > 0 ? (1 - costPrice / item.productPrice) * 100 : 0);
+          discountLocked = true;
+          if (contractItem.suggestedSellPrice != null && costPrice > 0) {
+            marginPct = (contractItem.suggestedSellPrice / costPrice - 1) * 100;
+          }
+          isSellAffected = contractItem.suggestedSellPrice != null;
+        } else {
+          discountPct = item.distributorDiscount ?? 0;
+          marginPct = marginToKeepSellEqualToList(discountPct);
+          costPrice = undefined;
+        }
+        const isCostAffected = discountPct > 0;
+        return { ...item, discountPct, marginPct, costPrice, discountLocked, isCostAffected, isSellAffected };
+      });
+    });
+  }, [priceContractId, contractDetails]);
+
   useEffect(() => {
     if (isEdit && quoteId) {
       quoteApi.getById(quoteId).then((res) => {
