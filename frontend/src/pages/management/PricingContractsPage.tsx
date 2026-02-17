@@ -260,7 +260,7 @@ const PricingContractsPage = () => {
             warnings: (Array.isArray(data.warnings) ? data.warnings : []) as Array<{ type: string; message: string; partNumber?: string }>,
             metadata,
             stats: (data.stats ?? {}) as { totalLinesProcessed?: number; productRows?: number; discountRows?: number },
-            parseDebug: data.parseDebug,
+            parseDebug: data.parseDebug as { rawTextLength: number; linesCount: number; usedPages: boolean; last200Chars: string; last3ProductPartNumbers: string[] } | undefined,
           });
           loadContracts();
         })

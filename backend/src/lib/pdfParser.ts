@@ -831,26 +831,27 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
       }
       if (effectiveParsed.type === 'product' && effectiveParsed.partNumber) {
         const parsed = effectiveParsed;
+        const partNumber = parsed.partNumber as string;
         // Check for duplicates
-        if (seenPartNumbers.has(parsed.partNumber)) {
+        if (seenPartNumbers.has(partNumber)) {
           result.warnings.push({
             type: 'duplicate_part',
             message: `Duplicate part number found`,
             lineNumber: lineNum,
-            partNumber: parsed.partNumber,
+            partNumber,
           });
         }
-        seenPartNumbers.add(parsed.partNumber);
+        seenPartNumbers.add(partNumber);
         
         // Calculate net price
         const netPrice = calculateNetPrice(
           parsed.price ?? null,
-          parsed.partNumber,
+          partNumber,
           seriesDiscountMap
         );
         
         // Determine series
-        const series = getSeriesFromPart(parsed.partNumber);
+        const series = getSeriesFromPart(partNumber);
         
         // Check if discount should apply but doesn't
         if (series && seriesDiscountMap.has(series) && netPrice === parsed.price) {
@@ -858,7 +859,7 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
             type: 'missing_discount',
             message: `Part has series ${series} but discount not applied`,
             lineNumber: lineNum,
-            partNumber: parsed.partNumber,
+            partNumber,
           });
         }
         
@@ -869,20 +870,20 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
               type: 'anomalous_price',
               message: `Price is unusually low: $${parsed.price}`,
               lineNumber: lineNum,
-              partNumber: parsed.partNumber,
+              partNumber,
             });
           } else if (parsed.price > 50000) {
             result.warnings.push({
               type: 'anomalous_price',
               message: `Price is unusually high: $${parsed.price}`,
               lineNumber: lineNum,
-              partNumber: parsed.partNumber,
+              partNumber,
             });
           }
         }
         
         result.rows.push({
-          partNumber: parsed.partNumber,
+          partNumber,
           series,
           description: parsed.description || '',
           price: formatPrice(parsed.price ?? null),
