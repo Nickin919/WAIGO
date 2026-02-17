@@ -11,6 +11,7 @@ interface LineItem {
   partId: string;
   productSeries: string;
   productPartNumber: string;
+  /** List price from MASTER catalog (display only) */
   productPrice: number;
   productDescription: string;
   minQty: number | null;
@@ -24,6 +25,10 @@ interface LineItem {
   isCostAffected?: boolean;
   /** Sell price from pricing contract – show bold + † (green) */
   isSellAffected?: boolean;
+  /** When true, discount % is from price contract and cannot be edited */
+  discountLocked?: boolean;
+  /** When set, cost is from price contract; sell = costPrice * (1 + margin%/100) */
+  costPrice?: number;
 }
 
 interface Customer {
@@ -68,6 +73,7 @@ const QuoteForm = () => {
 
   const [catalogId, setCatalogId] = useState('');
   const [catalogs, setCatalogs] = useState<{ id: string; name: string }[]>([]);
+  const [masterCatalogId, setMasterCatalogId] = useState<string | null>(null);
   const [priceContractId, setPriceContractId] = useState('');
   const [priceContracts, setPriceContracts] = useState<{ id: string; name: string }[]>([]);
   const [contractDetails, setContractDetails] = useState<{ items: PriceContractItemRow[] } | null>(null);
@@ -128,11 +134,13 @@ const QuoteForm = () => {
   useEffect(() => {
     assignmentsApi.getMyAssignments()
       .then((res) => {
-        const data = res.data as { catalogs?: { id: string; name: string; isPrimary?: boolean }[]; primaryCatalogId?: string | null; priceContracts?: { id: string; name: string }[] };
+        const data = res.data as { catalogs?: { id: string; name: string; isPrimary?: boolean; isMaster?: boolean }[]; primaryCatalogId?: string | null; priceContracts?: { id: string; name: string }[] };
         const assignedCatalogs = data.catalogs || [];
         const assignedContracts = data.priceContracts || [];
         setPriceContracts(assignedContracts);
         setCatalogs(assignedCatalogs.map((c) => ({ id: c.id, name: c.name || 'Unnamed' })));
+        const master = assignedCatalogs.find((c) => c.isMaster);
+        if (master) setMasterCatalogId(master.id);
         const primary = data.primaryCatalogId ?? assignedCatalogs.find((c) => c.isPrimary)?.id ?? assignedCatalogs[0]?.id;
         if (primary && !catalogId) setCatalogId(primary);
       })
@@ -143,6 +151,8 @@ const QuoteForm = () => {
           const masterOnly = list.filter((c: any) => c.isMaster);
           const useList = masterOnly.length > 0 ? masterOnly : list;
           setCatalogs(useList.map((c: any) => ({ id: c.id, name: c.name || 'Unnamed' })));
+          const master = useList.find((c: any) => c.isMaster);
+          if (master) setMasterCatalogId(master.id);
           if (useList.length > 0 && !catalogId) setCatalogId(useList[0].id);
         }).catch(() => {});
       });
@@ -193,6 +203,8 @@ const QuoteForm = () => {
           discountSelected: false,
           isCostAffected: Boolean(i.isCostAffected),
           isSellAffected: Boolean(i.isSellAffected),
+          discountLocked: Boolean(q.priceContractId && (i.isCostAffected || i.isSellAffected)),
+          costPrice: i.costPrice,
         })));
       }).catch(() => toast.error('Failed to load quote')).finally(() => setLoading(false));
     }
@@ -254,7 +266,7 @@ const QuoteForm = () => {
   }, [catalogId, quickAddPartNumber]);
 
   const calculateSellPrice = (item: LineItem) => {
-    const cost = item.productPrice * (1 - item.discountPct / 100);
+    const cost = item.costPrice != null ? item.costPrice : item.productPrice * (1 - item.discountPct / 100);
     return cost * (1 + (item.marginPct || 0) / 100);
   };
   const calculateLineTotal = (item: LineItem) => item.quantity * calculateSellPrice(item);
@@ -284,33 +296,100 @@ const QuoteForm = () => {
     return byPartNumber ?? null;
   };
 
-  const addProduct = (part: Part, quantityOverride?: number) => {
+  /** Resolve list price and min qty from MASTER catalog (by part number); falls back to part when master not found or same catalog */
+  const resolveMasterListAndMinQty = async (part: Part): Promise<{ listPrice: number; minQty: number }> => {
+    if (!masterCatalogId || catalogId === masterCatalogId) {
+      return { listPrice: part.basePrice ?? 0, minQty: part.minQty ?? 1 };
+    }
+    try {
+      const res = await partApi.getByNumber(part.partNumber, masterCatalogId);
+      const masterPart = res.data as Part;
+      return {
+        listPrice: masterPart.basePrice ?? part.basePrice ?? 0,
+        minQty: masterPart.minQty ?? part.minQty ?? 1,
+      };
+    } catch {
+      return { listPrice: part.basePrice ?? 0, minQty: part.minQty ?? 1 };
+    }
+  };
+
+  /** Build a line item from a part (async: resolves MASTER list/min qty, applies contract pricing when applicable) */
+  const buildLineItemFromPart = async (part: Part, quantityOverride?: number): Promise<LineItem> => {
+    const { listPrice, minQty: masterMinQty } = await resolveMasterListAndMinQty(part);
+    const defaultQty = Math.max(quantityOverride ?? Math.max(1, masterMinQty), masterMinQty);
     const contractItem = findContractItem(part);
-    const qty = quantityOverride ?? Math.max(1, part.minQty ?? 1);
-    let listPrice = part.basePrice ?? 0;
+    const contractApplies = Boolean(priceContractId && contractItem && defaultQty >= contractItem.minQuantity);
+
     let defaultDisc = 0;
     let marginPct = 0;
-    // When a price contract is selected, use contract cost/discount and suggested sell (margin)
-    if (priceContractId && contractItem && qty >= contractItem.minQuantity) {
-      listPrice = contractItem.costPrice;
-      defaultDisc = contractItem.discountPercent ?? part.distributorDiscount ?? 0;
-      const costAfterDisc = listPrice * (1 - defaultDisc / 100);
-      if (contractItem.suggestedSellPrice != null && costAfterDisc > 0) {
-        marginPct = (contractItem.suggestedSellPrice / costAfterDisc - 1) * 100;
+    let costPrice: number | undefined;
+    let discountLocked = false;
+
+    if (contractApplies) {
+      costPrice = contractItem.costPrice;
+      defaultDisc = contractItem.discountPercent ?? (listPrice > 0 ? (1 - costPrice / listPrice) * 100 : 0);
+      discountLocked = true;
+      if (contractItem.suggestedSellPrice != null && costPrice > 0) {
+        marginPct = (contractItem.suggestedSellPrice / costPrice - 1) * 100;
       }
     } else {
-      // No price contract: use part's standard (distributor) discount and set margin so sell price = list price
       defaultDisc = part.distributorDiscount ?? 0;
       marginPct = marginToKeepSellEqualToList(defaultDisc);
     }
+
+    const usedContractPricing = Boolean(contractApplies && contractItem?.suggestedSellPrice != null);
+    const costAffected = defaultDisc > 0;
+    return {
+      partId: part.id,
+      productSeries: part.series || part.partNumber,
+      productPartNumber: part.partNumber,
+      productPrice: listPrice,
+      productDescription: part.englishDescription || part.description || '',
+      minQty: masterMinQty,
+      distributorDiscount: defaultDisc,
+      quantity: defaultQty,
+      discountPct: defaultDisc,
+      marginPct,
+      marginSelected: false,
+      discountSelected: false,
+      isCostAffected: costAffected,
+      isSellAffected: usedContractPricing,
+      discountLocked,
+      costPrice,
+    };
+  };
+
+  const addProduct = async (part: Part, quantityOverride?: number) => {
+    const { listPrice, minQty: masterMinQty } = await resolveMasterListAndMinQty(part);
+    const defaultQty = quantityOverride ?? Math.max(1, masterMinQty);
+    const contractItem = findContractItem(part);
+    const contractApplies = Boolean(priceContractId && contractItem && defaultQty >= contractItem.minQuantity);
+
+    let defaultDisc = 0;
+    let marginPct = 0;
+    let costPrice: number | undefined;
+    let discountLocked = false;
+
+    if (contractApplies) {
+      costPrice = contractItem.costPrice;
+      defaultDisc = contractItem.discountPercent ?? (listPrice > 0 ? (1 - costPrice / listPrice) * 100 : 0);
+      discountLocked = true;
+      if (contractItem.suggestedSellPrice != null && costPrice > 0) {
+        marginPct = (contractItem.suggestedSellPrice / costPrice - 1) * 100;
+      }
+    } else {
+      defaultDisc = part.distributorDiscount ?? 0;
+      marginPct = marginToKeepSellEqualToList(defaultDisc);
+    }
+
     const existing = items.find((i) => i.partId === part.id);
     if (existing) {
-      const addQty = quantityOverride ?? Math.max(1, part.minQty ?? 1);
+      const addQty = quantityOverride ?? Math.max(1, masterMinQty);
       setItems(items.map((i) =>
         i.partId === part.id ? { ...i, quantity: i.quantity + addQty } : i
       ));
     } else {
-      const usedContractPricing = Boolean(priceContractId && contractItem && qty >= contractItem.minQuantity && contractItem.suggestedSellPrice != null);
+      const usedContractPricing = Boolean(contractApplies && contractItem?.suggestedSellPrice != null);
       const costAffected = defaultDisc > 0;
       setItems([
         ...items,
@@ -320,15 +399,17 @@ const QuoteForm = () => {
           productPartNumber: part.partNumber,
           productPrice: listPrice,
           productDescription: part.englishDescription || part.description || '',
-          minQty: part.minQty ?? null,
+          minQty: masterMinQty,
           distributorDiscount: defaultDisc,
-          quantity: qty,
+          quantity: defaultQty,
           discountPct: defaultDisc,
           marginPct,
           marginSelected: false,
           discountSelected: false,
           isCostAffected: costAffected,
           isSellAffected: usedContractPricing,
+          discountLocked,
+          costPrice,
         },
       ]);
     }
@@ -386,7 +467,7 @@ const QuoteForm = () => {
     }
   };
 
-  const handleBulkImport = () => {
+  const handleBulkImport = async () => {
     const parts = parseBulkInput(bulkInput);
     if (parts.length === 0 || !catalogId) {
       toast.error('Enter part numbers and select a catalog');
@@ -394,55 +475,27 @@ const QuoteForm = () => {
     }
     if (bulkImporting) return;
     setBulkImporting(true);
-    partApi.lookupBulk(catalogId, parts).then((res) => {
+    try {
+      const res = await partApi.lookupBulk(catalogId, parts);
       const data = res.data as { found: Part[]; notFound: string[] };
       const partCounts = new Map<string, number>();
       parts.forEach((p) => partCounts.set(p.toUpperCase(), (partCounts.get(p.toUpperCase()) || 0) + 1));
 
+      const newLines = await Promise.all(
+        data.found.map((part) => {
+          const count = partCounts.get(part.partNumber.toUpperCase()) || 1;
+          return buildLineItemFromPart(part, count);
+        })
+      );
+
       setItems((prev) => {
         const next = [...prev];
-        for (const part of data.found) {
-          const key = part.partNumber.toUpperCase();
-          const count = partCounts.get(key) || 1;
-          const minQty = Math.max(1, part.minQty ?? 1);
-          const qty = Math.max(count, minQty);
-          const contractItem = findContractItem(part);
-          let listPrice = part.basePrice ?? 0;
-          let defaultDisc = 0;
-          let marginPct = 0;
-          if (priceContractId && contractItem && qty >= contractItem.minQuantity) {
-            listPrice = contractItem.costPrice;
-            defaultDisc = contractItem.discountPercent ?? part.distributorDiscount ?? 0;
-            const costAfterDisc = listPrice * (1 - defaultDisc / 100);
-            if (contractItem.suggestedSellPrice != null && costAfterDisc > 0) {
-              marginPct = (contractItem.suggestedSellPrice / costAfterDisc - 1) * 100;
-            }
-          } else {
-            defaultDisc = part.distributorDiscount ?? 0;
-            marginPct = marginToKeepSellEqualToList(defaultDisc);
-          }
-          const idx = next.findIndex((i) => i.partId === part.id);
+        for (const line of newLines) {
+          const idx = next.findIndex((i) => i.partId === line.partId);
           if (idx >= 0) {
-            next[idx].quantity += qty;
+            next[idx] = { ...next[idx], quantity: next[idx].quantity + line.quantity };
           } else {
-            const usedContractPricing = Boolean(priceContractId && contractItem && qty >= contractItem.minQuantity && contractItem.suggestedSellPrice != null);
-            const costAffected = defaultDisc > 0;
-            next.push({
-              partId: part.id,
-              productSeries: part.series || part.partNumber,
-              productPartNumber: part.partNumber,
-              productPrice: listPrice,
-              productDescription: part.englishDescription || part.description || '',
-              minQty: part.minQty ?? null,
-              distributorDiscount: defaultDisc,
-              quantity: qty,
-              discountPct: defaultDisc,
-              marginPct,
-              marginSelected: false,
-              discountSelected: false,
-              isCostAffected: costAffected,
-              isSellAffected: usedContractPricing,
-            });
+            next.push(line);
           }
         }
         return next;
@@ -453,7 +506,11 @@ const QuoteForm = () => {
       if ((data.notFound || []).length > 0) {
         toast.error(`${data.notFound.length} part(s) not found`);
       }
-    }).catch(() => toast.error('Bulk lookup failed')).finally(() => setBulkImporting(false));
+    } catch {
+      toast.error('Bulk lookup failed');
+    } finally {
+      setBulkImporting(false);
+    }
   };
 
   const handleCsvDrop = (e: React.DragEvent) => {
@@ -469,10 +526,10 @@ const QuoteForm = () => {
     e.target.value = '';
   };
 
-  /** CSV rows: part number in col 0, optional quantity in col 1. Uses CSV quantity when provided, else catalog min qty. */
+  /** CSV rows: part number in col 0, optional quantity in col 1. Uses CSV quantity when provided, else MASTER min qty. */
   const readCsvFile = (file: File) => {
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const text = (reader.result as string) || '';
       const lines = text.split(/\r?\n/);
       const rows: { partNumber: string; quantity?: number }[] = [];
@@ -488,61 +545,40 @@ const QuoteForm = () => {
         return;
       }
       setBulkImporting(true);
-      const partNumbers = rows.map((r) => r.partNumber);
-      partApi.lookupBulk(catalogId, partNumbers).then((res) => {
+      try {
+        const partNumbers = rows.map((r) => r.partNumber);
+        const res = await partApi.lookupBulk(catalogId, partNumbers);
         const data = res.data as { found: Part[]; notFound: string[] };
         const partByNumber = new Map<string, Part>();
         (data.found || []).forEach((p) => partByNumber.set(p.partNumber.toUpperCase(), p));
+
+        const newLines: LineItem[] = [];
+        for (const row of rows) {
+          const part = partByNumber.get(row.partNumber.toUpperCase());
+          if (!part) continue;
+          const line = await buildLineItemFromPart(part, row.quantity);
+          newLines.push(line);
+        }
+
         setItems((prev) => {
           let next = [...prev];
-          for (const row of rows) {
-            const part = partByNumber.get(row.partNumber.toUpperCase());
-            if (!part) continue;
-            const qty = row.quantity ?? Math.max(1, part.minQty ?? 1);
-            const contractItem = findContractItem(part);
-            let listPrice = part.basePrice ?? 0;
-            let defaultDisc = 0;
-            let marginPct = 0;
-            if (priceContractId && contractItem && qty >= contractItem.minQuantity) {
-              listPrice = contractItem.costPrice;
-              defaultDisc = contractItem.discountPercent ?? part.distributorDiscount ?? 0;
-              const costAfterDisc = listPrice * (1 - defaultDisc / 100);
-              if (contractItem.suggestedSellPrice != null && costAfterDisc > 0) {
-                marginPct = (contractItem.suggestedSellPrice / costAfterDisc - 1) * 100;
-              }
-            } else {
-              defaultDisc = part.distributorDiscount ?? 0;
-              marginPct = marginToKeepSellEqualToList(defaultDisc);
-            }
-            const idx = next.findIndex((i) => i.partId === part.id);
+          for (const line of newLines) {
+            const idx = next.findIndex((i) => i.partId === line.partId);
             if (idx >= 0) {
-              next[idx].quantity += qty;
+              next[idx] = { ...next[idx], quantity: next[idx].quantity + line.quantity };
             } else {
-              const usedContractPricing = Boolean(priceContractId && contractItem && qty >= contractItem.minQuantity && contractItem.suggestedSellPrice != null);
-              const costAffected = defaultDisc > 0;
-              next.push({
-                partId: part.id,
-                productSeries: part.series || part.partNumber,
-                productPartNumber: part.partNumber,
-                productPrice: listPrice,
-                productDescription: part.englishDescription || part.description || '',
-                minQty: part.minQty ?? null,
-                distributorDiscount: defaultDisc,
-                quantity: qty,
-                discountPct: defaultDisc,
-                marginPct,
-                marginSelected: false,
-                discountSelected: false,
-                isCostAffected: costAffected,
-                isSellAffected: usedContractPricing,
-              });
+              next.push(line);
             }
           }
           return next;
         });
-        toast.success(`Added ${data.found?.length ?? 0} products from CSV`);
+        toast.success(`Added ${newLines.length} products from CSV`);
         if ((data.notFound || []).length > 0) setNotFoundParts(data.notFound || []);
-      }).catch(() => toast.error('CSV lookup failed')).finally(() => setBulkImporting(false));
+      } catch {
+        toast.error('CSV lookup failed');
+      } finally {
+        setBulkImporting(false);
+      }
     };
     reader.readAsText(file);
   };
@@ -601,7 +637,7 @@ const QuoteForm = () => {
     setItems(items.map((i) => (i.marginSelected ? { ...i, marginPct: value } : i)));
   };
   const applyBulkDiscount = (value: number) => {
-    setItems(items.map((i) => (i.discountSelected ? { ...i, discountPct: value, isCostAffected: value > 0 } : i)));
+    setItems(items.map((i) => (i.discountSelected && !i.discountLocked ? { ...i, discountPct: value, isCostAffected: value > 0 } : i)));
   };
 
   const removeItem = (index: number) => {
@@ -942,8 +978,8 @@ const QuoteForm = () => {
                     {isDistributorOrHigher && (
                       <td className="px-4 py-2">
                         <div className="flex items-center gap-2 justify-end">
-                          <input type="checkbox" checked={!!item.discountSelected} onChange={() => toggleDiscountSelected(idx)} className="rounded border-gray-300" />
-                          <input type="number" min={0} max={100} step={0.5} value={item.discountPct} onChange={(e) => updateItem(idx, { discountPct: parseFloat(e.target.value) || 0 })} className="input py-1 w-16 text-right" />
+                          <input type="checkbox" checked={!!item.discountSelected} onChange={() => toggleDiscountSelected(idx)} disabled={!!item.discountLocked} className="rounded border-gray-300" title={item.discountLocked ? 'Locked by price contract' : undefined} />
+                          <input type="number" min={0} max={100} step={0.5} value={item.discountPct} onChange={(e) => updateItem(idx, { discountPct: parseFloat(e.target.value) || 0 })} className="input py-1 w-16 text-right" disabled={!!item.discountLocked} title={item.discountLocked ? 'Locked by price contract' : undefined} readOnly={!!item.discountLocked} />
                         </div>
                       </td>
                     )}

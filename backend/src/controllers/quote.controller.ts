@@ -28,6 +28,32 @@ async function canUsePriceContract(userId: string, userRole: string, contractId:
   return !!assignment;
 }
 
+/** Resolve MASTER catalog part by part number; returns basePrice and minQty from master or fallback part */
+async function resolveMasterListAndMinQty(
+  part: { partNumber: string; basePrice: number | null; minQty: number; catalogId: string }
+): Promise<{ listPrice: number; minQty: number }> {
+  const masterCatalog = await prisma.catalog.findFirst({
+    where: { isMaster: true, isActive: true },
+    select: { id: true },
+  });
+  if (!masterCatalog || masterCatalog.id === part.catalogId) {
+    return { listPrice: part.basePrice ?? 0, minQty: part.minQty };
+  }
+  const masterPart = await prisma.part.findUnique({
+    where: {
+      catalogId_partNumber: { catalogId: masterCatalog.id, partNumber: part.partNumber },
+    },
+    select: { basePrice: true, minQty: true },
+  });
+  if (!masterPart) {
+    return { listPrice: part.basePrice ?? 0, minQty: part.minQty };
+  }
+  return {
+    listPrice: masterPart.basePrice ?? part.basePrice ?? 0,
+    minQty: masterPart.minQty ?? part.minQty,
+  };
+}
+
 /**
  * Get quotes (hierarchical visibility)
  */
@@ -163,6 +189,13 @@ export const createQuote = async (req: AuthRequest, res: Response): Promise<void
     const defaultTermsFromProfile = (quoteOwner as { defaultTerms?: string | null } | null)?.defaultTerms ?? null;
     const termsValue = bodyTerms != null && String(bodyTerms).trim() !== '' ? String(bodyTerms).trim() : (defaultTermsFromProfile ?? 'Net 30');
 
+    const contractItems = priceContractId
+      ? await prisma.priceContractItem.findMany({
+          where: { contractId: priceContractId },
+          select: { partId: true, seriesOrGroup: true, costPrice: true },
+        })
+      : [];
+
     let total = 0;
     const itemsToCreate: any[] = [];
 
@@ -175,12 +208,21 @@ export const createQuote = async (req: AuthRequest, res: Response): Promise<void
         return;
       }
 
-      const listPrice = part.basePrice ?? 0;
+      const { listPrice, minQty: snapshotMinQty } = await resolveMasterListAndMinQty(part);
       const discountPct = Number(item.discountPct) || 0;
       const marginPct = Number(item.marginPct) || 0;
       const quantity = Math.max(1, parseInt(String(item.quantity), 10) || 1);
 
-      const costPrice = listPrice * (1 - discountPct / 100);
+      const contractMatch = contractItems.length
+        ? contractItems.find(
+            (ci) =>
+              ci.partId === part.id ||
+              (ci.seriesOrGroup && (part.series || part.partNumber || '').toUpperCase().includes((ci.seriesOrGroup as string).toUpperCase())) ||
+              (ci.seriesOrGroup && (part.partNumber || '').toUpperCase() === (ci.seriesOrGroup as string).toUpperCase())
+          )
+        : null;
+      const costPrice =
+        contractMatch != null ? contractMatch.costPrice : listPrice * (1 - discountPct / 100);
       const sellPrice = costPrice * (1 + marginPct / 100);
       const lineTotal = quantity * sellPrice;
       total += lineTotal;
@@ -192,7 +234,7 @@ export const createQuote = async (req: AuthRequest, res: Response): Promise<void
         description: part.englishDescription || part.description,
         quantity,
         packageQty: part.packageQty ?? 1,
-        minQty: part.minQty ?? 1,
+        minQty: snapshotMinQty,
         discountPct,
         marginPct,
         costPrice,
@@ -203,7 +245,7 @@ export const createQuote = async (req: AuthRequest, res: Response): Promise<void
         snapshotSeries: part.series || part.partNumber,
         snapshotPartNumber: part.partNumber,
         snapshotPrice: listPrice,
-        snapshotMinQty: part.minQty,
+        snapshotMinQty,
         snapshotDescription: part.englishDescription || part.description,
         snapshotDistributorDiscount: part.distributorDiscount ?? 0,
       });
@@ -262,7 +304,7 @@ export const updateQuote = async (req: AuthRequest, res: Response): Promise<void
 
     const existing = await prisma.quote.findUnique({
       where: { id },
-      select: { userId: true },
+      select: { userId: true, priceContractId: true },
     });
 
     if (!existing) {
@@ -307,6 +349,15 @@ export const updateQuote = async (req: AuthRequest, res: Response): Promise<void
       }
     }
 
+    const contractIdForUpdate =
+      priceContractId !== undefined ? (priceContractId || null) : (existing!.priceContractId ?? null);
+    const contractItems = contractIdForUpdate
+      ? await prisma.priceContractItem.findMany({
+          where: { contractId: contractIdForUpdate },
+          select: { partId: true, seriesOrGroup: true, costPrice: true },
+        })
+      : [];
+
     let total = 0;
     const itemsToCreate: any[] = [];
 
@@ -319,12 +370,21 @@ export const updateQuote = async (req: AuthRequest, res: Response): Promise<void
         return;
       }
 
-      const listPrice = part.basePrice ?? 0;
+      const { listPrice, minQty: snapshotMinQty } = await resolveMasterListAndMinQty(part);
       const discountPct = Number(item.discountPct) || 0;
       const marginPct = Number(item.marginPct) || 0;
       const quantity = Math.max(1, parseInt(String(item.quantity), 10) || 1);
 
-      const costPrice = listPrice * (1 - discountPct / 100);
+      const contractMatch = contractItems.length
+        ? contractItems.find(
+            (ci) =>
+              ci.partId === part.id ||
+              (ci.seriesOrGroup && (part.series || part.partNumber || '').toUpperCase().includes((ci.seriesOrGroup as string).toUpperCase())) ||
+              (ci.seriesOrGroup && (part.partNumber || '').toUpperCase() === (ci.seriesOrGroup as string).toUpperCase())
+          )
+        : null;
+      const costPrice =
+        contractMatch != null ? contractMatch.costPrice : listPrice * (1 - discountPct / 100);
       const sellPrice = costPrice * (1 + marginPct / 100);
       const lineTotal = quantity * sellPrice;
       total += lineTotal;
@@ -336,7 +396,7 @@ export const updateQuote = async (req: AuthRequest, res: Response): Promise<void
         description: part.englishDescription || part.description,
         quantity,
         packageQty: part.packageQty ?? 1,
-        minQty: part.minQty ?? 1,
+        minQty: snapshotMinQty,
         discountPct,
         marginPct,
         costPrice,
@@ -347,7 +407,7 @@ export const updateQuote = async (req: AuthRequest, res: Response): Promise<void
         snapshotSeries: part.series || part.partNumber,
         snapshotPartNumber: part.partNumber,
         snapshotPrice: listPrice,
-        snapshotMinQty: part.minQty,
+        snapshotMinQty: snapshotMinQty,
         snapshotDescription: part.englishDescription || part.description,
         snapshotDistributorDiscount: part.distributorDiscount ?? 0,
       });

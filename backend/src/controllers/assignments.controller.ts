@@ -369,7 +369,7 @@ export const getMyAssignments = async (req: AuthRequest, res: Response): Promise
     const [catalogAssignments, priceContractAssignments, user] = await Promise.all([
       prisma.catalogAssignment.findMany({
         where: { userId },
-        include: { catalog: { select: { id: true, name: true, _count: { select: { parts: true, categories: true } } } } },
+        include: { catalog: { select: { id: true, name: true, isMaster: true, _count: { select: { parts: true, categories: true } } } } },
       }),
       prisma.userPriceContractAssignment.findMany({
         where: { userId },
@@ -391,7 +391,7 @@ export const getMyAssignments = async (req: AuthRequest, res: Response): Promise
     if (catalogsPayload.length === 0) {
       const masterCatalog = await prisma.catalog.findFirst({
         where: { isMaster: true, isActive: true },
-        select: { id: true, name: true, _count: { select: { parts: true, categories: true } } },
+        select: { id: true, name: true, isMaster: true, _count: { select: { parts: true, categories: true } } },
       });
       if (masterCatalog) {
         catalogsPayload = [{ ...masterCatalog, isPrimary: true }];
