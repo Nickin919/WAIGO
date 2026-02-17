@@ -6,7 +6,23 @@
  */
 
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
+import * as path from 'path';
 import { PDFParse } from 'pdf-parse';
+
+const DEBUG_LOG_PATH = path.resolve(process.cwd(), '.cursor', 'debug.log');
+const DEBUG_LOG_PATH_ALT = path.resolve(process.cwd(), '..', '.cursor', 'debug.log');
+function debugLog(payload: { location: string; message: string; data?: unknown; hypothesisId?: string }) {
+  const line = JSON.stringify({ ...payload, timestamp: Date.now() });
+  try { fetch('http://127.0.0.1:7242/ingest/3b168631-beca-4109-b9fb-808d8bac595c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: line }).catch(() => {}); } catch (_) {}
+  for (const logPath of [DEBUG_LOG_PATH, DEBUG_LOG_PATH_ALT]) {
+    try {
+      fsSync.mkdirSync(path.dirname(logPath), { recursive: true });
+      fsSync.appendFileSync(logPath, line + '\n');
+      break;
+    } catch (_) {}
+  }
+}
 
 // ============================================================================
 // Types
@@ -57,6 +73,14 @@ export interface ParseResult {
     productRows: number;
     discountRows: number;
     skippedRows: number;
+  };
+  /** Debug info for live-app troubleshooting (included in upload API response) */
+  parseDebug?: {
+    rawTextLength: number;
+    linesCount: number;
+    usedPages: boolean;
+    last200Chars: string;
+    last3ProductPartNumbers: string[];
   };
 }
 
@@ -698,7 +722,7 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
     // Read PDF file and parse using pdf-parse v2 API
     const dataBuffer = await fs.readFile(pdfPath);
     
-    let pdfData: { text: string };
+    let pdfData: { text: string; pages?: Array<{ text: string }> };
     try {
       const parser = new PDFParse({ data: dataBuffer });
       pdfData = await parser.getText();
@@ -706,14 +730,28 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
       result.errors.push(`pdf-parse error: ${parseErr.message}`);
       return result;
     }
-    
-    if (!pdfData.text) {
+
+    // Prefer per-page text when available to avoid last-page truncation (pdf-parse sometimes omits end of doc from .text)
+    let textSource: string;
+    if (pdfData.pages && pdfData.pages.length > 0) {
+      textSource = pdfData.pages.map(p => (p && p.text) ? p.text : '').join('\n');
+    } else {
+      textSource = pdfData.text || '';
+    }
+    if (!textSource.trim()) {
       result.errors.push('PDF contains no extractable text (may be scanned/image-based)');
       return result;
     }
-    
+
+    // #region agent log
+    const rawLen = textSource.length;
+    const rawTail = textSource.slice(-600);
+    debugLog({ location: 'pdfParser.ts:afterGetText', message: 'Raw PDF text from pdf-parse', data: { rawTextLength: rawLen, last600chars: rawTail, usedPages: !!pdfData.pages?.length }, hypothesisId: 'H1' });
+    console.log('[PDF parse] rawLen=', rawLen, 'usedPages=', !!pdfData.pages?.length, 'tail(200)=', rawTail.slice(-200));
+    // #endregion
+
     // Normalize text
-    const text = normalizeText(pdfData.text);
+    const text = normalizeText(textSource);
     
     // Extract metadata from first pages
     result.metadata = extractMetadata(text);
@@ -721,6 +759,10 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
     // Split into lines
     const lines = text.split('\n');
     result.stats.totalLinesProcessed = lines.length;
+    // #region agent log
+    const last5Lines = lines.slice(-5).map((l, idx) => ({ idx: lines.length - 5 + idx, content: l.trim().slice(0, 200) }));
+    debugLog({ location: 'pdfParser.ts:afterSplit', message: 'Lines after split', data: { linesLength: lines.length, last5Lines }, hypothesisId: 'H2' });
+    // #endregion
     
     // First pass: collect series discounts
     const seriesDiscountMap = new Map<string, number>();
@@ -748,8 +790,47 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
       const line = lines[i];
       const lineNum = i + 1;
       const parsed = parseLine(line, lineNum);
-      
-      if (parsed.type === 'product' && parsed.partNumber) {
+      // #region agent log
+      if (i >= lines.length - 15) {
+        const trimmed = line.trim();
+        debugLog({ location: 'pdfParser.ts:secondPass', message: 'Last lines parse', data: { lineNum, linePreview: trimmed.slice(0, 180), type: parsed.type, reason: (parsed as any).reason, partNumber: parsed.partNumber, price: parsed.price }, hypothesisId: 'H3' });
+      }
+      // #endregion
+      // When line has part number but was skipped (no_price or part-only), check next line(s) for description/price (common at end of PDF)
+      let effectiveParsed: ParsedLine = parsed;
+      const skipReason = (parsed as any).reason;
+      if (parsed.type === 'skip' && (skipReason === 'no_price' || skipReason === 'insufficient_columns')) {
+        const trimmed = line.trim();
+        const partMatch = trimmed.match(PATTERNS.partNumberLoose);
+        if (partMatch && !isInternalPartNumber(partMatch[1]) && i + 1 < lines.length) {
+          const nextLine = lines[i + 1].trim();
+          const priceOnNext = nextLine ? extractPrice(nextLine) : null;
+          const nextIsPriceOnly = priceOnNext !== null && nextLine.length < 30 && /^[\s$,\d.]+$/.test(nextLine.replace(/\s/g, ''));
+          let desc = trimmed.replace(partMatch[0], '').replace(/\s+/g, ' ').trim();
+          let priceVal = priceOnNext;
+          let consumed = 0;
+          if (priceOnNext !== null && priceOnNext > 0 && (nextIsPriceOnly || skipReason === 'no_price')) {
+            if (skipReason === 'insufficient_columns' && !desc && nextLine && !nextIsPriceOnly) desc = nextLine;
+            consumed = 1;
+          } else if (skipReason === 'insufficient_columns' && nextLine && !nextIsPriceOnly && i + 2 < lines.length) {
+            const lineAfter = lines[i + 2].trim();
+            const priceAfter = lineAfter ? extractPrice(lineAfter) : null;
+            if (priceAfter !== null && priceAfter > 0) {
+              desc = nextLine;
+              priceVal = priceAfter;
+              consumed = 2;
+            }
+          }
+          if (consumed > 0 && priceVal !== null && priceVal > 0) {
+            const moq = extractMOQ(desc);
+            desc = desc.replace(PATTERNS.moqInline, '').replace(PATTERNS.moqMinimum, '').replace(/\s+/g, ' ').trim();
+            effectiveParsed = { type: 'product', partNumber: partMatch[1], description: desc, price: priceVal, moq };
+            i += consumed;
+          }
+        }
+      }
+      if (effectiveParsed.type === 'product' && effectiveParsed.partNumber) {
+        const parsed = effectiveParsed;
         // Check for duplicates
         if (seenPartNumbers.has(parsed.partNumber)) {
           result.warnings.push({
@@ -814,12 +895,12 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
         });
         
         result.stats.productRows++;
-      } else if (parsed.type === 'skip') {
+      } else if (effectiveParsed.type === 'skip') {
         // Only track significant skips
-        if (parsed.reason !== 'empty' && parsed.reason !== 'header') {
+        if (effectiveParsed.reason !== 'empty' && effectiveParsed.reason !== 'header') {
           const trimmed = line.trim();
           if (trimmed.length > 5 && trimmed.length < 500) {
-            result.unparsedRows.push(`Line ${lineNum} (${parsed.reason}): ${trimmed.substring(0, 100)}${trimmed.length > 100 ? '...' : ''}`);
+            result.unparsedRows.push(`Line ${lineNum} (${effectiveParsed.reason}): ${trimmed.substring(0, 100)}${trimmed.length > 100 ? '...' : ''}`);
           }
         }
         result.stats.skippedRows++;
@@ -830,7 +911,22 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
     if (result.stats.productRows === 0 && lines.length > 0) {
       parseBlocksFallback(lines, result, seriesDiscountMap);
     }
-    
+
+    // #region agent log
+    const productRowsOnly = result.rows.filter(r => r.partNumber);
+    const last3Products = productRowsOnly.slice(-3).map(r => ({ partNumber: r.partNumber, price: r.price, lineNumber: r.lineNumber }));
+    debugLog({ location: 'pdfParser.ts:afterSecondPass', message: 'Last product rows in result', data: { totalProductRows: productRowsOnly.length, last3Products }, hypothesisId: 'H5' });
+    console.log('[PDF parse] totalProductRows=', productRowsOnly.length, 'last3Products=', last3Products, 'linesCount=', lines.length);
+    // #endregion
+
+    result.parseDebug = {
+      rawTextLength: textSource.length,
+      linesCount: lines.length,
+      usedPages: !!(pdfData.pages && pdfData.pages.length),
+      last200Chars: textSource.slice(-200),
+      last3ProductPartNumbers: productRowsOnly.slice(-3).map(r => r.partNumber),
+    };
+
     // Add series discount rows to output
     for (const discount of result.seriesDiscounts) {
       result.rows.push({

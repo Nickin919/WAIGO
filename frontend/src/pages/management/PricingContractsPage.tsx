@@ -43,6 +43,7 @@ const PricingContractsPage = () => {
     warnings?: Array<{ type: string; message: string; partNumber?: string }>;
     metadata?: { quoteNumber?: string; customerName?: string };
     stats?: { totalLinesProcessed?: number; productRows?: number; discountRows?: number };
+    parseDebug?: { rawTextLength: number; linesCount: number; usedPages: boolean; last200Chars: string; last3ProductPartNumbers: string[] };
   } | null>(null);
 
   const role = user?.role ? effectiveRole(user.role) : null;
@@ -259,6 +260,7 @@ const PricingContractsPage = () => {
             warnings: (Array.isArray(data.warnings) ? data.warnings : []) as Array<{ type: string; message: string; partNumber?: string }>,
             metadata,
             stats: (data.stats ?? {}) as { totalLinesProcessed?: number; productRows?: number; discountRows?: number },
+            parseDebug: data.parseDebug,
           });
           loadContracts();
         })
@@ -399,7 +401,7 @@ const PricingContractsPage = () => {
   // Results modal for showing import details
   const UploadResultsModal = () => {
     if (!uploadResult) return null;
-    const { imported, skipped, unparsed, seriesDiscounts, warnings, metadata, stats } = uploadResult;
+    const { imported, skipped, unparsed, seriesDiscounts, warnings, metadata, stats, parseDebug } = uploadResult;
     const hasIssues = skipped.length > 0 || unparsed.length > 0 || (warnings && warnings.length > 0);
 
     return (
@@ -556,6 +558,25 @@ const PricingContractsPage = () => {
               <div className="text-xs text-gray-500 border-t pt-3">
                 Processed {stats.totalLinesProcessed} lines: {stats.productRows} products, {stats.discountRows} discounts
               </div>
+            )}
+
+            {/* Parse debug (live-app troubleshooting) */}
+            {parseDebug && (
+              <details className="border-t pt-3 mt-3">
+                <summary className="cursor-pointer text-sm font-medium text-gray-600 hover:text-gray-800">
+                  Parse debug (for troubleshooting)
+                </summary>
+                <div className="mt-2 p-3 bg-gray-100 rounded-lg font-mono text-xs space-y-2">
+                  <div><strong>rawTextLength:</strong> {parseDebug.rawTextLength}</div>
+                  <div><strong>linesCount:</strong> {parseDebug.linesCount}</div>
+                  <div><strong>usedPages:</strong> {parseDebug.usedPages ? 'yes' : 'no'}</div>
+                  <div><strong>last3ProductPartNumbers:</strong> {parseDebug.last3ProductPartNumbers.join(', ') || '—'}</div>
+                  <div>
+                    <strong>last200Chars:</strong>
+                    <pre className="mt-1 p-2 bg-white rounded overflow-x-auto whitespace-pre-wrap break-all">{parseDebug.last200Chars || '—'}</pre>
+                  </div>
+                </div>
+              </details>
             )}
           </div>
 

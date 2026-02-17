@@ -516,6 +516,7 @@ export const uploadPdf = async (req: AuthRequest, res: Response): Promise<void> 
       warnings: parseResult.warnings,
       metadata: parseResult.metadata,
       stats: parseResult.stats,
+      parseDebug: parseResult.parseDebug,
     });
   } catch (error) {
     console.error('Upload PDF error:', error);

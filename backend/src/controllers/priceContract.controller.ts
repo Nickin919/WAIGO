@@ -370,6 +370,7 @@ export const uploadPDF = async (req: AuthRequest, res: Response): Promise<void> 
       skippedItems: skipped,
       unparsedRowDetails: parseResult.unparsedRows,
       metadata: parseResult.metadata,
+      parseDebug: parseResult.parseDebug,
     });
   } catch (error) {
     console.error('Upload PDF error:', error);
