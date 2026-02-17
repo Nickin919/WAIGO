@@ -456,3 +456,36 @@ export const updateItem = async (req: AuthRequest, res: Response): Promise<void>
     res.status(500).json({ error: 'Failed to update item' });
   }
 };
+
+/**
+ * DELETE /api/price-contracts/:id/items/:itemId – remove item from contract (ADMIN/RSM only)
+ */
+export const removeItem = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user || !isInternal(req.user.role)) {
+      res.status(403).json({ error: 'Admin or RSM only' });
+      return;
+    }
+    const { id: contractId, itemId } = req.params;
+
+    const contract = await prisma.priceContract.findUnique({ where: { id: contractId } });
+    if (!contract) {
+      res.status(404).json({ error: 'Contract not found' });
+      return;
+    }
+
+    const item = await prisma.priceContractItem.findFirst({
+      where: { id: itemId, contractId },
+    });
+    if (!item) {
+      res.status(404).json({ error: 'Item not found' });
+      return;
+    }
+
+    await prisma.priceContractItem.delete({ where: { id: itemId } });
+    res.status(204).send();
+  } catch (error) {
+    console.error('Remove contract item error:', error);
+    res.status(500).json({ error: 'Failed to remove item' });
+  }
+};

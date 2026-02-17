@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, CheckCircle, AlertTriangle, RefreshCw, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { priceContractApi } from '@/lib/api';
 
@@ -42,6 +42,7 @@ const PriceContractDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [edits, setEdits] = useState<Record<string, { partNumber: string; costPrice: string }>>({});
   const [recheckingId, setRecheckingId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -87,6 +88,23 @@ const PriceContractDetailPage = () => {
       toast.error(err.response?.data?.error || 'Recheck failed');
     } finally {
       setRecheckingId(null);
+    }
+  };
+
+  const handleRemove = async (item: ContractItem) => {
+    if (!id) return;
+    if (!window.confirm('Remove this item from the pricing contract?')) return;
+    setRemovingId(item.id);
+    try {
+      await priceContractApi.removeItem(id, item.id);
+      setContract((prev) =>
+        prev ? { ...prev, items: prev.items.filter((i) => i.id !== item.id) } : null
+      );
+      toast.success('Item removed');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to remove item');
+    } finally {
+      setRemovingId(null);
     }
   };
 
@@ -136,10 +154,11 @@ const PriceContractDetailPage = () => {
           <table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Part Number</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-700">Part Number / Series</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-700">Cost (Contract)</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-700">List Price</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-700">% Off List</th>
+                <th className="px-4 py-3 text-right font-medium text-gray-700">Discount %</th>
                 <th className="px-4 py-3 text-center font-medium text-gray-700">Status</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-700">Actions</th>
               </tr>
@@ -204,6 +223,9 @@ const PriceContractDetailPage = () => {
                     <td className="px-4 py-2 text-right">
                       {pct != null ? <span className="font-medium text-green-700">{pct}%</span> : '—'}
                     </td>
+                    <td className="px-4 py-2 text-right text-gray-600">
+                      {item.discountPercent != null ? <span className="font-medium">{item.discountPercent}%</span> : '—'}
+                    </td>
                     <td className="px-4 py-2 text-center">
                       {verified ? (
                         <span className="inline-flex items-center gap-1 text-green-700">
@@ -219,14 +241,25 @@ const PriceContractDetailPage = () => {
                     </td>
                     <td className="px-4 py-2 text-right">
                       {unverifiedProduct && (
-                        <button
-                          onClick={() => handleRecheck(item)}
-                          disabled={recheckingId === item.id}
-                          className="btn btn-primary text-sm py-1 flex items-center gap-1 ml-auto"
-                        >
-                          <RefreshCw className={`w-4 h-4 ${recheckingId === item.id ? 'animate-spin' : ''}`} />
-                          {recheckingId === item.id ? 'Checking…' : 'Recheck'}
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleRecheck(item)}
+                            disabled={recheckingId === item.id}
+                            className="btn btn-primary text-sm py-1 flex items-center gap-1"
+                          >
+                            <RefreshCw className={`w-4 h-4 ${recheckingId === item.id ? 'animate-spin' : ''}`} />
+                            {recheckingId === item.id ? 'Checking…' : 'Recheck'}
+                          </button>
+                          <button
+                            onClick={() => handleRemove(item)}
+                            disabled={removingId === item.id}
+                            className="btn bg-red-100 text-red-700 hover:bg-red-200 text-sm py-1 flex items-center gap-1"
+                            title="Remove from contract"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            {removingId === item.id ? 'Removing…' : 'Remove'}
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>

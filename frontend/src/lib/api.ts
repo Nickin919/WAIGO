@@ -378,6 +378,8 @@ export const priceContractApi = {
     api.patch(`/my/contracts/${contractId}/items`, { items }),
   updateItem: (contractId: string, itemId: string, data: { partNumber?: string; costPrice?: number }) =>
     api.patch(`/price-contracts/${contractId}/items/${itemId}`, data),
+  removeItem: (contractId: string, itemId: string) =>
+    api.delete(`/price-contracts/${contractId}/items/${itemId}`),
 };
 
 // ============================================================================
