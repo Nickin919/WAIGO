@@ -164,6 +164,7 @@ const QuoteForm = () => {
       setContractDetails(null);
       return;
     }
+    setContractDetails(null); // clear stale data so refresh effect does not use previous contract's items
     priceContractApi.getById(priceContractId).then((res) => {
       const contract = res.data as { items?: { id: string; partId: string | null; seriesOrGroup: string | null; costPrice: number; suggestedSellPrice: number | null; discountPercent: number | null; minQuantity: number }[] };
       const items = (contract.items || []).map((i) => ({
@@ -206,7 +207,7 @@ const QuoteForm = () => {
           marginPct = marginToKeepSellEqualToList(discountPct);
           costPrice = undefined;
         }
-        const isCostAffected = discountPct > 0;
+        const isCostAffected = contractApplies; // * only for items on the selected contract
         return { ...item, discountPct, marginPct, costPrice, discountLocked, isCostAffected, isSellAffected };
       });
     });
@@ -367,7 +368,6 @@ const QuoteForm = () => {
     }
 
     const usedContractPricing = Boolean(contractApplies && contractItem?.suggestedSellPrice != null);
-    const costAffected = defaultDisc > 0;
     return {
       partId: part.id,
       productSeries: part.series || part.partNumber,
@@ -381,7 +381,7 @@ const QuoteForm = () => {
       marginPct,
       marginSelected: false,
       discountSelected: false,
-      isCostAffected: costAffected,
+      isCostAffected: contractApplies,
       isSellAffected: usedContractPricing,
       discountLocked,
       costPrice,
@@ -419,7 +419,6 @@ const QuoteForm = () => {
       ));
     } else {
       const usedContractPricing = Boolean(contractApplies && contractItem?.suggestedSellPrice != null);
-      const costAffected = defaultDisc > 0;
       setItems([
         ...items,
         {
@@ -435,7 +434,7 @@ const QuoteForm = () => {
           marginPct,
           marginSelected: false,
           discountSelected: false,
-          isCostAffected: costAffected,
+          isCostAffected: contractApplies,
           isSellAffected: usedContractPricing,
           discountLocked,
           costPrice,
@@ -642,9 +641,7 @@ const QuoteForm = () => {
   const updateItem = (index: number, updates: Partial<LineItem>) => {
     setItems(items.map((i, idx) => {
       if (idx !== index) return i;
-      const next = { ...i, ...updates };
-      if ('discountPct' in updates && updates.discountPct != null) next.isCostAffected = updates.discountPct > 0;
-      return next;
+      return { ...i, ...updates };
     }));
   };
 
@@ -666,7 +663,7 @@ const QuoteForm = () => {
     setItems(items.map((i) => (i.marginSelected ? { ...i, marginPct: value } : i)));
   };
   const applyBulkDiscount = (value: number) => {
-    setItems(items.map((i) => (i.discountSelected && !i.discountLocked ? { ...i, discountPct: value, isCostAffected: value > 0 } : i)));
+    setItems(items.map((i) => (i.discountSelected && !i.discountLocked ? { ...i, discountPct: value } : i)));
   };
 
   const removeItem = (index: number) => {
