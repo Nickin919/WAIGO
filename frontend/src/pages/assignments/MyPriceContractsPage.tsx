@@ -7,12 +7,13 @@ import { priceContractApi } from '@/lib/api';
 interface ContractItem {
   id: string;
   partId: string | null;
+  partNumber: string | null;
   seriesOrGroup: string | null;
   costPrice: number;
   suggestedSellPrice: number | null;
   discountPercent: number | null;
   minQuantity: number;
-  part?: { partNumber: string; series: string | null; description: string } | null;
+  part?: { partNumber: string; series: string | null; description: string; basePrice: number | null } | null;
 }
 
 interface Contract {
@@ -121,18 +122,25 @@ const MyPriceContractsPage = () => {
                       <tr>
                         <th className="px-4 py-2 text-left">Product / Series</th>
                         <th className="px-4 py-2 text-right">Cost Price</th>
+                        <th className="px-4 py-2 text-right">List Price</th>
+                        <th className="px-4 py-2 text-right">% Off List</th>
                         <th className="px-4 py-2 text-right">Discount %</th>
                         <th className="px-4 py-2 text-center">Min Qty</th>
                         <th className="px-4 py-2 text-right">Suggested Sell Price</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {items.map((item) => (
+                      {items.map((item) => {
+                        const listPrice = item.part?.basePrice ?? null;
+                        const pctOff = listPrice != null && listPrice > 0 ? Math.round((1 - item.costPrice / listPrice) * 1000) / 10 : null;
+                        return (
                         <tr key={item.id} className="border-t">
                           <td className="px-4 py-2">
-                            {item.part ? `${item.part.partNumber} ${item.part.series ? `(${item.part.series})` : ''}` : item.seriesOrGroup ?? '—'}
+                            {item.partNumber ?? (item.part ? `${item.part.partNumber} ${item.part.series ? `(${item.part.series})` : ''}` : null) ?? item.seriesOrGroup ?? '—'}
                           </td>
                           <td className="px-4 py-2 text-right text-gray-600">{formatCurrency(item.costPrice)}</td>
+                          <td className="px-4 py-2 text-right text-gray-600">{listPrice != null ? formatCurrency(listPrice) : '—'}</td>
+                          <td className="px-4 py-2 text-right text-gray-600">{pctOff != null ? <span className="text-green-700 font-medium">{pctOff}%</span> : '—'}</td>
                           <td className="px-4 py-2 text-right text-gray-600">{item.discountPercent != null ? `${item.discountPercent}%` : '—'}</td>
                           <td className="px-4 py-2 text-center text-gray-600">{item.minQuantity}</td>
                           <td className="px-4 py-2">
@@ -149,7 +157,7 @@ const MyPriceContractsPage = () => {
                             />
                           </td>
                         </tr>
-                      ))}
+                      ); })}
                     </tbody>
                   </table>
                   <div className="mt-4 flex justify-end">

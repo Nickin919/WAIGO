@@ -94,7 +94,7 @@ export const getById = async (req: AuthRequest, res: Response): Promise<void> =>
     const contract = await prisma.priceContract.findUnique({
       where: { id },
       include: {
-        items: { include: { part: { select: { id: true, partNumber: true, series: true, description: true } } } },
+        items: { include: { part: { select: { id: true, partNumber: true, series: true, description: true, basePrice: true } } } },
         createdBy: { select: { id: true, firstName: true, lastName: true } },
       },
     });
@@ -335,11 +335,12 @@ export const uploadPDF = async (req: AuthRequest, res: Response): Promise<void> 
           partId = part?.id || null;
         }
 
-        // Create item
+        // Create item (store partNumber so we can display it when no matching Part in catalog)
         const item = await prisma.priceContractItem.create({
           data: {
             contractId,
             partId,
+            partNumber: !isSeriesDiscount && row.partNumber ? row.partNumber : null,
             seriesOrGroup: isSeriesDiscount ? row.series : (row.series || null),
             costPrice,
             suggestedSellPrice: null, // User can fill this in later
@@ -375,5 +376,62 @@ export const uploadPDF = async (req: AuthRequest, res: Response): Promise<void> 
   } catch (error) {
     console.error('Upload PDF error:', error);
     res.status(500).json({ error: 'Failed to process PDF' });
+  }
+};
+
+/**
+ * PATCH /api/price-contracts/:id/items/:itemId – update item part number/price and recheck against master catalog (ADMIN/RSM only)
+ * Body: { partNumber?: string, costPrice?: number }. If partNumber is provided, looks up Part and sets partId when found.
+ */
+export const updateItem = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user || !isInternal(req.user.role)) {
+      res.status(403).json({ error: 'Admin or RSM only' });
+      return;
+    }
+    const { id: contractId, itemId } = req.params;
+    const { partNumber: bodyPartNumber, costPrice: bodyCostPrice } = req.body;
+
+    const contract = await prisma.priceContract.findUnique({ where: { id: contractId } });
+    if (!contract) {
+      res.status(404).json({ error: 'Contract not found' });
+      return;
+    }
+
+    const existing = await prisma.priceContractItem.findFirst({
+      where: { id: itemId, contractId },
+      include: { part: { select: { id: true, partNumber: true, basePrice: true } } },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Item not found' });
+      return;
+    }
+
+    const partNumber = typeof bodyPartNumber === 'string' && bodyPartNumber.trim() ? bodyPartNumber.trim() : existing.partNumber;
+    const costPrice = typeof bodyCostPrice === 'number' && bodyCostPrice >= 0 ? bodyCostPrice : existing.costPrice;
+
+    let partId: string | null = null;
+    if (partNumber) {
+      const part = await prisma.part.findFirst({
+        where: { partNumber },
+        select: { id: true },
+      });
+      partId = part?.id || null;
+    }
+
+    const updated = await prisma.priceContractItem.update({
+      where: { id: itemId },
+      data: {
+        partNumber: partNumber || null,
+        costPrice,
+        partId,
+      },
+      include: { part: { select: { id: true, partNumber: true, series: true, description: true, basePrice: true } } },
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Update contract item error:', error);
+    res.status(500).json({ error: 'Failed to update item' });
   }
 };

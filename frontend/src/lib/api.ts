@@ -376,6 +376,8 @@ export const priceContractApi = {
     api.post(`/price-contracts/${contractId}/items/upload-pdf`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   updateMyContractItems: (contractId: string, items: Array<{ id: string; suggestedSellPrice: number | null }>) =>
     api.patch(`/my/contracts/${contractId}/items`, { items }),
+  updateItem: (contractId: string, itemId: string, data: { partNumber?: string; costPrice?: number }) =>
+    api.patch(`/price-contracts/${contractId}/items/${itemId}`, data),
 };
 
 // ============================================================================

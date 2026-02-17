@@ -721,7 +721,15 @@ const PricingContractsPage = () => {
               <tbody className="divide-y divide-gray-200">
                 {contracts.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium">{c.name}</td>
+                    <td className="px-4 py-3 font-medium">
+                      {c.isAssignable ? (
+                        <Link to={`/pricing-contracts/${c.id}`} className="text-green-600 hover:underline">
+                          {c.name}
+                        </Link>
+                      ) : (
+                        c.name
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-gray-600">{c.ownerLabel}</td>
                     <td className="px-4 py-3 text-gray-600">{c.itemCount}</td>
                     <td className="px-4 py-3 text-right">
@@ -752,12 +760,20 @@ const PricingContractsPage = () => {
                           </button>
                         )}
                         {c.isAssignable && (
-                          <Link
-                            to="/accounts"
-                            className="text-green-600 hover:underline flex items-center gap-1"
-                          >
-                            <Users className="w-4 h-4" /> Assign
-                          </Link>
+                          <>
+                            <Link
+                              to={`/pricing-contracts/${c.id}`}
+                              className="text-green-600 hover:underline flex items-center gap-1"
+                            >
+                              Verify items
+                            </Link>
+                            <Link
+                              to="/accounts"
+                              className="text-green-600 hover:underline flex items-center gap-1"
+                            >
+                              <Users className="w-4 h-4" /> Assign
+                            </Link>
+                          </>
                         )}
                         <button
                           onClick={() => handleDelete(c.id, c.name)}

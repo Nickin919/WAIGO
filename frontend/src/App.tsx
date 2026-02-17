@@ -34,6 +34,7 @@ import AccountsPage from './pages/accounts/AccountsPage';
 import AccountDetailPage from './pages/accounts/AccountDetailPage';
 import MyPriceContractsPage from './pages/assignments/MyPriceContractsPage';
 import PricingContractsPage from './pages/management/PricingContractsPage';
+import PriceContractDetailPage from './pages/management/PriceContractDetailPage';
 import ActivityPage from './pages/management/ActivityPage';
 import ProductFinder from './pages/public/ProductFinder';
 import BomCrossReference from './pages/public/BomCrossReference';
@@ -128,6 +129,7 @@ function App() {
         <Route path="/assignments" element={<AssignmentsRedirect />} />
         <Route path="/managed-users" element={<Navigate to="/accounts" replace />} />
         <Route path="/pricing-contracts" element={<PricingContractsPage />} />
+        <Route path="/pricing-contracts/:id" element={<PriceContractDetailPage />} />
         <Route path="/cost-tables" element={<Navigate to="/pricing-contracts" replace />} />
         <Route path="/team" element={<Navigate to="/dashboard" replace />} />
         <Route path="/activity" element={<ActivityPage />} />
