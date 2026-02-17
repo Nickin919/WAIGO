@@ -94,7 +94,12 @@ export const getById = async (req: AuthRequest, res: Response): Promise<void> =>
     const contract = await prisma.priceContract.findUnique({
       where: { id },
       include: {
-        items: { include: { part: { select: { id: true, partNumber: true, series: true, description: true, basePrice: true } } } },
+        items: {
+          include: {
+            part: { select: { id: true, partNumber: true, series: true, description: true, basePrice: true } },
+            category: { select: { id: true, name: true } },
+          },
+        },
         createdBy: { select: { id: true, firstName: true, lastName: true } },
       },
     });
@@ -309,21 +314,21 @@ export const uploadPDF = async (req: AuthRequest, res: Response): Promise<void> 
 
     for (const row of parseResult.rows) {
       try {
-        // Extract price (remove $ and commas)
-        const priceStr = row.price.replace(/[$,]/g, '').trim();
-        const costPrice = parseFloat(priceStr);
+        // Determine if this is a series discount or product
+        const isSeriesDiscount = !row.partNumber && row.series;
 
-        if (isNaN(costPrice)) {
+        // Extract price (series discounts use 0; products require a valid price)
+        const priceStr = row.price.replace(/[$,]/g, '').trim();
+        const costPrice = priceStr ? parseFloat(priceStr) : 0;
+        if (!isSeriesDiscount && isNaN(costPrice)) {
           skipped.push({ row, reason: 'Invalid price' });
           continue;
         }
+        const finalCostPrice = isSeriesDiscount ? 0 : costPrice;
 
         // Extract discount if present
         const discountStr = row.discount.replace(/%/g, '').trim();
         const discountPercent = discountStr ? parseFloat(discountStr) : null;
-
-        // Determine if this is a series discount or product
-        const isSeriesDiscount = !row.partNumber && row.series;
 
         // For products: try to find matching part by part number
         let partId: string | null = null;
@@ -335,14 +340,30 @@ export const uploadPDF = async (req: AuthRequest, res: Response): Promise<void> 
           partId = part?.id || null;
         }
 
+        // For series discounts: try to match series to a category (by category name = series number)
+        let categoryId: string | null = null;
+        if (isSeriesDiscount && row.series) {
+          const category = await prisma.category.findFirst({
+            where: {
+              OR: [
+                { name: row.series },
+                { name: { contains: row.series, mode: 'insensitive' } },
+              ],
+            },
+            select: { id: true },
+          });
+          categoryId = category?.id || null;
+        }
+
         // Create item (store partNumber so we can display it when no matching Part in catalog)
         const item = await prisma.priceContractItem.create({
           data: {
             contractId,
             partId,
             partNumber: !isSeriesDiscount && row.partNumber ? row.partNumber : null,
+            categoryId,
             seriesOrGroup: isSeriesDiscount ? row.series : (row.series || null),
-            costPrice,
+            costPrice: finalCostPrice,
             suggestedSellPrice: null, // User can fill this in later
             discountPercent: discountPercent,
             minQuantity: 1,

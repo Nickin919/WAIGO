@@ -293,6 +293,7 @@ model Category {
   children      Category[] @relation("CategoryHierarchy")
   parts         Part[]
   catalogItems  CatalogItem[] // Categories selected in user catalogs
+  priceContractItems PriceContractItem[]
 
   @@index([catalogId])
   @@index([parentId])
@@ -705,7 +706,8 @@ model PriceContractItem {
   contractId        String    @map("contract_id")
   partId            String?   @map("part_id") // Specific product (when Part exists in catalog)
   partNumber        String?   @map("part_number") // Raw part number from PDF/import when no matching Part
-  seriesOrGroup     String?   @map("series_or_group") // Or series/group name
+  categoryId        String?   @map("category_id") // For series discounts: matched category (by name/number)
+  seriesOrGroup     String?   @map("series_or_group") // Series/group name (e.g. "209")
   costPrice         Float     @map("cost_price")
   suggestedSellPrice Float?   @map("suggested_sell_price") // Editable by assignees
   discountPercent   Float?    @map("discount_percent")
@@ -716,9 +718,11 @@ model PriceContractItem {
   // Relations
   contract    PriceContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
   part        Part?         @relation(fields: [partId], references: [id], onDelete: SetNull)
+  category    Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([contractId])
   @@index([partId])
+  @@index([categoryId])
   @@index([seriesOrGroup])
   @@map("price_contract_items")
 }

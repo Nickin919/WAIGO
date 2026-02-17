@@ -8,12 +8,14 @@ interface ContractItem {
   id: string;
   partId: string | null;
   partNumber: string | null;
+  categoryId: string | null;
   seriesOrGroup: string | null;
   costPrice: number;
   suggestedSellPrice: number | null;
   discountPercent: number | null;
   minQuantity: number;
   part?: { id: string; partNumber: string; series: string | null; description: string; basePrice: number | null } | null;
+  category?: { id: string; name: string } | null;
 }
 
 interface Contract {
@@ -104,8 +106,14 @@ const PriceContractDetailPage = () => {
     );
   }
 
-  const displayPartNumber = (item: ContractItem) =>
-    item.partNumber ?? (item.part ? item.part.partNumber : null) ?? item.seriesOrGroup ?? '—';
+  const displayPartNumber = (item: ContractItem) => {
+    if (!item.partId && !item.partNumber && item.seriesOrGroup) {
+      const cat = item.category?.name ? ` (Category: ${item.category.name})` : '';
+      const pct = item.discountPercent != null ? `${item.discountPercent}% off` : '';
+      return `Series ${item.seriesOrGroup}${pct ? `: ${pct}` : ''}${cat}`;
+    }
+    return item.partNumber ?? (item.part ? item.part.partNumber : null) ?? item.seriesOrGroup ?? '—';
+  };
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -170,8 +178,10 @@ const PriceContractDetailPage = () => {
                       )}
                     </td>
                     <td className="px-4 py-2 text-right">
-                      {verified || isSeriesDiscount ? (
+                      {verified ? (
                         formatCurrency(item.costPrice)
+                      ) : isSeriesDiscount ? (
+                        '—'
                       ) : (
                         <input
                           type="number"

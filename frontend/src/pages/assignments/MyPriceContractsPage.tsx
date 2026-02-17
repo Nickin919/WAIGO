@@ -8,12 +8,14 @@ interface ContractItem {
   id: string;
   partId: string | null;
   partNumber: string | null;
+  categoryId?: string | null;
   seriesOrGroup: string | null;
   costPrice: number;
   suggestedSellPrice: number | null;
   discountPercent: number | null;
   minQuantity: number;
   part?: { partNumber: string; series: string | null; description: string; basePrice: number | null } | null;
+  category?: { id: string; name: string } | null;
 }
 
 interface Contract {
@@ -136,9 +138,16 @@ const MyPriceContractsPage = () => {
                         return (
                         <tr key={item.id} className="border-t">
                           <td className="px-4 py-2">
-                            {item.partNumber ?? (item.part ? `${item.part.partNumber} ${item.part.series ? `(${item.part.series})` : ''}` : null) ?? item.seriesOrGroup ?? '—'}
+                            {!item.partId && !item.partNumber && item.seriesOrGroup ? (
+                              <span>
+                                Series {item.seriesOrGroup}{item.discountPercent != null ? `: ${item.discountPercent}% off` : ''}
+                                {item.category?.name ? <span className="text-gray-500"> (Category: {item.category.name})</span> : ''}
+                              </span>
+                            ) : (
+                              item.partNumber ?? (item.part ? `${item.part.partNumber} ${item.part.series ? `(${item.part.series})` : ''}` : null) ?? item.seriesOrGroup ?? '—'
+                            )}
                           </td>
-                          <td className="px-4 py-2 text-right text-gray-600">{formatCurrency(item.costPrice)}</td>
+                          <td className="px-4 py-2 text-right text-gray-600">{!item.partId && !item.partNumber && item.seriesOrGroup ? '—' : formatCurrency(item.costPrice)}</td>
                           <td className="px-4 py-2 text-right text-gray-600">{listPrice != null ? formatCurrency(listPrice) : '—'}</td>
                           <td className="px-4 py-2 text-right text-gray-600">{pctOff != null ? <span className="text-green-700 font-medium">{pctOff}%</span> : '—'}</td>
                           <td className="px-4 py-2 text-right text-gray-600">{item.discountPercent != null ? `${item.discountPercent}%` : '—'}</td>
