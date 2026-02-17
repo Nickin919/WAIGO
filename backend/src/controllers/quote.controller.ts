@@ -217,7 +217,6 @@ export const createQuote = async (req: AuthRequest, res: Response): Promise<void
         ? contractItems.find(
             (ci) =>
               ci.partId === part.id ||
-              (ci.seriesOrGroup && (part.series || part.partNumber || '').toUpperCase().includes((ci.seriesOrGroup as string).toUpperCase())) ||
               (ci.seriesOrGroup && (part.partNumber || '').toUpperCase() === (ci.seriesOrGroup as string).toUpperCase())
           )
         : null;
@@ -379,7 +378,6 @@ export const updateQuote = async (req: AuthRequest, res: Response): Promise<void
         ? contractItems.find(
             (ci) =>
               ci.partId === part.id ||
-              (ci.seriesOrGroup && (part.series || part.partNumber || '').toUpperCase().includes((ci.seriesOrGroup as string).toUpperCase())) ||
               (ci.seriesOrGroup && (part.partNumber || '').toUpperCase() === (ci.seriesOrGroup as string).toUpperCase())
           )
         : null;

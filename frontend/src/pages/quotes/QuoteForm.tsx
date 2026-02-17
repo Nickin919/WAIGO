@@ -281,15 +281,11 @@ const QuoteForm = () => {
     return 100 * (1 / factor - 1);
   };
 
+  /** Match contract item only by exact partId or exact part number (no broad series substring match). */
   const findContractItem = (part: Part): PriceContractItemRow | null => {
     if (!contractDetails?.items?.length) return null;
     const byPart = contractDetails.items.find((i) => i.partId === part.id);
     if (byPart) return byPart;
-    const series = (part.series || part.partNumber || '').toUpperCase();
-    const bySeries = contractDetails.items.find(
-      (i) => i.seriesOrGroup && series.includes((i.seriesOrGroup as string).toUpperCase())
-    );
-    if (bySeries) return bySeries;
     const byPartNumber = contractDetails.items.find(
       (i) => i.seriesOrGroup && (part.partNumber || '').toUpperCase() === (i.seriesOrGroup as string).toUpperCase()
     );
