@@ -270,12 +270,16 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
       const total = it.lineTotal;
       const sym = it.isCostAffected ? '*' : it.isSellAffected ? '†' : '';
       const symColor = it.isSellAffected ? '#059669' : '#6b7280';
+      const partNumWithGap = pn + (sym ? '   ' : ''); // extra space before * or † for readability
 
       const rowY = y;
       doc.rect(MARGIN, rowY, CONTENT_WIDTH, ROW_HEIGHT).fill(i % 2 === 0 ? '#ffffff' : '#f9fafb');
       doc.fillColor('#1f2937').fontSize(10);
-      doc.text(pn + (sym ? ' ' : ''), COL.part + 4, rowY + 4);
-      if (sym) doc.fillColor(symColor).text(sym, COL.part + 44, rowY + 4);
+      doc.text(partNumWithGap, COL.part + 4, rowY + 4);
+      if (sym) {
+        const symX = COL.part + 4 + doc.widthOfString(partNumWithGap);
+        doc.fillColor(symColor).text(sym, symX, rowY + 4);
+      }
       doc.fillColor('#1f2937').text(desc.slice(0, 34), COL.desc + 4, rowY + 4);
       doc.text(String(it.quantity), COL.qty, rowY + 4, { width: COL_WIDTHS.qty, align: 'right' });
       doc.text('$' + price.toFixed(2), COL.price, rowY + 4, { width: COL_WIDTHS.price, align: 'right' });
@@ -285,14 +289,6 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     }
 
     row(8);
-    const legendY = y;
-    doc.fontSize(10).fillColor('#6b7280');
-    doc.text('*', COL.part, legendY).fillColor('#6b7280');
-    doc.text(' Cost affected by SPA/discount    ', MARGIN + 12, legendY);
-    doc.fillColor('#059669').text('†', MARGIN + 178, legendY);
-    doc.fillColor('#6b7280').text(' Sell price from pricing contract', MARGIN + 190, legendY);
-    doc.moveTo(MARGIN, legendY + 14).lineTo(COL.end, legendY + 14).strokeColor('#e5e7eb').stroke();
-    row(20);
 
     doc.moveTo(MARGIN, y).lineTo(COL.end, y).strokeColor('#059669').lineWidth(2).stroke();
     row(12);
