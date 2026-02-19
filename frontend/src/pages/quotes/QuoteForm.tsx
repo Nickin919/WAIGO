@@ -158,13 +158,14 @@ const QuoteForm = () => {
       });
   }, [user?.catalogId]);
 
-  // When a price contract is selected, load its items for applying pricing
+  // When a price contract is selected, load its items and immediately refresh line pricing with the new data
   useEffect(() => {
     if (!priceContractId) {
       setContractDetails(null);
+      setItems((current) => refreshItemsPricing(current, '', null));
       return;
     }
-    setContractDetails(null); // clear so refresh does not use previous contract's items
+    setContractDetails(null);
     priceContractApi.getById(priceContractId).then((res) => {
       const contract = res.data as { items?: { id: string; partId: string | null; seriesOrGroup: string | null; costPrice: number; suggestedSellPrice: number | null; discountPercent: number | null; minQuantity: number }[] };
       const items = (contract.items || []).map((i) => ({
@@ -176,43 +177,14 @@ const QuoteForm = () => {
         discountPercent: i.discountPercent ?? null,
         minQuantity: i.minQuantity ?? 1,
       }));
-      setContractDetails({ contractId: priceContractId, items });
-    }).catch(() => setContractDetails(null));
-  }, [priceContractId]);
-
-  // When price contract selection (or contract details) changes, refresh pricing for all line items.
-  // Only refresh when selected contract has no details (standard pricing) or when loaded details match selected contract.
-  useEffect(() => {
-    if (priceContractId && (!contractDetails || contractDetails.contractId !== priceContractId)) return;
-    setItems((current) => {
-      if (current.length === 0) return current;
-      return current.map((item) => {
-        const partLike: Part = { id: item.partId, partNumber: item.productPartNumber, series: item.productSeries ?? null, description: '' };
-        const contractItem = findContractItem(partLike);
-        const contractApplies = Boolean(priceContractId && contractItem && item.quantity >= contractItem.minQuantity);
-        let discountPct = 0;
-        let marginPct = 0;
-        let costPrice: number | undefined;
-        let discountLocked = false;
-        let isSellAffected = false;
-        if (contractApplies) {
-          costPrice = contractItem.costPrice;
-          discountPct = contractItem.discountPercent ?? (item.productPrice > 0 ? (1 - costPrice / item.productPrice) * 100 : 0);
-          discountLocked = true;
-          if (contractItem.suggestedSellPrice != null && costPrice > 0) {
-            marginPct = (contractItem.suggestedSellPrice / costPrice - 1) * 100;
-          }
-          isSellAffected = contractItem.suggestedSellPrice != null;
-        } else {
-          discountPct = item.distributorDiscount ?? 0;
-          marginPct = marginToKeepSellEqualToList(discountPct);
-          costPrice = undefined;
-        }
-        const isCostAffected = contractApplies; // * only for items on the selected contract
-        return { ...item, discountPct, marginPct, costPrice, discountLocked, isCostAffected, isSellAffected };
-      });
+      const contractId = priceContractId;
+      setContractDetails({ contractId, items });
+      setItems((current) => refreshItemsPricing(current, contractId, items));
+    }).catch(() => {
+      setContractDetails(null);
+      setItems((current) => refreshItemsPricing(current, '', null));
     });
-  }, [priceContractId, contractDetails]);
+  }, [priceContractId]);
 
   useEffect(() => {
     if (isEdit && quoteId) {
@@ -325,6 +297,53 @@ const QuoteForm = () => {
       (i) => i.seriesOrGroup && (part.partNumber || '').toUpperCase() === (i.seriesOrGroup as string).toUpperCase()
     );
     return byPartNumber ?? null;
+  };
+
+  /** Match contract item from an explicit items array (used when refreshing so we use the just-loaded data). */
+  const findContractItemInList = (contractItems: PriceContractItemRow[], part: { id: string; partNumber: string }): PriceContractItemRow | null => {
+    if (!contractItems?.length) return null;
+    const byPart = contractItems.find((i) => i.partId === part.id);
+    if (byPart) return byPart;
+    const byPartNumber = contractItems.find(
+      (i) => i.seriesOrGroup && (part.partNumber || '').toUpperCase() === (i.seriesOrGroup as string).toUpperCase()
+    );
+    return byPartNumber ?? null;
+  };
+
+  /** Recompute pricing for all line items given current contract selection and (optional) just-loaded contract items. */
+  const refreshItemsPricing = (
+    currentItems: LineItem[],
+    selectedContractId: string,
+    contractItems: PriceContractItemRow[] | null
+  ): LineItem[] => {
+    if (currentItems.length === 0) return currentItems;
+    return currentItems.map((item) => {
+      const partLike = { id: item.partId, partNumber: item.productPartNumber };
+      const contractItem = selectedContractId && contractItems
+        ? findContractItemInList(contractItems, partLike)
+        : null;
+      const contractApplies = Boolean(selectedContractId && contractItem && item.quantity >= contractItem.minQuantity);
+      let discountPct = 0;
+      let marginPct = 0;
+      let costPrice: number | undefined;
+      let discountLocked = false;
+      let isSellAffected = false;
+      if (contractApplies) {
+        costPrice = contractItem!.costPrice;
+        discountPct = contractItem!.discountPercent ?? (item.productPrice > 0 ? (1 - costPrice! / item.productPrice) * 100 : 0);
+        discountLocked = true;
+        if (contractItem!.suggestedSellPrice != null && costPrice! > 0) {
+          marginPct = (contractItem!.suggestedSellPrice / costPrice! - 1) * 100;
+        }
+        isSellAffected = contractItem!.suggestedSellPrice != null;
+      } else {
+        discountPct = item.distributorDiscount ?? 0;
+        marginPct = marginToKeepSellEqualToList(discountPct);
+        costPrice = undefined;
+      }
+      const isCostAffected = contractApplies;
+      return { ...item, discountPct, marginPct, costPrice, discountLocked, isCostAffected, isSellAffected };
+    });
   };
 
   /** Resolve list price and min qty from MASTER catalog (by part number); falls back to part when master not found or same catalog */
