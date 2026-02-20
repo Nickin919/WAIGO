@@ -288,7 +288,7 @@ const QuoteForm = () => {
     if (discountPct <= 0) return 0;
     const factor = 1 - discountPct / 100;
     if (factor <= 0) return 0;
-    return 100 * (1 / factor - 1);
+    return Math.round(100 * (1 / factor - 1) * 10) / 10;
   };
 
   /** Match contract item by partId, exact seriesOrGroup/partNumber, partPartNumber, or series prefix (e.g. seriesOrGroup "751" matches partNumber "751-9301"). */
@@ -349,10 +349,10 @@ const QuoteForm = () => {
       let isSellAffected = false;
       if (contractApplies) {
         costPrice = contractItem!.costPrice;
-        discountPct = contractItem!.discountPercent ?? (item.productPrice > 0 ? (1 - costPrice! / item.productPrice) * 100 : 0);
+        discountPct = Math.round((contractItem!.discountPercent ?? (item.productPrice > 0 ? (1 - costPrice! / item.productPrice) * 100 : 0)) * 10) / 10;
         discountLocked = true;
         if (contractItem!.suggestedSellPrice != null && costPrice! > 0) {
-          marginPct = (contractItem!.suggestedSellPrice / costPrice! - 1) * 100;
+          marginPct = Math.round((contractItem!.suggestedSellPrice / costPrice! - 1) * 100 * 10) / 10;
         }
         isSellAffected = contractItem!.suggestedSellPrice != null;
       } else {
@@ -397,10 +397,10 @@ const QuoteForm = () => {
 
     if (contractApplies) {
       costPrice = contractItem.costPrice;
-      defaultDisc = contractItem.discountPercent ?? (listPrice > 0 ? (1 - costPrice / listPrice) * 100 : 0);
+      defaultDisc = Math.round((contractItem.discountPercent ?? (listPrice > 0 ? (1 - costPrice / listPrice) * 100 : 0)) * 10) / 10;
       discountLocked = true;
       if (contractItem.suggestedSellPrice != null && costPrice > 0) {
-        marginPct = (contractItem.suggestedSellPrice / costPrice - 1) * 100;
+        marginPct = Math.round((contractItem.suggestedSellPrice / costPrice - 1) * 100 * 10) / 10;
       }
     } else {
       defaultDisc = part.distributorDiscount ?? 0;
@@ -441,10 +441,10 @@ const QuoteForm = () => {
 
     if (contractApplies) {
       costPrice = contractItem.costPrice;
-      defaultDisc = contractItem.discountPercent ?? (listPrice > 0 ? (1 - costPrice / listPrice) * 100 : 0);
+      defaultDisc = Math.round((contractItem.discountPercent ?? (listPrice > 0 ? (1 - costPrice / listPrice) * 100 : 0)) * 10) / 10;
       discountLocked = true;
       if (contractItem.suggestedSellPrice != null && costPrice > 0) {
-        marginPct = (contractItem.suggestedSellPrice / costPrice - 1) * 100;
+        marginPct = Math.round((contractItem.suggestedSellPrice / costPrice - 1) * 100 * 10) / 10;
       }
     } else {
       defaultDisc = part.distributorDiscount ?? 0;
@@ -1008,7 +1008,7 @@ const QuoteForm = () => {
                     <th className="px-5 py-3 min-w-[140px]">
                       <div className="flex items-center gap-3 justify-end">
                         <input type="checkbox" checked={allDiscountSelected} ref={discountSelectAllRef} onChange={toggleDiscountSelectAll} className="rounded border-gray-300 shrink-0" title="Select all" />
-                        <input type="number" min={0} max={100} step={0.5} value={bulkDiscountValue} onChange={(e) => { const v = e.target.value; setBulkDiscountValue(v); const n = parseFloat(v); if (!isNaN(n)) applyBulkDiscount(n); }} placeholder="Apply %" className="input py-2 w-24 text-right text-base" title="Apply to selected" />
+                        <input type="number" min={0} max={100} step="any" value={bulkDiscountValue} onChange={(e) => { const v = e.target.value; setBulkDiscountValue(v); const n = parseFloat(v); if (!isNaN(n)) applyBulkDiscount(n); }} placeholder="Apply %" className="input py-2 w-24 text-right text-base" title="Apply to selected" />
                       </div>
                       <div className="text-xs font-normal text-gray-500 mt-1">Disc %</div>
                     </th>
@@ -1017,7 +1017,7 @@ const QuoteForm = () => {
                     <th className="px-5 py-3 min-w-[140px]">
                       <div className="flex items-center gap-3 justify-end">
                         <input type="checkbox" checked={allMarginSelected} ref={marginSelectAllRef} onChange={toggleMarginSelectAll} className="rounded border-gray-300 shrink-0" title="Select all" />
-                        <input type="number" min={0} step={0.5} value={bulkMarginValue} onChange={(e) => { const v = e.target.value; setBulkMarginValue(v); const n = parseFloat(v); if (!isNaN(n)) applyBulkMargin(n); }} placeholder="Apply %" className="input py-2 w-24 text-right text-base" title="Apply to selected" />
+                        <input type="number" min={0} step="any" value={bulkMarginValue} onChange={(e) => { const v = e.target.value; setBulkMarginValue(v); const n = parseFloat(v); if (!isNaN(n)) applyBulkMargin(n); }} placeholder="Apply %" className="input py-2 w-24 text-right text-base" title="Apply to selected" />
                       </div>
                       <div className="text-xs font-normal text-gray-500 mt-1">Margin %</div>
                     </th>
@@ -1045,7 +1045,7 @@ const QuoteForm = () => {
                       <td className="px-5 py-3 min-w-[140px]">
                         <div className="flex items-center gap-3 justify-end">
                           <input type="checkbox" checked={!!item.discountSelected} onChange={() => toggleDiscountSelected(idx)} disabled={!!item.discountLocked} className="rounded border-gray-300 shrink-0" title={item.discountLocked ? 'Locked by price contract' : undefined} />
-                          <input type="number" min={0} max={100} step={0.5} value={item.discountPct} onChange={(e) => updateItem(idx, { discountPct: parseFloat(e.target.value) || 0 })} className="input py-2 w-24 text-right text-base tabular-nums" disabled={!!item.discountLocked} title={item.discountLocked ? 'Locked by price contract' : undefined} readOnly={!!item.discountLocked} />
+                          <input type="number" min={0} max={100} step="any" value={item.discountPct} onChange={(e) => updateItem(idx, { discountPct: parseFloat(e.target.value) || 0 })} className="input py-2 w-24 text-right text-base tabular-nums" disabled={!!item.discountLocked} title={item.discountLocked ? 'Locked by price contract' : undefined} readOnly={!!item.discountLocked} />
                         </div>
                       </td>
                     )}
@@ -1053,7 +1053,7 @@ const QuoteForm = () => {
                       <td className="px-5 py-3 min-w-[140px]">
                         <div className="flex items-center gap-3 justify-end">
                           <input type="checkbox" checked={!!item.marginSelected} onChange={() => toggleMarginSelected(idx)} className="rounded border-gray-300 shrink-0" />
-                          <input type="number" min={0} step={0.5} value={item.marginPct} onChange={(e) => updateItem(idx, { marginPct: parseFloat(e.target.value) || 0 })} className="input py-2 w-24 text-right text-base tabular-nums" />
+                          <input type="number" min={0} step="any" value={item.marginPct} onChange={(e) => updateItem(idx, { marginPct: parseFloat(e.target.value) || 0 })} className="input py-2 w-24 text-right text-base tabular-nums" />
                         </div>
                       </td>
                     )}
