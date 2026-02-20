@@ -7,16 +7,6 @@ import { quoteApi, catalogApi, customerApi, partApi, assignmentsApi, priceContra
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 
-// #region agent log
-const _debugLog = (location: string, message: string, data: Record<string, unknown>, hypothesisId: string) => {
-  fetch('http://127.0.0.1:7242/ingest/3b168631-beca-4109-b9fb-808d8bac595c', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6057ea' },
-    body: JSON.stringify({ sessionId: '6057ea', location, message, data, timestamp: Date.now(), hypothesisId }),
-  }).catch(() => {});
-};
-// #endregion
-
 interface LineItem {
   partId: string;
   productSeries: string;
@@ -190,13 +180,6 @@ const QuoteForm = () => {
         discountPercent: i.discountPercent ?? null,
         minQuantity: i.minQuantity ?? 1,
       }));
-      // #region agent log
-      _debugLog('QuoteForm.tsx:contractFetch', 'Contract items loaded', {
-        total: items.length,
-        sample: items.slice(0, 10).map((it) => ({ seriesOrGroup: it.seriesOrGroup, partPartNumber: it.partPartNumber, partId: it.partId })),
-        rawFirst3: (contract.items || []).slice(0, 3).map((r: any) => ({ partId: r.partId, partNumber: r.partNumber, seriesOrGroup: r.seriesOrGroup, part: r.part })),
-      }, 'H1');
-      // #endregion
       const contractId = priceContractId;
       setContractDetails({ contractId, items });
       setItems((current) => refreshItemsPricing(current, contractId, items));
@@ -341,19 +324,6 @@ const QuoteForm = () => {
       const s = (i.seriesOrGroup as string).toUpperCase();
       return partNumUpper === s || partNumUpper.startsWith(s + '-');
     });
-    // #region agent log
-    if (!bySeriesOrGroup) {
-      _debugLog('QuoteForm.tsx:findContractItemInList', 'No match for part', {
-        partNumber: part.partNumber,
-        partNumUpper,
-        contractSample: contractItems.slice(0, 8).map((i) => ({
-          seriesOrGroup: i.seriesOrGroup,
-          partPartNumber: i.partPartNumber,
-          seriesCheck: i.seriesOrGroup ? { s: (i.seriesOrGroup as string).toUpperCase(), prefix: (i.seriesOrGroup as string).toUpperCase() + '-', startsWith: partNumUpper.startsWith((i.seriesOrGroup as string).toUpperCase() + '-') } : null,
-        })),
-      }, 'H2');
-    }
-    // #endregion
     return bySeriesOrGroup ?? null;
   };
 
@@ -364,13 +334,6 @@ const QuoteForm = () => {
     contractItems: PriceContractItemRow[] | null
   ): LineItem[] => {
     if (currentItems.length === 0) return currentItems;
-    // #region agent log
-    _debugLog('QuoteForm.tsx:refreshItemsPricing', 'Refresh entry', {
-      selectedContractId: selectedContractId || '(empty)',
-      contractItemsLength: contractItems?.length ?? 0,
-      linePartNumbers: currentItems.map((i) => i.productPartNumber),
-    }, 'H3');
-    // #endregion
     let matchCount = 0;
     const result = currentItems.map((item) => {
       const partLike = { id: item.partId, partNumber: item.productPartNumber };
