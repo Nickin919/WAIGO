@@ -7,6 +7,16 @@ import { quoteApi, catalogApi, customerApi, partApi, assignmentsApi, priceContra
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 
+// #region agent log
+const _debugLog = (location: string, message: string, data: Record<string, unknown>, hypothesisId: string) => {
+  fetch('http://127.0.0.1:7242/ingest/3b168631-beca-4109-b9fb-808d8bac595c', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '6057ea' },
+    body: JSON.stringify({ sessionId: '6057ea', location, message, data, timestamp: Date.now(), hypothesisId }),
+  }).catch(() => {});
+};
+// #endregion
+
 interface LineItem {
   partId: string;
   productSeries: string;
@@ -59,6 +69,8 @@ interface PriceContractItemRow {
   id: string;
   partId: string | null;
   seriesOrGroup: string | null;
+  /** Part number from linked part (API part.partNumber); used to match when quote part is from a different catalog than contract part */
+  partPartNumber?: string | null;
   costPrice: number;
   suggestedSellPrice: number | null;
   discountPercent: number | null;
@@ -167,16 +179,24 @@ const QuoteForm = () => {
     }
     setContractDetails(null);
     priceContractApi.getById(priceContractId).then((res) => {
-      const contract = res.data as { items?: { id: string; partId: string | null; seriesOrGroup: string | null; costPrice: number; suggestedSellPrice: number | null; discountPercent: number | null; minQuantity: number }[] };
+      const contract = res.data as { items?: { id: string; partId: string | null; partNumber: string | null; seriesOrGroup: string | null; costPrice: number; suggestedSellPrice: number | null; discountPercent: number | null; minQuantity: number; part?: { partNumber?: string } }[] };
       const items = (contract.items || []).map((i) => ({
         id: i.id,
         partId: i.partId ?? null,
         seriesOrGroup: i.seriesOrGroup ?? null,
+        partPartNumber: i.part?.partNumber ?? i.partNumber ?? null,
         costPrice: i.costPrice,
         suggestedSellPrice: i.suggestedSellPrice ?? null,
         discountPercent: i.discountPercent ?? null,
         minQuantity: i.minQuantity ?? 1,
       }));
+      // #region agent log
+      _debugLog('QuoteForm.tsx:contractFetch', 'Contract items loaded', {
+        total: items.length,
+        sample: items.slice(0, 10).map((it) => ({ seriesOrGroup: it.seriesOrGroup, partPartNumber: it.partPartNumber, partId: it.partId })),
+        rawFirst3: (contract.items || []).slice(0, 3).map((r: any) => ({ partId: r.partId, partNumber: r.partNumber, seriesOrGroup: r.seriesOrGroup, part: r.part })),
+      }, 'H1');
+      // #endregion
       const contractId = priceContractId;
       setContractDetails({ contractId, items });
       setItems((current) => refreshItemsPricing(current, contractId, items));
@@ -288,26 +308,53 @@ const QuoteForm = () => {
     return 100 * (1 / factor - 1);
   };
 
-  /** Match contract item only by exact partId or exact part number (no broad series substring match). */
+  /** Match contract item by partId, exact seriesOrGroup/partNumber, partPartNumber, or series prefix (e.g. seriesOrGroup "751" matches partNumber "751-9301"). */
   const findContractItem = (part: Part): PriceContractItemRow | null => {
     if (!contractDetails?.items?.length) return null;
+    const partNumUpper = (part.partNumber || '').toUpperCase();
     const byPart = contractDetails.items.find((i) => i.partId === part.id);
     if (byPart) return byPart;
-    const byPartNumber = contractDetails.items.find(
-      (i) => i.seriesOrGroup && (part.partNumber || '').toUpperCase() === (i.seriesOrGroup as string).toUpperCase()
+    const byPartPartNumber = contractDetails.items.find(
+      (i) => i.partPartNumber && partNumUpper === (i.partPartNumber as string).toUpperCase()
     );
-    return byPartNumber ?? null;
+    if (byPartPartNumber) return byPartPartNumber;
+    const bySeriesOrGroup = contractDetails.items.find((i) => {
+      if (!i.seriesOrGroup) return false;
+      const s = (i.seriesOrGroup as string).toUpperCase();
+      return partNumUpper === s || partNumUpper.startsWith(s + '-');
+    });
+    return bySeriesOrGroup ?? null;
   };
 
   /** Match contract item from an explicit items array (used when refreshing so we use the just-loaded data). */
   const findContractItemInList = (contractItems: PriceContractItemRow[], part: { id: string; partNumber: string }): PriceContractItemRow | null => {
     if (!contractItems?.length) return null;
+    const partNumUpper = (part.partNumber || '').toUpperCase();
     const byPart = contractItems.find((i) => i.partId === part.id);
     if (byPart) return byPart;
-    const byPartNumber = contractItems.find(
-      (i) => i.seriesOrGroup && (part.partNumber || '').toUpperCase() === (i.seriesOrGroup as string).toUpperCase()
+    const byPartPartNumber = contractItems.find(
+      (i) => i.partPartNumber && partNumUpper === (i.partPartNumber as string).toUpperCase()
     );
-    return byPartNumber ?? null;
+    if (byPartPartNumber) return byPartPartNumber;
+    const bySeriesOrGroup = contractItems.find((i) => {
+      if (!i.seriesOrGroup) return false;
+      const s = (i.seriesOrGroup as string).toUpperCase();
+      return partNumUpper === s || partNumUpper.startsWith(s + '-');
+    });
+    // #region agent log
+    if (!bySeriesOrGroup) {
+      _debugLog('QuoteForm.tsx:findContractItemInList', 'No match for part', {
+        partNumber: part.partNumber,
+        partNumUpper,
+        contractSample: contractItems.slice(0, 8).map((i) => ({
+          seriesOrGroup: i.seriesOrGroup,
+          partPartNumber: i.partPartNumber,
+          seriesCheck: i.seriesOrGroup ? { s: (i.seriesOrGroup as string).toUpperCase(), prefix: (i.seriesOrGroup as string).toUpperCase() + '-', startsWith: partNumUpper.startsWith((i.seriesOrGroup as string).toUpperCase() + '-') } : null,
+        })),
+      }, 'H2');
+    }
+    // #endregion
+    return bySeriesOrGroup ?? null;
   };
 
   /** Recompute pricing for all line items given current contract selection and (optional) just-loaded contract items. */
@@ -317,12 +364,21 @@ const QuoteForm = () => {
     contractItems: PriceContractItemRow[] | null
   ): LineItem[] => {
     if (currentItems.length === 0) return currentItems;
-    return currentItems.map((item) => {
+    // #region agent log
+    _debugLog('QuoteForm.tsx:refreshItemsPricing', 'Refresh entry', {
+      selectedContractId: selectedContractId || '(empty)',
+      contractItemsLength: contractItems?.length ?? 0,
+      linePartNumbers: currentItems.map((i) => i.productPartNumber),
+    }, 'H3');
+    // #endregion
+    let matchCount = 0;
+    const result = currentItems.map((item) => {
       const partLike = { id: item.partId, partNumber: item.productPartNumber };
       const contractItem = selectedContractId && contractItems
         ? findContractItemInList(contractItems, partLike)
         : null;
       const contractApplies = Boolean(selectedContractId && contractItem && item.quantity >= contractItem.minQuantity);
+      if (contractApplies) matchCount++;
       let discountPct = 0;
       let marginPct = 0;
       let costPrice: number | undefined;
@@ -344,6 +400,7 @@ const QuoteForm = () => {
       const isCostAffected = contractApplies;
       return { ...item, discountPct, marginPct, costPrice, discountLocked, isCostAffected, isSellAffected };
     });
+    return result;
   };
 
   /** Resolve list price and min qty from MASTER catalog (by part number); falls back to part when master not found or same catalog */
