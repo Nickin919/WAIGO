@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, AlertTriangle, RefreshCw, Trash2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle, AlertTriangle, RefreshCw, Trash2, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { priceContractApi } from '@/lib/api';
+import { useAuthStore } from '@/stores/authStore';
+import { effectiveRole } from '@/lib/quoteConstants';
 
 interface ContractItem {
   id: string;
@@ -38,11 +40,18 @@ function pctOff(listPrice: number, contractPrice: number): number | null {
 
 const PriceContractDetailPage = () => {
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuthStore();
+  const role = user?.role ? effectiveRole(user.role) : null;
+  const canRename = role === 'ADMIN' || role === 'RSM';
+
   const [contract, setContract] = useState<Contract | null>(null);
   const [loading, setLoading] = useState(true);
   const [edits, setEdits] = useState<Record<string, { partNumber: string; costPrice: string }>>({});
   const [recheckingId, setRecheckingId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -108,6 +117,37 @@ const PriceContractDetailPage = () => {
     }
   };
 
+  const startRename = () => {
+    setRenameValue(contract?.name ?? '');
+    setEditingName(true);
+  };
+
+  const cancelRename = () => {
+    setEditingName(false);
+    setRenameValue('');
+  };
+
+  const saveRename = async () => {
+    if (!id || !contract) return;
+    const name = renameValue.trim();
+    if (!name) {
+      toast.error('Name is required');
+      return;
+    }
+    setSavingName(true);
+    try {
+      await priceContractApi.update(id, { name });
+      setContract((prev) => (prev ? { ...prev, name } : null));
+      setEditingName(false);
+      setRenameValue('');
+      toast.success('Contract renamed');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to rename');
+    } finally {
+      setSavingName(false);
+    }
+  };
+
   if (loading || !contract) {
     return (
       <div className="p-6">
@@ -142,7 +182,41 @@ const PriceContractDetailPage = () => {
       </div>
 
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">{contract.name}</h1>
+        <div className="flex items-center gap-3 flex-wrap">
+          {editingName ? (
+            <>
+              <input
+                type="text"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && saveRename()}
+                placeholder="Contract name"
+                className="input text-2xl font-bold max-w-md"
+                autoFocus
+              />
+              <button onClick={saveRename} disabled={savingName} className="btn btn-primary">
+                {savingName ? 'Saving…' : 'Save'}
+              </button>
+              <button onClick={cancelRename} disabled={savingName} className="btn bg-gray-200">
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl font-bold">{contract.name}</h1>
+              {canRename && (
+                <button
+                  type="button"
+                  onClick={startRename}
+                  className="text-green-600 hover:text-green-800 hover:underline flex items-center gap-1 text-sm font-normal"
+                  title="Rename contract"
+                >
+                  <Pencil className="w-4 h-5" /> Rename
+                </button>
+              )}
+            </>
+          )}
+        </div>
         {contract.description && <p className="text-gray-600 mt-1">{contract.description}</p>}
         <p className="text-sm text-gray-500 mt-2">
           Verify each item against the master catalog. Items not found can be edited and rechecked.
