@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, FolderOpen, Download, Trash2, Upload, FileSpreadsheet, FileText, AlertTriangle, CheckCircle, X, Users } from 'lucide-react';
+import { Plus, FolderOpen, Download, Trash2, Upload, FileSpreadsheet, FileText, AlertTriangle, CheckCircle, X, Users, FileStack } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { costTableApi, priceContractApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
@@ -45,6 +45,16 @@ const PricingContractsPage = () => {
     stats?: { totalLinesProcessed?: number; productRows?: number; discountRows?: number };
     parseDebug?: { rawTextLength: number; linesCount: number; usedPages: boolean; last200Chars: string; last3ProductPartNumbers: string[] };
   } | null>(null);
+
+  // Batch import: multiple PDFs → one contract per PDF (Admin/RSM only)
+  const [batchFiles, setBatchFiles] = useState<File[] | null>(null);
+  const [batchImporting, setBatchImporting] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
+  const [batchResult, setBatchResult] = useState<{
+    created: string[];
+    failed: Array<{ name: string; error: string }>;
+  } | null>(null);
+  const batchFileInputRef = useRef<HTMLInputElement>(null);
 
   const role = user?.role ? effectiveRole(user.role) : null;
   const canManage = role && ['DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'].includes(role);
@@ -325,6 +335,63 @@ const PricingContractsPage = () => {
       .catch(() => toast.error('Download failed'));
   };
 
+  const onBatchFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    const pdfs = Array.from(files).filter((f) => f.name.toLowerCase().endsWith('.pdf'));
+    if (pdfs.length < files.length) {
+      toast('Only PDF files are used. Non-PDF files were ignored.', { icon: 'ℹ️' });
+    }
+    setBatchFiles(pdfs.length ? pdfs : null);
+    setBatchResult(null);
+    e.target.value = '';
+  };
+
+  const startBatchImport = async () => {
+    if (!batchFiles?.length || !isAssignableMode) return;
+    setBatchImporting(true);
+    setBatchProgress({ current: 0, total: batchFiles.length });
+    const created: string[] = [];
+    const failed: Array<{ name: string; error: string }> = [];
+
+    for (let i = 0; i < batchFiles.length; i++) {
+      const file = batchFiles[i];
+      setBatchProgress({ current: i + 1, total: batchFiles.length });
+      const contractName = file.name.replace(/\.pdf$/i, '').trim() || file.name;
+      try {
+        const createRes = await priceContractApi.create({
+          name: contractName,
+          description: undefined,
+        });
+        const contractId = createRes.data?.id;
+        if (!contractId) {
+          failed.push({ name: file.name, error: 'Create did not return contract ID' });
+          continue;
+        }
+        const formData = new FormData();
+        formData.append('pdf', file);
+        await priceContractApi.uploadPdf(contractId, formData);
+        created.push(contractName);
+      } catch (err: unknown) {
+        const errData = (err as { response?: { data?: { error?: string } } })?.response?.data;
+        const message = errData?.error ?? (err instanceof Error ? err.message : 'Unknown error');
+        failed.push({ name: file.name, error: message });
+      }
+    }
+
+    setBatchResult({ created, failed });
+    setBatchImporting(false);
+    setBatchProgress(null);
+    setBatchFiles(null);
+    loadContracts();
+    if (created.length > 0) {
+      toast.success(`Created ${created.length} contract${created.length > 1 ? 's' : ''}: ${created.slice(0, 3).join(', ')}${created.length > 3 ? ` and ${created.length - 3} more` : ''}`);
+    }
+    if (failed.length > 0) {
+      toast.error(`${failed.length} failed: ${failed.map((f) => f.name).join(', ')}`);
+    }
+  };
+
   const onDrop = useCallback(
     (e: React.DragEvent, targetId?: string) => {
       e.preventDefault();
@@ -599,9 +666,64 @@ const PricingContractsPage = () => {
     );
   }
 
+  const BatchResultModal = () => {
+    if (!batchResult) return null;
+    const { created, failed } = batchResult;
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-900">Batch import complete</h3>
+            <button onClick={() => setBatchResult(null)} className="text-gray-400 hover:text-gray-600">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          {created.length > 0 && (
+            <div className="mb-4">
+              <p className="text-sm font-medium text-green-700 mb-1">
+                Created {created.length} contract{created.length > 1 ? 's' : ''}:
+              </p>
+              <ul className="text-sm text-gray-600 list-disc list-inside max-h-32 overflow-y-auto">
+                {created.map((name, i) => (
+                  <li key={i}>{name}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {failed.length > 0 && (
+            <div className="mb-4">
+              <p className="text-sm font-medium text-red-700 mb-1">
+                Failed {failed.length} file{failed.length > 1 ? 's' : ''}:
+              </p>
+              <ul className="text-sm text-gray-600 space-y-1 max-h-32 overflow-y-auto">
+                {failed.map((f, i) => (
+                  <li key={i}>
+                    <span className="font-medium">{f.name}</span>: {f.error}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <button onClick={() => setBatchResult(null)} className="btn btn-primary w-full">
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <UploadResultsModal />
+      <BatchResultModal />
+      <input
+        ref={batchFileInputRef}
+        type="file"
+        accept=".pdf"
+        multiple
+        className="hidden"
+        onChange={onBatchFilesSelected}
+      />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Pricing Contracts</h1>
@@ -613,13 +735,24 @@ const PricingContractsPage = () => {
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           {isAssignableMode && (
-            <Link
-              to="/accounts"
-              className="btn bg-green-700 hover:bg-green-800 text-white flex items-center gap-2 w-fit"
-            >
-              <Users className="w-5 h-5" />
-              Assign to users
-            </Link>
+            <>
+              <button
+                type="button"
+                onClick={() => batchFileInputRef.current?.click()}
+                disabled={batchImporting}
+                className="btn bg-green-700 hover:bg-green-800 text-white flex items-center gap-2 w-fit disabled:opacity-60"
+              >
+                <FileStack className="w-5 h-5" />
+                Import multiple PDFs
+              </button>
+              <Link
+                to="/accounts"
+                className="btn bg-green-700 hover:bg-green-800 text-white flex items-center gap-2 w-fit"
+              >
+                <Users className="w-5 h-5" />
+                Assign to users
+              </Link>
+            </>
           )}
           <button
             onClick={() => setShowCreate(true)}
@@ -630,6 +763,45 @@ const PricingContractsPage = () => {
           </button>
         </div>
       </div>
+
+      {isAssignableMode && batchImporting && batchProgress && (
+        <div className="card p-4 mb-6 bg-green-50 border border-green-200">
+          <p className="text-green-800 font-medium">
+            Importing {batchProgress.current} of {batchProgress.total}…
+          </p>
+          <div className="mt-2 h-2 bg-green-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-green-600 transition-all duration-300"
+              style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {isAssignableMode && batchFiles && batchFiles.length > 0 && !batchImporting && (
+        <div className="card p-4 mb-6">
+          <p className="font-medium text-gray-800 mb-2">
+            {batchFiles.length} PDF{batchFiles.length > 1 ? 's' : ''} selected
+          </p>
+          <ul className="text-sm text-gray-600 list-disc list-inside mb-4 max-h-24 overflow-y-auto">
+            {batchFiles.map((f, i) => (
+              <li key={i}>{f.name}</li>
+            ))}
+          </ul>
+          <div className="flex gap-2">
+            <button onClick={startBatchImport} className="btn btn-primary">
+              Import {batchFiles.length} PDF{batchFiles.length > 1 ? 's' : ''}
+            </button>
+            <button
+              type="button"
+              onClick={() => setBatchFiles(null)}
+              className="btn bg-gray-200 hover:bg-gray-300"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
 
       {showCreate && (
         <div className="card p-6 mb-6">
