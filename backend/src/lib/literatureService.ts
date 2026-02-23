@@ -317,27 +317,31 @@ export async function updateAssociations(
   literatureId: string,
   partNumbers: string[],
   seriesNames: string[]
-) {
+): Promise<{ literature: any; unresolvedParts: string[] }> {
   // Resolve part numbers → IDs (match either catalog partNumber or wagoIdent/article number)
   const partIds: string[] = [];
+  const unresolvedParts: string[] = [];
   for (const pn of partNumbers) {
+    const trimmed = pn.trim();
+    if (!trimmed) continue;
     const part = await prisma.part.findFirst({
       where: {
         OR: [
-          { partNumber: pn.trim() },
-          { wagoIdent: pn.trim() },
+          { partNumber: trimmed },
+          { wagoIdent: trimmed },
         ],
       },
       select: { id: true },
     });
     if (part) partIds.push(part.id);
+    else unresolvedParts.push(trimmed);
   }
 
   if (partIds.length > MAX_PARTS || seriesNames.length > MAX_SERIES) {
     throw new Error(`Maximum ${MAX_PARTS} parts and ${MAX_SERIES} series per item`);
   }
 
-  return prisma.$transaction(async (tx) => {
+  const literature = await prisma.$transaction(async (tx) => {
     await tx.literaturePart.deleteMany({ where: { literatureId } });
     await tx.literatureSeries.deleteMany({ where: { literatureId } });
     if (partIds.length) {
@@ -357,6 +361,8 @@ export async function updateAssociations(
       include: { parts: { include: { part: { select: { id: true, partNumber: true } } } }, series: true },
     });
   });
+
+  return { literature, unresolvedParts };
 }
 
 const literatureInclude = {

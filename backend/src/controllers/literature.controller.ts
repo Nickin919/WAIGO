@@ -126,9 +126,9 @@ export const patchLiteratureAssociations = async (req: AuthRequest, res: Respons
     const partNumbers = parseList(req.body.partNumbers);
     const seriesNames = parseList(req.body.seriesNames);
 
-    const literature = await updateAssociations(id, partNumbers, seriesNames);
-    if (!literature) { res.status(404).json({ error: 'Literature not found' }); return; }
-    res.json(literature);
+    const result = await updateAssociations(id, partNumbers, seriesNames);
+    if (!result.literature) { res.status(404).json({ error: 'Literature not found' }); return; }
+    res.json({ literature: result.literature, unresolvedParts: result.unresolvedParts });
   } catch (error) {
     console.error('Update associations error:', error);
     const message = error instanceof Error ? error.message : 'Failed to update associations';

@@ -61,13 +61,15 @@ function EditModal({ item, onClose, onSaved }: EditModalProps) {
     industryTags: item.industryTags.join(', '),
   });
   const [saving, setSaving] = useState(false);
+  const [unresolvedParts, setUnresolvedParts] = useState<string[]>([]);
 
   const handleSave = async () => {
     if (!form.title.trim()) { toast.error('Title is required'); return; }
     setSaving(true);
+    setUnresolvedParts([]);
     try {
       const splitList = (s: string) => s.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean);
-      await Promise.all([
+      const [, assocResult] = await Promise.all([
         literatureApi.updateMetadata(item.id, {
           title: form.title.trim(),
           description: form.description.trim() || undefined,
@@ -80,9 +82,17 @@ function EditModal({ item, onClose, onSaved }: EditModalProps) {
           seriesNames: splitList(form.seriesNames),
         }),
       ]);
-      toast.success('Saved');
-      onSaved();
-      onClose();
+      const unresolved: string[] = (assocResult.data as any)?.unresolvedParts ?? [];
+      if (unresolved.length > 0) {
+        setUnresolvedParts(unresolved);
+        toast.success('Saved — but some part numbers were not found (see below)');
+        onSaved();
+        // Don't close — keep modal open so admin can see the warning
+      } else {
+        toast.success('Saved');
+        onSaved();
+        onClose();
+      }
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Save failed');
     } finally {
@@ -129,11 +139,31 @@ function EditModal({ item, onClose, onSaved }: EditModalProps) {
             <TagInput value={form.industryTags} onChange={(v) => setForm((f) => ({ ...f, industryTags: v }))} placeholder="Automation, Panel Building, Rail" />
           </div>
         </div>
+        {unresolvedParts.length > 0 && (
+          <div className="mx-6 mb-2 p-3 rounded-lg bg-amber-50 border border-amber-300">
+            <p className="text-sm font-semibold text-amber-800 mb-1">
+              ⚠ {unresolvedParts.length} part number{unresolvedParts.length !== 1 ? 's' : ''} not found in catalog
+            </p>
+            <p className="text-xs text-amber-700 mb-1">
+              These numbers were not matched to any part in the database and were not saved:
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {unresolvedParts.map((pn) => (
+                <code key={pn} className="px-1.5 py-0.5 bg-amber-100 text-amber-900 rounded text-xs font-mono">{pn}</code>
+              ))}
+            </div>
+            <p className="text-xs text-amber-600 mt-2">
+              Check that these numbers exist in the product catalog, or add them as keywords instead.
+            </p>
+          </div>
+        )}
         <div className="flex justify-end gap-3 p-6 border-t">
-          <button onClick={onClose} className="btn bg-gray-100">Cancel</button>
+          <button onClick={onClose} className="btn bg-gray-100">
+            {unresolvedParts.length > 0 ? 'Close' : 'Cancel'}
+          </button>
           <button onClick={handleSave} disabled={saving} className="btn btn-primary flex items-center gap-2 disabled:opacity-60">
             {saving ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Check className="w-4 h-4" />}
-            Save Changes
+            {unresolvedParts.length > 0 ? 'Save Again' : 'Save Changes'}
           </button>
         </div>
       </div>
@@ -155,6 +185,7 @@ export default function LiteratureLibrary() {
   });
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadUnresolved, setUploadUnresolved] = useState<string[]>([]);
 
   // Library list
   const [items, setItems] = useState<LitItem[]>([]);
@@ -215,6 +246,7 @@ export default function LiteratureLibrary() {
     e.preventDefault();
     if (!uploadForm.title.trim() || !uploadFile) { toast.error('Title and PDF file are required'); return; }
     setUploading(true);
+    setUploadUnresolved([]);
     try {
       const splitList = (s: string) => s.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean);
       const formData = new FormData();
@@ -228,8 +260,10 @@ export default function LiteratureLibrary() {
       splitList(uploadForm.industryTags).forEach((t) => formData.append('industryTags', t));
 
       const { data } = await literatureApi.upload(formData);
-      if (data.unresolvedParts?.length) {
-        toast.success(`Uploaded. Note: ${data.unresolvedParts.length} part number(s) not found in catalog: ${data.unresolvedParts.join(', ')}`);
+      const unresolved: string[] = data.unresolvedParts ?? [];
+      if (unresolved.length > 0) {
+        setUploadUnresolved(unresolved);
+        toast.success('Uploaded — check part number warnings below');
       } else {
         toast.success('Literature uploaded successfully');
       }
@@ -384,10 +418,30 @@ export default function LiteratureLibrary() {
                 {uploading
                   ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   : <Upload className="w-4 h-4" />}
-                {uploading ? 'Uploading...' : 'Upload'}
-              </button>
-            </form>
-          </div>
+              {uploading ? 'Uploading...' : 'Upload'}
+            </button>
+
+            {uploadUnresolved.length > 0 && (
+              <div className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-300">
+                <p className="text-sm font-semibold text-amber-800 mb-1">
+                  ⚠ {uploadUnresolved.length} part number{uploadUnresolved.length !== 1 ? 's' : ''} not found in catalog
+                </p>
+                <p className="text-xs text-amber-700 mb-2">
+                  These were not linked to the uploaded document:
+                </p>
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {uploadUnresolved.map((pn) => (
+                    <code key={pn} className="px-1.5 py-0.5 bg-amber-100 text-amber-900 rounded text-xs font-mono">{pn}</code>
+                  ))}
+                </div>
+                <p className="text-xs text-amber-600">
+                  Use the Edit button on the uploaded item to re-enter these once confirmed, or add them as keywords.
+                </p>
+                <button onClick={() => setUploadUnresolved([])} className="mt-2 text-xs text-amber-700 underline">Dismiss</button>
+              </div>
+            )}
+          </form>
+        </div>
 
           {/* Export & Bulk */}
           <div className="card p-6">
