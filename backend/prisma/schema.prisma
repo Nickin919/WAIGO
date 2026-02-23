@@ -682,14 +682,19 @@ model QuoteDiscount {
 // ============================================================================
 
 model PriceContract {
-  id          String    @id @default(uuid())
-  name        String
-  description String?   @db.Text
-  validFrom   DateTime? @map("valid_from")
-  validTo     DateTime? @map("valid_to")
-  createdById String    @map("created_by_id")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  id             String    @id @default(uuid())
+  name           String
+  description    String?   @db.Text
+  quoteNumber    String?   @map("quote_number")
+  quoteCore      String?   @map("quote_core")
+  quoteYear      String?   @map("quote_year")
+  quotePrefix    String?   @map("quote_prefix")
+  quoteRevision  String?   @map("quote_revision")
+  validFrom      DateTime? @map("valid_from")
+  validTo        DateTime? @map("valid_to")
+  createdById    String    @map("created_by_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   // Relations
   createdBy   User      @relation(fields: [createdById], references: [id])
@@ -698,6 +703,7 @@ model PriceContract {
   quotes      Quote[]
 
   @@index([createdById])
+  @@index([quoteCore, quoteYear])
   @@map("price_contracts")
 }
 
@@ -711,6 +717,7 @@ model PriceContractItem {
   costPrice         Float     @map("cost_price")
   suggestedSellPrice Float?   @map("suggested_sell_price") // Editable by assignees
   discountPercent   Float?    @map("discount_percent")
+  moq               String?  @map("moq") // Display string e.g. "1", "1-99"
   minQuantity       Int       @default(1) @map("min_quantity")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")

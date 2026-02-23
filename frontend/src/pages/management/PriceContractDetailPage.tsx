@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, AlertTriangle, RefreshCw, Trash2, Pencil } from 'lucide-react';
+import { ArrowLeft, CheckCircle, AlertTriangle, RefreshCw, Trash2, Pencil, Download, FileArchive } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { priceContractApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
@@ -15,6 +15,7 @@ interface ContractItem {
   costPrice: number;
   suggestedSellPrice: number | null;
   discountPercent: number | null;
+  moq: string | null;
   minQuantity: number;
   part?: { id: string; partNumber: string; series: string | null; description: string; basePrice: number | null } | null;
   category?: { id: string; name: string } | null;
@@ -24,6 +25,7 @@ interface Contract {
   id: string;
   name: string;
   description: string | null;
+  quoteNumber: string | null;
   validFrom: string | null;
   validTo: string | null;
   items: ContractItem[];
@@ -46,12 +48,35 @@ const PriceContractDetailPage = () => {
 
   const [contract, setContract] = useState<Contract | null>(null);
   const [loading, setLoading] = useState(true);
-  const [edits, setEdits] = useState<Record<string, { partNumber: string; costPrice: string }>>({});
+  const [edits, setEdits] = useState<Record<string, { partNumber: string; costPrice: string; moq?: string; suggestedSellPrice?: string }>>({});
   const [recheckingId, setRecheckingId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [savingName, setSavingName] = useState(false);
+  const [editingQuoteNumber, setEditingQuoteNumber] = useState(false);
+  const [quoteNumberValue, setQuoteNumberValue] = useState('');
+  const [savingQuoteNumber, setSavingQuoteNumber] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkMoqValue, setBulkMoqValue] = useState('');
+  const [bulkMarginPercent, setBulkMarginPercent] = useState('');
+  const [bulkSuggestedSell, setBulkSuggestedSell] = useState('');
+  const [applyingBulk, setApplyingBulk] = useState(false);
+  const [savingItemId, setSavingItemId] = useState<string | null>(null);
+  const [downloadingCsv, setDownloadingCsv] = useState(false);
+  const [downloadingZip, setDownloadingZip] = useState(false);
+
+  const productRows = contract?.items.filter((i) => i.partNumber || i.partId) ?? [];
+  const allProductIds = productRows.map((i) => i.id);
+  const isAllSelected = allProductIds.length > 0 && allProductIds.every((pid) => selectedIds.has(pid));
+  const toggleSelectAll = () => {
+    if (isAllSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(allProductIds));
+  };
+  const refreshContract = useCallback(() => {
+    if (!id) return;
+    priceContractApi.getById(id).then((res) => setContract(res.data as Contract)).catch(() => toast.error('Failed to refresh'));
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -148,6 +173,157 @@ const PriceContractDetailPage = () => {
     }
   };
 
+  const startEditQuoteNumber = () => {
+    setQuoteNumberValue(contract?.quoteNumber ?? '');
+    setEditingQuoteNumber(true);
+  };
+  const saveQuoteNumber = async () => {
+    if (!id || !contract) return;
+    setSavingQuoteNumber(true);
+    try {
+      await priceContractApi.update(id, { quoteNumber: quoteNumberValue.trim() || undefined });
+      setContract((prev) => (prev ? { ...prev, quoteNumber: quoteNumberValue.trim() || null } : null));
+      setEditingQuoteNumber(false);
+      setQuoteNumberValue('');
+      toast.success('Quote number updated');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to update quote number');
+    } finally {
+      setSavingQuoteNumber(false);
+    }
+  };
+
+  const handleBulkMoq = async () => {
+    if (!id || selectedIds.size === 0 || !bulkMoqValue.trim()) {
+      toast.error('Select at least one item and enter an MOQ');
+      return;
+    }
+    setApplyingBulk(true);
+    try {
+      await priceContractApi.bulkMoq(id, { itemIds: Array.from(selectedIds), moq: bulkMoqValue.trim() });
+      refreshContract();
+      toast.success('MOQ applied');
+      setBulkMoqValue('');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to apply MOQ');
+    } finally {
+      setApplyingBulk(false);
+    }
+  };
+
+  const handleBulkSellPrice = async () => {
+    if (!id || selectedIds.size === 0) {
+      toast.error('Select at least one item');
+      return;
+    }
+    const margin = bulkMarginPercent.trim() ? parseFloat(bulkMarginPercent) : NaN;
+    const fixed = bulkSuggestedSell.trim() ? parseFloat(bulkSuggestedSell) : NaN;
+    if (Number.isNaN(margin) && Number.isNaN(fixed)) {
+      toast.error('Enter margin % or suggested sell price');
+      return;
+    }
+    setApplyingBulk(true);
+    try {
+      await priceContractApi.bulkSellPrice(id, {
+        itemIds: Array.from(selectedIds),
+        ...(Number.isNaN(margin) ? {} : { marginPercent: margin }),
+        ...(Number.isNaN(fixed) ? {} : { suggestedSellPrice: fixed }),
+      });
+      refreshContract();
+      toast.success('Suggested sell applied');
+      setBulkMarginPercent('');
+      setBulkSuggestedSell('');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to apply');
+    } finally {
+      setApplyingBulk(false);
+    }
+  };
+
+  const saveItemMoq = async (item: ContractItem, value: string) => {
+    if (!id) return;
+    setSavingItemId(item.id);
+    try {
+      const res = await priceContractApi.updateItem(id, item.id, { moq: value.trim() || undefined });
+      setContract((prev) =>
+        prev ? { ...prev, items: prev.items.map((i) => (i.id === item.id ? (res.data as ContractItem) : i)) } : null
+      );
+      setEdits((prev) => {
+        const next = { ...prev };
+        if (next[item.id]) {
+          delete next[item.id].moq;
+          if (Object.keys(next[item.id]).length === 0) delete next[item.id];
+        }
+        return next;
+      });
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to save MOQ');
+    } finally {
+      setSavingItemId(null);
+    }
+  };
+
+  const saveItemSuggestedSell = async (item: ContractItem, value: string) => {
+    if (!id) return;
+    const num = value.trim() === '' ? null : parseFloat(value);
+    if (value.trim() !== '' && Number.isNaN(num!)) return;
+    setSavingItemId(item.id);
+    try {
+      const res = await priceContractApi.updateItem(id, item.id, { suggestedSellPrice: num ?? undefined });
+      setContract((prev) =>
+        prev ? { ...prev, items: prev.items.map((i) => (i.id === item.id ? (res.data as ContractItem) : i)) } : null
+      );
+      setEdits((prev) => {
+        const next = { ...prev };
+        if (next[item.id]) {
+          delete next[item.id].suggestedSellPrice;
+          if (Object.keys(next[item.id]).length === 0) delete next[item.id];
+        }
+        return next;
+      });
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to save');
+    } finally {
+      setSavingItemId(null);
+    }
+  };
+
+  const handleDownloadCsv = () => {
+    if (!id) return;
+    setDownloadingCsv(true);
+    priceContractApi
+      .downloadCsv(id)
+      .then((res) => {
+        const url = URL.createObjectURL(new Blob([res.data]));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `price-contract-${contract?.name.replace(/\s+/g, '-') ?? id}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast.success('Download started');
+      })
+      .catch(() => toast.error('Download failed'))
+      .finally(() => setDownloadingCsv(false));
+  };
+
+  const handleDownloadQuoteFamily = () => {
+    if (!id) return;
+    setDownloadingZip(true);
+    priceContractApi
+      .downloadQuoteFamily(id)
+      .then((res) => {
+        const url = URL.createObjectURL(new Blob([res.data]));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `quote-family-${contract?.quoteNumber ?? id}.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast.success('Download started');
+      })
+      .catch((e: any) => toast.error(e.response?.data?.error || 'Download failed'))
+      .finally(() => setDownloadingZip(false));
+  };
+
   if (loading || !contract) {
     return (
       <div className="p-6">
@@ -218,8 +394,68 @@ const PriceContractDetailPage = () => {
           )}
         </div>
         {contract.description && <p className="text-gray-600 mt-1">{contract.description}</p>}
+        <div className="mt-4 flex flex-wrap items-center gap-6 text-sm">
+          <div>
+            <span className="text-gray-500">Quote #:</span>{' '}
+            {editingQuoteNumber ? (
+              <span className="inline-flex items-center gap-2">
+                <input
+                  type="text"
+                  value={quoteNumberValue}
+                  onChange={(e) => setQuoteNumberValue(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && saveQuoteNumber()}
+                  className="input py-1 w-32"
+                  autoFocus
+                />
+                <button onClick={saveQuoteNumber} disabled={savingQuoteNumber} className="btn btn-primary text-xs py-1">
+                  Save
+                </button>
+                <button onClick={() => { setEditingQuoteNumber(false); setQuoteNumberValue(''); }} className="btn bg-gray-200 text-xs py-1">
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <>
+                {contract.quoteNumber ? <span className="font-mono">{contract.quoteNumber}</span> : '—'}
+                {canRename && (
+                  <button type="button" onClick={startEditQuoteNumber} className="ml-1 text-green-600 hover:underline">
+                    Edit
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+          <div>
+            <span className="text-gray-500">Date:</span>{' '}
+            {contract.validFrom ? new Date(contract.validFrom).toLocaleDateString() : '—'}
+          </div>
+          <div>
+            <span className="text-gray-500">Expires:</span>{' '}
+            {contract.validTo ? (
+              new Date(contract.validTo) < new Date() ? (
+                <span className="text-red-600 font-medium">{new Date(contract.validTo).toLocaleDateString()} (expired)</span>
+              ) : (
+                new Date(contract.validTo).toLocaleDateString()
+              )
+            ) : (
+              '—'
+            )}
+          </div>
+          {canRename && (
+            <div className="flex gap-2">
+              <button onClick={handleDownloadCsv} disabled={downloadingCsv} className="btn bg-gray-100 text-sm py-1.5 flex items-center gap-1">
+                <Download className="w-4 h-4" /> {downloadingCsv ? '…' : 'Download CSV'}
+              </button>
+              {contract.quoteNumber && (
+                <button onClick={handleDownloadQuoteFamily} disabled={downloadingZip} className="btn bg-gray-100 text-sm py-1.5 flex items-center gap-1">
+                  <FileArchive className="w-4 h-4" /> {downloadingZip ? '…' : 'Quote family ZIP'}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
         <p className="text-sm text-gray-500 mt-2">
-          Verify each item against the master catalog. Items not found can be edited and rechecked.
+          Verify each item against the master catalog. Select product rows to apply MOQ or suggested sell in bulk.
         </p>
       </div>
 
@@ -228,8 +464,59 @@ const PriceContractDetailPage = () => {
           <table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-2 py-3 text-left font-medium text-gray-700 w-10">
+                  {productRows.length > 0 && (
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      onChange={toggleSelectAll}
+                      className="rounded"
+                    />
+                  )}
+                </th>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Part Number / Series</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-700">Cost (Contract)</th>
+                <th className="px-4 py-3 text-right font-medium text-gray-700">
+                  <div className="flex flex-col gap-1">
+                    <span>MOQ</span>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        placeholder="e.g. 1"
+                        value={bulkMoqValue}
+                        onChange={(e) => setBulkMoqValue(e.target.value)}
+                        className="input py-1 w-14 text-right text-xs"
+                      />
+                      <button onClick={handleBulkMoq} disabled={applyingBulk || selectedIds.size === 0} className="btn btn-primary text-xs py-0.5">
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-right font-medium text-gray-700">
+                  <div className="flex flex-col gap-1">
+                    <span>Suggested Sell</span>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <input
+                        type="text"
+                        placeholder="Margin %"
+                        value={bulkMarginPercent}
+                        onChange={(e) => setBulkMarginPercent(e.target.value)}
+                        className="input py-1 w-16 text-right text-xs"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Price"
+                        value={bulkSuggestedSell}
+                        onChange={(e) => setBulkSuggestedSell(e.target.value)}
+                        className="input py-1 w-20 text-right text-xs"
+                      />
+                      <button onClick={handleBulkSellPrice} disabled={applyingBulk || selectedIds.size === 0} className="btn btn-primary text-xs py-0.5">
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                </th>
                 <th className="px-4 py-3 text-right font-medium text-gray-700">List Price</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-700">% Off List</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-700">Discount %</th>
@@ -247,11 +534,33 @@ const PriceContractDetailPage = () => {
                 const costEdit = edits[item.id]?.costPrice ?? String(item.costPrice);
                 const unverifiedProduct = !verified && !isSeriesDiscount;
 
+                const isProductRow = !!(item.partNumber || item.partId);
+                const moqDisplay = item.moq ?? String(item.minQuantity);
+                const moqEdit = edits[item.id]?.moq ?? moqDisplay;
+                const suggestedEdit = edits[item.id]?.suggestedSellPrice ?? (item.suggestedSellPrice != null ? String(item.suggestedSellPrice) : '');
+
                 return (
                   <tr
                     key={item.id}
                     className={unverifiedProduct ? 'bg-amber-50/80' : ''}
                   >
+                    <td className="px-2 py-2">
+                      {isProductRow ? (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(item.id)}
+                          onChange={() => {
+                            setSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(item.id)) next.delete(item.id);
+                              else next.add(item.id);
+                              return next;
+                            });
+                          }}
+                          className="rounded"
+                        />
+                      ) : null}
+                    </td>
                     <td className="px-4 py-2">
                       {verified || isSeriesDiscount ? (
                         <span className="font-mono">{displayPartNumber(item)}</span>
@@ -289,6 +598,61 @@ const PriceContractDetailPage = () => {
                           }
                           className="input py-1 w-24 text-right"
                         />
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {isProductRow ? (
+                        savingItemId === item.id ? (
+                          <span className="text-gray-400">Saving…</span>
+                        ) : (
+                          <input
+                            type="text"
+                            value={moqEdit}
+                            onChange={(e) => setEdits((prev) => ({ ...prev, [item.id]: { ...prev[item.id], partNumber: partNumEdit, costPrice: costEdit, moq: e.target.value } }))}
+                            onBlur={() => {
+                              const v = edits[item.id]?.moq ?? moqDisplay;
+                              if (v !== moqDisplay) saveItemMoq(item, v);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                const v = edits[item.id]?.moq ?? moqDisplay;
+                                if (v !== moqDisplay) saveItemMoq(item, v);
+                              }
+                            }}
+                            className="input py-1 w-14 text-right text-xs"
+                          />
+                        )
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {isProductRow ? (
+                        savingItemId === item.id ? (
+                          <span className="text-gray-400">Saving…</span>
+                        ) : (
+                          <input
+                            type="text"
+                            value={suggestedEdit}
+                            onChange={(e) => setEdits((prev) => ({ ...prev, [item.id]: { ...prev[item.id], partNumber: partNumEdit, costPrice: costEdit, suggestedSellPrice: e.target.value } }))}
+                            onBlur={() => {
+                              const v = edits[item.id]?.suggestedSellPrice ?? (item.suggestedSellPrice != null ? String(item.suggestedSellPrice) : '');
+                              const prevStr = item.suggestedSellPrice != null ? String(item.suggestedSellPrice) : '';
+                              if (v !== prevStr) saveItemSuggestedSell(item, v);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                const v = edits[item.id]?.suggestedSellPrice ?? (item.suggestedSellPrice != null ? String(item.suggestedSellPrice) : '');
+                                const prevStr = item.suggestedSellPrice != null ? String(item.suggestedSellPrice) : '';
+                                if (v !== prevStr) saveItemSuggestedSell(item, v);
+                              }
+                            }}
+                            placeholder="—"
+                            className="input py-1 w-20 text-right text-xs"
+                          />
+                        )
+                      ) : (
+                        '—'
                       )}
                     </td>
                     <td className="px-4 py-2 text-right text-gray-600">

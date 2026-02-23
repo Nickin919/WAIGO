@@ -20,16 +20,32 @@ interface ContractRow {
   description: string | null;
   ownerLabel: string;
   itemCount: number;
-  isAssignable: boolean; // true when from PriceContract (ADMIN/RSM)
+  isAssignable: boolean;
+  quoteNumber?: string | null;
+  validFrom?: string | null;
+  validTo?: string | null;
+}
+
+/** By-quote list response */
+interface ByQuoteGroup {
+  quoteKey: string;
+  quoteCore: string | null;
+  quoteYear: string | null;
+  contracts: ContractRow[];
 }
 
 const PricingContractsPage = () => {
   const { user } = useAuthStore();
   const [contracts, setContracts] = useState<ContractRow[]>([]);
+  const [listView, setListView] = useState<'by-name' | 'by-quote'>('by-name');
+  const [byQuoteData, setByQuoteData] = useState<{ groups: ByQuoteGroup[]; ungrouped: ContractRow[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [newQuoteNumber, setNewQuoteNumber] = useState('');
+  const [newValidFrom, setNewValidFrom] = useState('');
+  const [newValidTo, setNewValidTo] = useState('');
   const [creating, setCreating] = useState(false);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -61,30 +77,59 @@ const PricingContractsPage = () => {
   /** ADMIN/RSM see and manage assignable PriceContracts (same ones used in Accounts) */
   const isAssignableMode = role === 'ADMIN' || role === 'RSM';
 
+  const mapContractToRow = (c: {
+    id: string;
+    name: string;
+    description?: string | null;
+    quoteNumber?: string | null;
+    validFrom?: string | null;
+    validTo?: string | null;
+    createdBy?: { firstName?: string | null; lastName?: string | null; email?: string | null };
+    _count?: { items: number };
+  }): ContractRow => ({
+    id: c.id,
+    name: c.name,
+    description: c.description ?? null,
+    quoteNumber: c.quoteNumber ?? null,
+    validFrom: c.validFrom ?? null,
+    validTo: c.validTo ?? null,
+    ownerLabel: c.createdBy
+      ? [c.createdBy.firstName, c.createdBy.lastName].filter(Boolean).join(' ') || c.createdBy.email || '—'
+      : '—',
+    itemCount: c._count?.items ?? 0,
+    isAssignable: true,
+  });
+
   const loadContracts = useCallback(() => {
     if (!canManage) return;
     setLoading(true);
     if (isAssignableMode) {
+      const params = listView === 'by-quote' ? { view: 'by-quote' } : undefined;
       priceContractApi
-        .list()
+        .list(params)
         .then((res) => {
-          const data = Array.isArray(res.data) ? res.data : [];
-          setContracts(
-            data.map((c: { id: string; name: string; description?: string | null; createdBy?: { firstName?: string | null; lastName?: string | null; email?: string | null }; _count?: { items: number } }) => ({
-              id: c.id,
-              name: c.name,
-              description: c.description ?? null,
-              ownerLabel: c.createdBy
-                ? [c.createdBy.firstName, c.createdBy.lastName].filter(Boolean).join(' ') || c.createdBy.email || '—'
-                : '—',
-              itemCount: c._count?.items ?? 0,
-              isAssignable: true,
-            }))
-          );
+          if (res.data && typeof res.data === 'object' && 'view' in res.data && res.data.view === 'by-quote') {
+            const d = res.data as { groups: ByQuoteGroup[]; ungrouped: unknown[] };
+            setByQuoteData({
+              groups: (d.groups || []).map((g: { quoteKey: string; quoteCore: string | null; quoteYear: string | null; contracts: unknown[] }) => ({
+                quoteKey: g.quoteKey,
+                quoteCore: g.quoteCore,
+                quoteYear: g.quoteYear,
+                contracts: (g.contracts || []).map((c: Record<string, unknown>) => mapContractToRow(c as Parameters<typeof mapContractToRow>[0])),
+              })),
+              ungrouped: (d.ungrouped || []).map((c: Record<string, unknown>) => mapContractToRow(c as Parameters<typeof mapContractToRow>[0])),
+            });
+            setContracts([]);
+          } else {
+            setByQuoteData(null);
+            const data = Array.isArray(res.data) ? res.data : [];
+            setContracts(data.map((c: Record<string, unknown>) => mapContractToRow(c as Parameters<typeof mapContractToRow>[0])));
+          }
         })
         .catch(() => {
           toast.error('Failed to load pricing contracts');
           setContracts([]);
+          setByQuoteData(null);
         })
         .finally(() => setLoading(false));
     } else {
@@ -111,7 +156,7 @@ const PricingContractsPage = () => {
         })
         .finally(() => setLoading(false));
     }
-  }, [canManage, isAssignableMode]);
+  }, [canManage, isAssignableMode, listView]);
 
   useEffect(() => {
     loadContracts();
@@ -135,7 +180,13 @@ const PricingContractsPage = () => {
     }
     setCreating(true);
     const createPromise = isAssignableMode
-      ? priceContractApi.create({ name: newName.trim(), description: newDesc.trim() || undefined })
+      ? priceContractApi.create({
+          name: newName.trim(),
+          description: newDesc.trim() || undefined,
+          quoteNumber: newQuoteNumber.trim() || undefined,
+          validFrom: newValidFrom.trim() || undefined,
+          validTo: newValidTo.trim() || undefined,
+        })
       : costTableApi.create({ name: newName.trim(), description: newDesc.trim() || undefined });
     createPromise
       .then((res) => {
@@ -144,6 +195,9 @@ const PricingContractsPage = () => {
         setShowCreate(false);
         setNewName('');
         setNewDesc('');
+        setNewQuoteNumber('');
+        setNewValidFrom('');
+        setNewValidTo('');
         setCreateDropFile(null);
         toast.success('Pricing contract created');
         loadContracts();
@@ -736,6 +790,22 @@ const PricingContractsPage = () => {
         <div className="flex items-center gap-3 flex-wrap">
           {isAssignableMode && (
             <>
+              <div className="flex rounded-lg border border-gray-300 p-0.5 bg-gray-50">
+                <button
+                  type="button"
+                  onClick={() => setListView('by-name')}
+                  className={`px-3 py-1.5 text-sm rounded-md ${listView === 'by-name' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
+                >
+                  By name
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setListView('by-quote')}
+                  className={`px-3 py-1.5 text-sm rounded-md ${listView === 'by-quote' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
+                >
+                  By Quote #
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => batchFileInputRef.current?.click()}
@@ -835,6 +905,37 @@ const PricingContractsPage = () => {
               onChange={(e) => setNewDesc(e.target.value)}
               className="input w-full"
             />
+            {isAssignableMode && (
+              <>
+                <input
+                  type="text"
+                  placeholder="Quote # (optional)"
+                  value={newQuoteNumber}
+                  onChange={(e) => setNewQuoteNumber(e.target.value)}
+                  className="input w-full"
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date (optional)</label>
+                    <input
+                      type="date"
+                      value={newValidFrom}
+                      onChange={(e) => setNewValidFrom(e.target.value)}
+                      className="input w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Expiration (optional)</label>
+                    <input
+                      type="date"
+                      value={newValidTo}
+                      onChange={(e) => setNewValidTo(e.target.value)}
+                      className="input w-full"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -856,6 +957,9 @@ const PricingContractsPage = () => {
                   setCreateDropFile(null);
                   setNewName('');
                   setNewDesc('');
+                  setNewQuoteNumber('');
+                  setNewValidFrom('');
+                  setNewValidTo('');
                 }}
                 className="btn bg-gray-200"
               >
@@ -871,96 +975,179 @@ const PricingContractsPage = () => {
           <div className="p-12 text-center">
             <div className="w-12 h-12 border-4 border-green-600 border-t-transparent rounded-full animate-spin mx-auto" />
           </div>
-        ) : contracts.length === 0 ? (
-          <div className="p-12 text-center">
-            <FolderOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500">No pricing contracts yet</p>
-            <button onClick={() => setShowCreate(true)} className="btn btn-primary mt-4">
-              Create your first pricing contract
-            </button>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-700">Name</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-700">Owner</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-700">Items</th>
-                  <th className="px-4 py-3 text-right font-medium text-gray-700">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {contracts.map((c) => (
-                  <tr key={c.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium">
-                      {c.isAssignable ? (
-                        <Link to={`/pricing-contracts/${c.id}`} className="text-green-600 hover:underline">
-                          {c.name}
-                        </Link>
-                      ) : (
-                        c.name
+        ) : (() => {
+          const hasByQuote = byQuoteData && (byQuoteData.groups.length > 0 || byQuoteData.ungrouped.length > 0);
+          const hasFlat = contracts.length > 0;
+          if (!hasByQuote && !hasFlat) {
+            return (
+              <div className="p-12 text-center">
+                <FolderOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500">No pricing contracts yet</p>
+                <button onClick={() => setShowCreate(true)} className="btn btn-primary mt-4">
+                  Create your first pricing contract
+                </button>
+              </div>
+            );
+          }
+          const renderContractRow = (c: ContractRow) => (
+            <tr key={c.id} className="hover:bg-gray-50">
+              <td className="px-4 py-3 font-medium">
+                {c.isAssignable ? (
+                  <Link to={`/pricing-contracts/${c.id}`} className="text-green-600 hover:underline">
+                    {c.name}
+                  </Link>
+                ) : (
+                  c.name
+                )}
+              </td>
+              {isAssignableMode && (
+                <>
+                  <td className="px-4 py-3 text-gray-600 font-mono text-xs">{c.quoteNumber ?? '—'}</td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">
+                    {c.validFrom ? new Date(c.validFrom).toLocaleDateString() : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">
+                    {c.validTo ? new Date(c.validTo).toLocaleDateString() : '—'}
+                  </td>
+                </>
+              )}
+              <td className="px-4 py-3 text-gray-600">{c.ownerLabel}</td>
+              <td className="px-4 py-3 text-gray-600">{c.itemCount}</td>
+              <td className="px-4 py-3 text-right">
+                <div className="flex gap-2 justify-end items-center flex-wrap">
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      accept={isAssignableMode ? '.pdf' : '.csv,.pdf'}
+                      className="hidden"
+                      disabled={uploadingId === c.id}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleUploadFile(c.id, f);
+                        e.target.value = '';
+                      }}
+                    />
+                    <span className="text-green-600 hover:underline flex items-center gap-1">
+                      <Upload className="w-4 h-4" />
+                      {uploadingId === c.id ? 'Uploading...' : isAssignableMode ? 'PDF' : 'Upload'}
+                    </span>
+                  </label>
+                  {!c.isAssignable && (
+                    <button
+                      onClick={() => handleDownload(c.id, c.name)}
+                      className="text-green-600 hover:underline flex items-center gap-1"
+                    >
+                      <Download className="w-4 h-4" /> CSV
+                    </button>
+                  )}
+                  {c.isAssignable && (
+                    <>
+                      <Link
+                        to={`/pricing-contracts/${c.id}`}
+                        className="text-green-600 hover:underline flex items-center gap-1"
+                      >
+                        Verify items
+                      </Link>
+                      <Link
+                        to="/accounts"
+                        className="text-green-600 hover:underline flex items-center gap-1"
+                      >
+                        <Users className="w-4 h-4" /> Assign
+                      </Link>
+                    </>
+                  )}
+                  <button
+                    onClick={() => handleDelete(c.id, c.name)}
+                    className="text-red-600 hover:underline flex items-center gap-1"
+                  >
+                    <Trash2 className="w-4 h-4" /> Delete
+                  </button>
+                </div>
+              </td>
+            </tr>
+          );
+          return (
+            <div className="overflow-x-auto">
+              {hasByQuote ? (
+                <div className="divide-y divide-gray-200">
+                  {byQuoteData!.groups.map((g) => (
+                    <div key={g.quoteKey} className="p-4">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                        Quote {[g.quoteCore, g.quoteYear].filter(Boolean).join(' ') || g.quoteKey}
+                      </h3>
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left font-medium text-gray-700">Name</th>
+                            {isAssignableMode && (
+                              <>
+                                <th className="px-4 py-3 text-left font-medium text-gray-700">Quote #</th>
+                                <th className="px-4 py-3 text-left font-medium text-gray-700">Date</th>
+                                <th className="px-4 py-3 text-left font-medium text-gray-700">Expires</th>
+                              </>
+                            )}
+                            <th className="px-4 py-3 text-left font-medium text-gray-700">Owner</th>
+                            <th className="px-4 py-3 text-left font-medium text-gray-700">Items</th>
+                            <th className="px-4 py-3 text-right font-medium text-gray-700">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {g.contracts.map(renderContractRow)}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                  {byQuoteData!.ungrouped.length > 0 && (
+                    <div className="p-4">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-2">No quote number</h3>
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left font-medium text-gray-700">Name</th>
+                            {isAssignableMode && (
+                              <>
+                                <th className="px-4 py-3 text-left font-medium text-gray-700">Quote #</th>
+                                <th className="px-4 py-3 text-left font-medium text-gray-700">Date</th>
+                                <th className="px-4 py-3 text-left font-medium text-gray-700">Expires</th>
+                              </>
+                            )}
+                            <th className="px-4 py-3 text-left font-medium text-gray-700">Owner</th>
+                            <th className="px-4 py-3 text-left font-medium text-gray-700">Items</th>
+                            <th className="px-4 py-3 text-right font-medium text-gray-700">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {byQuoteData!.ungrouped.map(renderContractRow)}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-medium text-gray-700">Name</th>
+                      {isAssignableMode && (
+                        <>
+                          <th className="px-4 py-3 text-left font-medium text-gray-700">Quote #</th>
+                          <th className="px-4 py-3 text-left font-medium text-gray-700">Date</th>
+                          <th className="px-4 py-3 text-left font-medium text-gray-700">Expires</th>
+                        </>
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{c.ownerLabel}</td>
-                    <td className="px-4 py-3 text-gray-600">{c.itemCount}</td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex gap-2 justify-end items-center flex-wrap">
-                        <label className="cursor-pointer">
-                          <input
-                            type="file"
-                            accept={isAssignableMode ? '.pdf' : '.csv,.pdf'}
-                            className="hidden"
-                            disabled={uploadingId === c.id}
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) handleUploadFile(c.id, f);
-                              e.target.value = '';
-                            }}
-                          />
-                          <span className="text-green-600 hover:underline flex items-center gap-1">
-                            <Upload className="w-4 h-4" />
-                            {uploadingId === c.id ? 'Uploading...' : isAssignableMode ? 'PDF' : 'Upload'}
-                          </span>
-                        </label>
-                        {!c.isAssignable && (
-                          <button
-                            onClick={() => handleDownload(c.id, c.name)}
-                            className="text-green-600 hover:underline flex items-center gap-1"
-                          >
-                            <Download className="w-4 h-4" /> CSV
-                          </button>
-                        )}
-                        {c.isAssignable && (
-                          <>
-                            <Link
-                              to={`/pricing-contracts/${c.id}`}
-                              className="text-green-600 hover:underline flex items-center gap-1"
-                            >
-                              Verify items
-                            </Link>
-                            <Link
-                              to="/accounts"
-                              className="text-green-600 hover:underline flex items-center gap-1"
-                            >
-                              <Users className="w-4 h-4" /> Assign
-                            </Link>
-                          </>
-                        )}
-                        <button
-                          onClick={() => handleDelete(c.id, c.name)}
-                          className="text-red-600 hover:underline flex items-center gap-1"
-                        >
-                          <Trash2 className="w-4 h-4" /> Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                      <th className="px-4 py-3 text-left font-medium text-gray-700">Owner</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-700">Items</th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-700">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {contracts.map(renderContractRow)}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

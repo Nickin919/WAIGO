@@ -363,20 +363,26 @@ export const assignmentsApi = {
 // ============================================================================
 
 export const priceContractApi = {
-  list: () => api.get('/price-contracts'),
+  list: (params?: { view?: string }) => api.get('/price-contracts', { params }),
   getById: (id: string) => api.get(`/price-contracts/${id}`),
-  create: (data: { name: string; description?: string; validFrom?: string; validTo?: string }) =>
+  create: (data: { name: string; description?: string; quoteNumber?: string; validFrom?: string; validTo?: string }) =>
     api.post('/price-contracts', data),
-  update: (id: string, data: { name?: string; description?: string; validFrom?: string; validTo?: string }) =>
+  update: (id: string, data: { name?: string; description?: string; quoteNumber?: string; validFrom?: string; validTo?: string }) =>
     api.patch(`/price-contracts/${id}`, data),
   delete: (id: string) => api.delete(`/price-contracts/${id}`),
-  addItems: (contractId: string, items: Array<{ partId?: string; seriesOrGroup?: string; costPrice: number; suggestedSellPrice?: number; discountPercent?: number; minQuantity?: number }>) =>
+  downloadCsv: (id: string) => api.get(`/price-contracts/${id}/download-csv`, { responseType: 'blob' }),
+  downloadQuoteFamily: (id: string) => api.get(`/price-contracts/${id}/download-quote-family`, { responseType: 'blob' }),
+  addItems: (contractId: string, items: Array<{ partId?: string; seriesOrGroup?: string; costPrice: number; suggestedSellPrice?: number; discountPercent?: number; minQuantity?: number; moq?: string }>) =>
     api.post(`/price-contracts/${contractId}/items`, { items }),
   uploadPdf: (contractId: string, formData: FormData) =>
     api.post(`/price-contracts/${contractId}/items/upload-pdf`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  bulkSellPrice: (contractId: string, data: { itemIds: string[]; marginPercent?: number; suggestedSellPrice?: number }) =>
+    api.post(`/price-contracts/${contractId}/items/bulk-sell-price`, data),
+  bulkMoq: (contractId: string, data: { itemIds: string[]; moq: string }) =>
+    api.post(`/price-contracts/${contractId}/items/bulk-moq`, data),
   updateMyContractItems: (contractId: string, items: Array<{ id: string; suggestedSellPrice: number | null }>) =>
     api.patch(`/my/contracts/${contractId}/items`, { items }),
-  updateItem: (contractId: string, itemId: string, data: { partNumber?: string; costPrice?: number }) =>
+  updateItem: (contractId: string, itemId: string, data: { partNumber?: string; costPrice?: number; moq?: string; minQuantity?: number; suggestedSellPrice?: number | null }) =>
     api.patch(`/price-contracts/${contractId}/items/${itemId}`, data),
   removeItem: (contractId: string, itemId: string) =>
     api.delete(`/price-contracts/${contractId}/items/${itemId}`),
