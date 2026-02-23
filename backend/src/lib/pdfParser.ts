@@ -6,23 +6,8 @@
  */
 
 import * as fs from 'fs/promises';
-import * as fsSync from 'fs';
 import * as path from 'path';
 import { PDFParse } from 'pdf-parse';
-
-const DEBUG_LOG_PATH = path.resolve(process.cwd(), '.cursor', 'debug.log');
-const DEBUG_LOG_PATH_ALT = path.resolve(process.cwd(), '..', '.cursor', 'debug.log');
-function debugLog(payload: { location: string; message: string; data?: unknown; hypothesisId?: string }) {
-  const line = JSON.stringify({ ...payload, timestamp: Date.now() });
-  try { fetch('http://127.0.0.1:7242/ingest/3b168631-beca-4109-b9fb-808d8bac595c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: line }).catch(() => {}); } catch (_) {}
-  for (const logPath of [DEBUG_LOG_PATH, DEBUG_LOG_PATH_ALT]) {
-    try {
-      fsSync.mkdirSync(path.dirname(logPath), { recursive: true });
-      fsSync.appendFileSync(logPath, line + '\n');
-      break;
-    } catch (_) {}
-  }
-}
 
 // ============================================================================
 // Types
@@ -420,10 +405,6 @@ function extractMetadata(text: string): QuoteMetadata {
   
   const headerText = text.substring(0, 4000);
   
-  // #region agent log
-  debugLog({ location: 'pdfParser.ts:extractMetadata', message: 'Raw header text for metadata', data: { headerTextLength: headerText.length, first800: headerText.substring(0, 800), next800: headerText.substring(800, 1600) }, hypothesisId: 'META' });
-  // #endregion
-
   // Quote number (try specific format first, then alternate)
   let match = headerText.match(PATTERNS.quoteNumber);
   if (!match) match = headerText.match(PATTERNS.quoteNumberAlt);
@@ -457,10 +438,6 @@ function extractMetadata(text: string): QuoteMetadata {
     metadata.customerNumber = match[1].trim();
   }
 
-  // #region agent log
-  debugLog({ location: 'pdfParser.ts:extractMetadata:result', message: 'Extracted metadata', data: metadata, hypothesisId: 'META' });
-  // #endregion
-  
   return metadata;
 }
 
@@ -756,13 +733,6 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
       return result;
     }
 
-    // #region agent log
-    const rawLen = textSource.length;
-    const rawTail = textSource.slice(-600);
-    debugLog({ location: 'pdfParser.ts:afterGetText', message: 'Raw PDF text from pdf-parse', data: { rawTextLength: rawLen, last600chars: rawTail, usedPages: !!pdfData.pages?.length }, hypothesisId: 'H1' });
-    console.log('[PDF parse] rawLen=', rawLen, 'usedPages=', !!pdfData.pages?.length, 'tail(200)=', rawTail.slice(-200));
-    // #endregion
-
     // Normalize text
     const text = normalizeText(textSource);
     
@@ -772,10 +742,6 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
     // Split into lines
     const lines = text.split('\n');
     result.stats.totalLinesProcessed = lines.length;
-    // #region agent log
-    const last5Lines = lines.slice(-5).map((l, idx) => ({ idx: lines.length - 5 + idx, content: l.trim().slice(0, 200) }));
-    debugLog({ location: 'pdfParser.ts:afterSplit', message: 'Lines after split', data: { linesLength: lines.length, last5Lines }, hypothesisId: 'H2' });
-    // #endregion
     
     // First pass: collect series discounts
     const seriesDiscountMap = new Map<string, number>();
@@ -803,12 +769,6 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
       const line = lines[i];
       const lineNum = i + 1;
       const parsed = parseLine(line, lineNum);
-      // #region agent log
-      if (i >= lines.length - 15) {
-        const trimmed = line.trim();
-        debugLog({ location: 'pdfParser.ts:secondPass', message: 'Last lines parse', data: { lineNum, linePreview: trimmed.slice(0, 180), type: parsed.type, reason: (parsed as any).reason, partNumber: parsed.partNumber, price: parsed.price }, hypothesisId: 'H3' });
-      }
-      // #endregion
       // When line has part number but was skipped (no_price or part-only), check next line(s) for description/price (common at end of PDF)
       let effectiveParsed: ParsedLine = parsed;
       const skipReason = (parsed as any).reason;
@@ -926,12 +886,7 @@ export async function parseWagoPDF(pdfPath: string): Promise<ParseResult> {
       parseBlocksFallback(lines, result, seriesDiscountMap);
     }
 
-    // #region agent log
     const productRowsOnly = result.rows.filter(r => r.partNumber);
-    const last3Products = productRowsOnly.slice(-3).map(r => ({ partNumber: r.partNumber, price: r.price, lineNumber: r.lineNumber }));
-    debugLog({ location: 'pdfParser.ts:afterSecondPass', message: 'Last product rows in result', data: { totalProductRows: productRowsOnly.length, last3Products }, hypothesisId: 'H5' });
-    console.log('[PDF parse] totalProductRows=', productRowsOnly.length, 'last3Products=', last3Products, 'linesCount=', lines.length);
-    // #endregion
 
     result.parseDebug = {
       rawTextLength: textSource.length,

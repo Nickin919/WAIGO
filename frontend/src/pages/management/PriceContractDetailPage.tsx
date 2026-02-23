@@ -83,12 +83,7 @@ const PriceContractDetailPage = () => {
     priceContractApi
       .getById(id)
       .then((res) => {
-        // #region agent log
-        const c = res.data as Contract;
-        const sample = (c.items || []).slice(0, 5).map(i => ({ id: i.id, partNumber: i.partNumber, partId: i.partId, seriesOrGroup: i.seriesOrGroup, moq: i.moq, isProductRow: !!(i.partNumber || i.partId) }));
-        fetch('http://127.0.0.1:7242/ingest/3b168631-beca-4109-b9fb-808d8bac595c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9628a6'},body:JSON.stringify({sessionId:'9628a6',location:'PriceContractDetailPage.tsx:useEffect',message:'contract loaded',data:{contractId:c.id,itemCount:c.items?.length,quoteNumber:c.quoteNumber,validFrom:c.validFrom,validTo:c.validTo,sampleItems:sample,productRowCount:(c.items||[]).filter(i=>!!(i.partNumber||i.partId)).length},timestamp:Date.now(),hypothesisId:'A,B'})}).catch(()=>{});
-        // #endregion
-        setContract(c);
+        setContract(res.data as Contract);
       })
       .catch(() => toast.error('Failed to load contract'))
       .finally(() => setLoading(false));
