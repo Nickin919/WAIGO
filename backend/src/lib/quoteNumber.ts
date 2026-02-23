@@ -78,16 +78,35 @@ export function parseMoqToMinQuantity(moq: string | null | undefined): number {
   return 1;
 }
 
+const MONTH_MAP: Record<string, number> = {
+  jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2,
+  apr: 3, april: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6,
+  aug: 7, august: 7, sep: 8, sept: 8, september: 8, oct: 9, october: 9,
+  nov: 10, november: 10, dec: 11, december: 11,
+};
+
 /**
- * Parse date string from PDF metadata (e.g. MM/DD/YYYY, MM-DD-YYYY) to Date or null.
+ * Parse date string from PDF metadata to Date or null.
+ * Handles: MM/DD/YYYY, MM-DD-YYYY, "February 23, 2026", "Feb 23, 2026", ISO.
  */
 export function parseMetadataDate(value: string | null | undefined): Date | null {
   if (value == null || typeof value !== 'string') return null;
   const s = value.trim();
   if (!s) return null;
-  // ISO
-  const iso = Date.parse(s);
-  if (!Number.isNaN(iso)) return new Date(iso);
+
+  // Text month: "February 23, 2026" or "Feb 23 2026"
+  const textMatch = s.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{2,4})$/);
+  if (textMatch) {
+    const monthIdx = MONTH_MAP[textMatch[1].toLowerCase()];
+    if (monthIdx !== undefined) {
+      const d = parseInt(textMatch[2], 10);
+      let y = parseInt(textMatch[3], 10);
+      if (y < 100) y += 2000;
+      const date = new Date(y, monthIdx, d);
+      if (!Number.isNaN(date.getTime())) return date;
+    }
+  }
+
   // US style: MM/DD/YYYY or MM-DD-YYYY
   const parts = s.split(/[\/\-]/);
   if (parts.length === 3) {
@@ -95,10 +114,15 @@ export function parseMetadataDate(value: string | null | undefined): Date | null
     const d = parseInt(parts[1], 10);
     let y = parseInt(parts[2], 10);
     if (y < 100) y += 2000;
-    if (!Number.isNaN(m) && !Number.isNaN(d) && !Number.isNaN(y)) {
+    if (!Number.isNaN(m) && !Number.isNaN(d) && !Number.isNaN(y) && m >= 0 && m <= 11) {
       const date = new Date(y, m, d);
       if (!Number.isNaN(date.getTime())) return date;
     }
   }
+
+  // ISO fallback
+  const iso = Date.parse(s);
+  if (!Number.isNaN(iso)) return new Date(iso);
+
   return null;
 }

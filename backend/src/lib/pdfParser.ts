@@ -240,10 +240,13 @@ const SERIES_PREFIXES: Record<string, string[]> = {
 
 // Regex patterns
 const PATTERNS = {
-  // Quote metadata
-  quoteNumber: /(?:quote|quotation|Q)\s*#?\s*:?\s*([A-Z0-9\-]+)/i,
-  quoteDate: /(?:date|dated?)\s*:?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/i,
-  expirationDate: /(?:exp(?:ires?|iration)?|valid\s*(?:until|through|thru))\s*:?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/i,
+  // Quote metadata — patterns ordered from most specific to least to avoid partial matches
+  quoteNumber: /(?:quotation|quote)\s*(?:number|no\.?|#)\s*:?\s*([A-Z0-9][-A-Z0-9]*)/i,
+  quoteNumberAlt: /(?:quotation|quote)\s*:?\s*([A-Z]\d{1,2}[A-Z]\d{3,}(?:-[A-Z0-9]+)?)/i,
+  quoteDate: /(?:quote\s*)?date\s*:?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/i,
+  quoteDateTextMonth: /(?:quote\s*)?date\s*:?\s*((?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2},?\s+\d{2,4})/i,
+  expirationDate: /(?:exp(?:ires?|iration)?(?:\s*date)?|valid\s*(?:until|through|thru|to)|good\s*(?:until|through|thru)|price\s*valid(?:ity)?(?:\s*(?:until|through|thru))?)\s*:?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/i,
+  expirationDateTextMonth: /(?:exp(?:ires?|iration)?(?:\s*date)?|valid\s*(?:until|through|thru|to)|good\s*(?:until|through|thru))\s*:?\s*((?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2},?\s+\d{2,4})/i,
   customerName: /(?:customer|company|ship\s*to|sold\s*to)\s*:?\s*([A-Z][A-Za-z0-9\s&.,'-]+?)(?:\n|$)/i,
   customerNumber: /(?:customer\s*(?:#|no|num(?:ber)?)|acct)\s*:?\s*([A-Z0-9\-]+)/i,
 
@@ -415,23 +418,29 @@ function isInternalPartNumber(partNumber: string): boolean {
 function extractMetadata(text: string): QuoteMetadata {
   const metadata: QuoteMetadata = {};
   
-  // Extract from first ~2000 characters (first 1-2 pages typically)
-  const headerText = text.substring(0, 2000);
+  const headerText = text.substring(0, 4000);
   
-  // Quote number
+  // #region agent log
+  debugLog({ location: 'pdfParser.ts:extractMetadata', message: 'Raw header text for metadata', data: { headerTextLength: headerText.length, first800: headerText.substring(0, 800), next800: headerText.substring(800, 1600) }, hypothesisId: 'META' });
+  // #endregion
+
+  // Quote number (try specific format first, then alternate)
   let match = headerText.match(PATTERNS.quoteNumber);
+  if (!match) match = headerText.match(PATTERNS.quoteNumberAlt);
   if (match) {
     metadata.quoteNumber = match[1].trim();
   }
   
-  // Quote date
+  // Quote date (try numeric first, then text month)
   match = headerText.match(PATTERNS.quoteDate);
+  if (!match) match = headerText.match(PATTERNS.quoteDateTextMonth);
   if (match) {
     metadata.quoteDate = match[1].trim();
   }
   
-  // Expiration date
+  // Expiration date (try numeric first, then text month)
   match = headerText.match(PATTERNS.expirationDate);
+  if (!match) match = headerText.match(PATTERNS.expirationDateTextMonth);
   if (match) {
     metadata.expirationDate = match[1].trim();
   }
@@ -447,6 +456,10 @@ function extractMetadata(text: string): QuoteMetadata {
   if (match) {
     metadata.customerNumber = match[1].trim();
   }
+
+  // #region agent log
+  debugLog({ location: 'pdfParser.ts:extractMetadata:result', message: 'Extracted metadata', data: metadata, hypothesisId: 'META' });
+  // #endregion
   
   return metadata;
 }

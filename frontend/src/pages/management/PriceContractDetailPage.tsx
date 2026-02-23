@@ -82,7 +82,14 @@ const PriceContractDetailPage = () => {
     if (!id) return;
     priceContractApi
       .getById(id)
-      .then((res) => setContract(res.data as Contract))
+      .then((res) => {
+        // #region agent log
+        const c = res.data as Contract;
+        const sample = (c.items || []).slice(0, 5).map(i => ({ id: i.id, partNumber: i.partNumber, partId: i.partId, seriesOrGroup: i.seriesOrGroup, moq: i.moq, isProductRow: !!(i.partNumber || i.partId) }));
+        fetch('http://127.0.0.1:7242/ingest/3b168631-beca-4109-b9fb-808d8bac595c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9628a6'},body:JSON.stringify({sessionId:'9628a6',location:'PriceContractDetailPage.tsx:useEffect',message:'contract loaded',data:{contractId:c.id,itemCount:c.items?.length,quoteNumber:c.quoteNumber,validFrom:c.validFrom,validTo:c.validTo,sampleItems:sample,productRowCount:(c.items||[]).filter(i=>!!(i.partNumber||i.partId)).length},timestamp:Date.now(),hypothesisId:'A,B'})}).catch(()=>{});
+        // #endregion
+        setContract(c);
+      })
       .catch(() => toast.error('Failed to load contract'))
       .finally(() => setLoading(false));
   }, [id]);
@@ -454,8 +461,8 @@ const PriceContractDetailPage = () => {
             </div>
           )}
         </div>
-        <p className="text-sm text-gray-500 mt-2">
-          Verify each item against the master catalog. Select product rows to apply MOQ or suggested sell in bulk.
+        <p className="text-sm text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mt-3">
+          <strong>Tip:</strong> Use the ☐ checkboxes (between MOQ and Suggested Sell) to select items, then enter a value in the column header and click <strong>Apply</strong> to set MOQ or Suggested Sell in bulk.
         </p>
       </div>
 
@@ -464,16 +471,6 @@ const PriceContractDetailPage = () => {
           <table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-2 py-3 text-left font-medium text-gray-700 w-10">
-                  {productRows.length > 0 && (
-                    <input
-                      type="checkbox"
-                      checked={isAllSelected}
-                      onChange={toggleSelectAll}
-                      className="rounded"
-                    />
-                  )}
-                </th>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Part Number / Series</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-700">Cost (Contract)</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-700">
@@ -493,6 +490,17 @@ const PriceContractDetailPage = () => {
                     </div>
                   </div>
                 </th>
+                <th className="px-2 py-3 text-center font-medium text-gray-500 w-10" title="Select items to bulk-apply MOQ or Suggested Sell">
+                  {productRows.length > 0 && (
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      onChange={toggleSelectAll}
+                      className="rounded"
+                      title="Select / deselect all"
+                    />
+                  )}
+                </th>
                 <th className="px-4 py-3 text-right font-medium text-gray-700">
                   <div className="flex flex-col gap-1">
                     <span>Suggested Sell</span>
@@ -502,14 +510,14 @@ const PriceContractDetailPage = () => {
                         placeholder="Margin %"
                         value={bulkMarginPercent}
                         onChange={(e) => setBulkMarginPercent(e.target.value)}
-                        className="input py-1 w-16 text-right text-xs"
+                        className="input py-1 w-20 text-right text-xs"
                       />
                       <input
                         type="text"
-                        placeholder="Price"
+                        placeholder="Fixed Price"
                         value={bulkSuggestedSell}
                         onChange={(e) => setBulkSuggestedSell(e.target.value)}
-                        className="input py-1 w-20 text-right text-xs"
+                        className="input py-1 w-24 text-right text-xs"
                       />
                       <button onClick={handleBulkSellPrice} disabled={applyingBulk || selectedIds.size === 0} className="btn btn-primary text-xs py-0.5">
                         Apply
@@ -537,30 +545,13 @@ const PriceContractDetailPage = () => {
                 const isProductRow = !!(item.partNumber || item.partId);
                 const moqDisplay = item.moq ?? String(item.minQuantity);
                 const moqEdit = edits[item.id]?.moq ?? moqDisplay;
-                const suggestedEdit = edits[item.id]?.suggestedSellPrice ?? (item.suggestedSellPrice != null ? String(item.suggestedSellPrice) : '');
+                const suggestedEdit = edits[item.id]?.suggestedSellPrice ?? (item.suggestedSellPrice != null ? item.suggestedSellPrice.toFixed(2) : '');
 
                 return (
                   <tr
                     key={item.id}
                     className={unverifiedProduct ? 'bg-amber-50/80' : ''}
                   >
-                    <td className="px-2 py-2">
-                      {isProductRow ? (
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(item.id)}
-                          onChange={() => {
-                            setSelectedIds((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(item.id)) next.delete(item.id);
-                              else next.add(item.id);
-                              return next;
-                            });
-                          }}
-                          className="rounded"
-                        />
-                      ) : null}
-                    </td>
                     <td className="px-4 py-2">
                       {verified || isSeriesDiscount ? (
                         <span className="font-mono">{displayPartNumber(item)}</span>
@@ -626,6 +617,23 @@ const PriceContractDetailPage = () => {
                         '—'
                       )}
                     </td>
+                    <td className="px-2 py-2 text-center">
+                      {isProductRow ? (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(item.id)}
+                          onChange={() => {
+                            setSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(item.id)) next.delete(item.id);
+                              else next.add(item.id);
+                              return next;
+                            });
+                          }}
+                          className="rounded"
+                        />
+                      ) : null}
+                    </td>
                     <td className="px-4 py-2 text-right">
                       {isProductRow ? (
                         savingItemId === item.id ? (
@@ -636,19 +644,19 @@ const PriceContractDetailPage = () => {
                             value={suggestedEdit}
                             onChange={(e) => setEdits((prev) => ({ ...prev, [item.id]: { ...prev[item.id], partNumber: partNumEdit, costPrice: costEdit, suggestedSellPrice: e.target.value } }))}
                             onBlur={() => {
-                              const v = edits[item.id]?.suggestedSellPrice ?? (item.suggestedSellPrice != null ? String(item.suggestedSellPrice) : '');
-                              const prevStr = item.suggestedSellPrice != null ? String(item.suggestedSellPrice) : '';
+                              const v = edits[item.id]?.suggestedSellPrice ?? (item.suggestedSellPrice != null ? item.suggestedSellPrice.toFixed(2) : '');
+                              const prevStr = item.suggestedSellPrice != null ? item.suggestedSellPrice.toFixed(2) : '';
                               if (v !== prevStr) saveItemSuggestedSell(item, v);
                             }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
-                                const v = edits[item.id]?.suggestedSellPrice ?? (item.suggestedSellPrice != null ? String(item.suggestedSellPrice) : '');
-                                const prevStr = item.suggestedSellPrice != null ? String(item.suggestedSellPrice) : '';
+                                const v = edits[item.id]?.suggestedSellPrice ?? (item.suggestedSellPrice != null ? item.suggestedSellPrice.toFixed(2) : '');
+                                const prevStr = item.suggestedSellPrice != null ? item.suggestedSellPrice.toFixed(2) : '';
                                 if (v !== prevStr) saveItemSuggestedSell(item, v);
                               }
                             }}
                             placeholder="—"
-                            className="input py-1 w-20 text-right text-xs"
+                            className="input py-1 w-24 text-right text-xs"
                           />
                         )
                       ) : (
