@@ -550,6 +550,7 @@ export default function LiteratureLibrary() {
                         <th className="px-3 py-2 text-left">Keywords / Tags</th>
                         <th className="px-3 py-2 text-left">Parts / Series</th>
                         <th className="px-3 py-2 text-right">Size</th>
+                        <th className="px-3 py-2 text-left whitespace-nowrap">Uploaded</th>
                         <th className="px-3 py-2 text-center">Actions</th>
                       </tr>
                     </thead>
@@ -588,6 +589,9 @@ export default function LiteratureLibrary() {
                           </td>
                           <td className="px-3 py-3 text-right text-gray-500 whitespace-nowrap">
                             {formatBytes(lit.fileSize)}
+                          </td>
+                          <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
+                            {new Date(lit.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </td>
                           <td className="px-3 py-3">
                             <div className="flex items-center justify-center gap-1">

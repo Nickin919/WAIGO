@@ -21,6 +21,7 @@ interface LitItem {
   industryTags: string[];
   parts: { part: { partNumber: string } }[];
   series: { seriesName: string }[];
+  createdAt: string;
 }
 
 function formatBytes(bytes: number): string {
@@ -360,9 +361,14 @@ export default function LiteratureBrowse() {
                     </div>
                   )}
 
-                  {/* Footer: size + actions */}
+                  {/* Footer: size + upload date + actions */}
                   <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-100">
-                    <span className="text-xs text-gray-400">{formatBytes(item.fileSize)}</span>
+                    <div className="flex flex-col">
+                      <span className="text-xs text-gray-400">{formatBytes(item.fileSize)}</span>
+                      <span className="text-xs text-gray-400">
+                        {new Date(item.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                    </div>
                     <div className="flex gap-2">
                       <a
                         href={item.filePath}
