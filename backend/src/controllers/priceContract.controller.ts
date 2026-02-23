@@ -694,6 +694,11 @@ function escapeCsvCell(val: string | number | null | undefined): string {
   return s;
 }
 
+function roundPrice(val: number | null | undefined): number | null {
+  if (val == null) return null;
+  return Math.round(val * 100) / 100;
+}
+
 /**
  * GET /api/price-contracts/:id/download-csv – download contract as CSV (ADMIN/RSM or assignee)
  */
@@ -739,9 +744,9 @@ export const downloadCsv = async (req: AuthRequest, res: Response): Promise<void
         escapeCsvCell(partNum),
         escapeCsvCell(series),
         escapeCsvCell(desc),
-        escapeCsvCell(item.costPrice),
+        escapeCsvCell(roundPrice(item.costPrice)),
         escapeCsvCell(moqDisplay),
-        escapeCsvCell(item.suggestedSellPrice),
+        escapeCsvCell(roundPrice(item.suggestedSellPrice)),
         escapeCsvCell(item.discountPercent),
       ].join(','));
     }
@@ -816,9 +821,9 @@ export const downloadQuoteFamilyZip = async (req: AuthRequest, res: Response): P
           escapeCsvCell(partNum),
           escapeCsvCell(series),
           escapeCsvCell(desc),
-          escapeCsvCell(item.costPrice),
+          escapeCsvCell(roundPrice(item.costPrice)),
           escapeCsvCell(moqDisplay),
-          escapeCsvCell(item.suggestedSellPrice),
+          escapeCsvCell(roundPrice(item.suggestedSellPrice)),
           escapeCsvCell(item.discountPercent),
         ].join(','));
       }
