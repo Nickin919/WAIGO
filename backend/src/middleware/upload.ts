@@ -73,26 +73,35 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
   }
 };
 
-// Configure multer
+const fileSizeLimit = parseInt(process.env.MAX_FILE_SIZE || '52428800'); // Default 50MB
+
+// Disk-based multer (images, avatars, logos, csv, excel, documents)
 const upload = multer({
   storage,
   fileFilter,
-  limits: {
-    fileSize: parseInt(process.env.MAX_FILE_SIZE || '52428800') // Default 50MB
-  }
+  limits: { fileSize: fileSizeLimit }
 });
 
-// Export configured upload middleware
-export const uploadVideo = upload.single('video');
+// Memory-based multer for R2 uploads (video, literature)
+const memUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter,
+  limits: { fileSize: fileSizeLimit }
+});
+
+// Disk-storage exports (unchanged behaviour)
 export const uploadImage = upload.single('image');
 export const uploadThumbnail = upload.single('thumbnail');
 export const uploadCSV = upload.single('csv');
 export const uploadExcel = upload.single('excel');
 export const uploadDocument = upload.single('document');
 export const uploadPDF = upload.single('pdf');
-export const uploadLiterature = upload.single('file');
 export const uploadAvatar = upload.single('avatar');
 export const uploadLogo = upload.single('logo');
 export const uploadMultiple = upload.array('files', 10);
+
+// Memory-storage exports — controller is responsible for pushing to R2
+export const uploadVideo = memUpload.single('video');
+export const uploadLiterature = memUpload.single('file');
 
 export default upload;

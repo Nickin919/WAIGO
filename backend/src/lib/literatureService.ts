@@ -5,6 +5,7 @@ import PDFDocument from 'pdfkit';
 import Papa from 'papaparse';
 import { prisma } from './prisma';
 import { getUploadDir } from './uploadPath';
+import { uploadToR2, bufferFromR2, deleteFromR2, R2_PUBLIC_BUCKET, getPublicUrl, isR2Key } from './r2';
 import type { LiteratureType as PrismaLiteratureType } from '@prisma/client';
 
 const MAX_PARTS = 100;
@@ -42,7 +43,13 @@ export async function uploadLiteratureWithAssociations(
     throw new Error(`Maximum ${MAX_PARTS} parts and ${MAX_SERIES} series per item`);
   }
 
-  const filePathToStore = file.path; // full path from multer
+  // Upload to R2 public bucket; store the full CDN URL in filePath so it can be
+  // used directly as a hyperlink in emails and generated quote PDFs
+  const ext = path.extname(file.originalname) || '.pdf';
+  const base = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9._-]/g, '_');
+  const r2Key = `literature/${Date.now()}-${base}${ext}`;
+  await uploadToR2(R2_PUBLIC_BUCKET, r2Key, file.buffer, file.mimetype || 'application/pdf');
+  const publicUrl = getPublicUrl(r2Key);
 
   return prisma.$transaction(async (tx) => {
     const lit = await tx.literature.create({
@@ -50,7 +57,7 @@ export async function uploadLiteratureWithAssociations(
         title: metadata.title.trim(),
         description: metadata.description?.trim() || null,
         type: metadata.type as PrismaLiteratureType,
-        filePath: filePathToStore,
+        filePath: publicUrl,
         fileSize: file.size,
         uploadedById: userId,
       },
@@ -166,14 +173,14 @@ export async function generateLiteraturePack(quoteId: string): Promise<{
   const milestone = await getZipMilestone();
 
   if (items.length === 1 && items[0].literature.fileSize <= milestone) {
-    const resolved = resolveFilePath(items[0].literature.filePath);
-    const buffer = await fs.readFile(resolved);
-    const filename = path.basename(items[0].literature.filePath);
+    const lit = items[0].literature;
+    const buffer = await getLiteratureBuffer(lit.filePath);
+    const filename = path.basename(lit.filePath);
     return { buffer, isZipped: false, filename };
   }
 
   const zipBuffer = await createZipBuffer(
-    items.map((i) => ({ ...i.literature, filePath: resolveFilePath(i.literature.filePath) }))
+    items.map((i) => ({ id: i.literature.id, title: i.literature.title, filePath: i.literature.filePath }))
   );
   return {
     buffer: zipBuffer,
@@ -182,20 +189,40 @@ export async function generateLiteraturePack(quoteId: string): Promise<{
   };
 }
 
-function createZipBuffer(literature: { id: string; title: string; filePath: string }[]): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    const archive = archiver('zip', { zlib: { level: 9 } });
-    archive.on('data', (chunk: Buffer) => chunks.push(chunk));
-    archive.on('end', () => resolve(Buffer.concat(chunks)));
-    archive.on('error', reject);
+/** Fetch a literature file buffer from R2 (new CDN URL or key) or local disk (legacy). */
+async function getLiteratureBuffer(filePath: string): Promise<Buffer> {
+  const publicBase = (process.env.R2_PUBLIC_URL || '').replace(/\/$/, '');
+  if (publicBase && filePath.startsWith(publicBase)) {
+    // Full CDN URL — extract the key after the base
+    const r2Key = filePath.slice(publicBase.length + 1);
+    return bufferFromR2(R2_PUBLIC_BUCKET, r2Key);
+  }
+  if (isR2Key(filePath)) {
+    return bufferFromR2(R2_PUBLIC_BUCKET, filePath);
+  }
+  const resolved = resolveFilePath(filePath);
+  return fs.readFile(resolved);
+}
 
-    for (const lit of literature) {
-      const ext = path.extname(lit.filePath) || '.pdf';
-      const name = `${lit.title.replace(/[^a-zA-Z0-9._-]/g, '_')}${ext}`;
-      archive.file(lit.filePath, { name });
+async function createZipBuffer(literature: { id: string; title: string; filePath: string }[]): Promise<Buffer> {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const chunks: Buffer[] = [];
+      const archive = archiver('zip', { zlib: { level: 9 } });
+      archive.on('data', (chunk: Buffer) => chunks.push(chunk));
+      archive.on('end', () => resolve(Buffer.concat(chunks)));
+      archive.on('error', reject);
+
+      for (const lit of literature) {
+        const ext = path.extname(lit.filePath) || '.pdf';
+        const name = `${lit.title.replace(/[^a-zA-Z0-9._-]/g, '_')}${ext}`;
+        const buffer = await getLiteratureBuffer(lit.filePath);
+        archive.append(buffer, { name });
+      }
+      archive.finalize();
+    } catch (err) {
+      reject(err);
     }
-    archive.finalize();
   });
 }
 

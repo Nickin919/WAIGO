@@ -18,6 +18,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.995.0",
     "@prisma/client": "^5.22.0",
     "@react-email/components": "^1.0.7",
     "@react-email/render": "^2.0.4",

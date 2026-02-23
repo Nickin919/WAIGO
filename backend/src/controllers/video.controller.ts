@@ -1,7 +1,9 @@
+import path from 'path';
 import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { sendVideoApprovalEmail } from '../lib/email';
+import { uploadToR2, getPublicUrl, deleteFromR2, R2_PUBLIC_BUCKET } from '../lib/r2';
 
 /**
  * Get videos by part
@@ -104,11 +106,15 @@ export const uploadVideo = async (req: AuthRequest, res: Response): Promise<void
     }
 
     const { partId, title, description, level, videoUrl } = req.body;
-    
-    // Video URL can come from uploaded file or external URL
-    const finalVideoUrl = req.file
-      ? `/uploads/videos/${req.file.filename}`
-      : videoUrl;
+
+    // Video URL can come from an uploaded file (pushed to R2) or an external URL
+    let finalVideoUrl = videoUrl as string | undefined;
+    if (req.file) {
+      const ext = path.extname(req.file.originalname) || '.mp4';
+      const key = `videos/${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+      await uploadToR2(R2_PUBLIC_BUCKET, key, req.file.buffer, req.file.mimetype);
+      finalVideoUrl = getPublicUrl(key);
+    }
 
     if (!partId || !title || !finalVideoUrl) {
       res.status(400).json({ error: 'Missing required fields' });
@@ -282,9 +288,19 @@ export const deleteVideo = async (req: AuthRequest, res: Response): Promise<void
   try {
     const { id } = req.params;
 
-    await prisma.video.delete({
-      where: { id }
-    });
+    const video = await prisma.video.findUnique({ where: { id }, select: { videoUrl: true } });
+    await prisma.video.delete({ where: { id } });
+
+    // Remove from R2 if it was stored there
+    if (video?.videoUrl) {
+      const publicBase = (process.env.R2_PUBLIC_URL || '').replace(/\/$/, '');
+      if (publicBase && video.videoUrl.startsWith(publicBase)) {
+        const key = video.videoUrl.slice(publicBase.length + 1);
+        deleteFromR2(R2_PUBLIC_BUCKET, key).catch((err) =>
+          console.warn('R2 video delete skipped:', err)
+        );
+      }
+    }
 
     res.json({ message: 'Video deleted successfully' });
   } catch (error) {
