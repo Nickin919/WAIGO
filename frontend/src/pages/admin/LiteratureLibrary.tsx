@@ -113,8 +113,8 @@ function EditModal({ item, onClose, onSaved }: EditModalProps) {
             <input className="input w-full" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Part Numbers <span className="text-gray-400 font-normal">(comma-separated, e.g. 221-2301, 750-841)</span></label>
-            <TagInput value={form.partNumbers} onChange={(v) => setForm((f) => ({ ...f, partNumbers: v }))} placeholder="221-2301, 750-841" />
+            <label className="block text-sm font-medium text-gray-700 mb-1">Part Numbers <span className="text-gray-400 font-normal">(catalog: 221-2301 or article: 51015188)</span></label>
+            <TagInput value={form.partNumbers} onChange={(v) => setForm((f) => ({ ...f, partNumbers: v }))} placeholder="221-2301, 51015188, 750-841" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Series <span className="text-gray-400 font-normal">(comma-separated)</span></label>
@@ -337,7 +337,7 @@ export default function LiteratureLibrary() {
                   value={uploadForm.partNumbers}
                   onChange={(e) => setUploadForm((f) => ({ ...f, partNumbers: e.target.value }))}
                 />
-                <p className="text-xs text-gray-400 mt-1">Comma-separated WAGO part numbers</p>
+                <p className="text-xs text-gray-400 mt-1">Comma-separated — use catalog numbers (221-2301) or article/order numbers (51015188)</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Series</label>

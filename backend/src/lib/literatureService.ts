@@ -46,7 +46,12 @@ export async function uploadLiteratureWithAssociations(
   const unresolvedParts: string[] = [];
   for (const pn of partNumberInputs) {
     const part = await prisma.part.findFirst({
-      where: { partNumber: pn.trim() },
+      where: {
+        OR: [
+          { partNumber: pn.trim() },
+          { wagoIdent: pn.trim() },
+        ],
+      },
       select: { id: true },
     });
     if (part) {
@@ -313,11 +318,16 @@ export async function updateAssociations(
   partNumbers: string[],
   seriesNames: string[]
 ) {
-  // Resolve part numbers → IDs
+  // Resolve part numbers → IDs (match either catalog partNumber or wagoIdent/article number)
   const partIds: string[] = [];
   for (const pn of partNumbers) {
     const part = await prisma.part.findFirst({
-      where: { partNumber: pn.trim() },
+      where: {
+        OR: [
+          { partNumber: pn.trim() },
+          { wagoIdent: pn.trim() },
+        ],
+      },
       select: { id: true },
     });
     if (part) partIds.push(part.id);
@@ -379,7 +389,12 @@ export async function listLiterature(options?: {
 
   if (options?.partNumber) {
     const part = await prisma.part.findFirst({
-      where: { partNumber: options.partNumber },
+      where: {
+        OR: [
+          { partNumber: options.partNumber },
+          { wagoIdent: options.partNumber },
+        ],
+      },
       select: { id: true },
     });
     if (part) {
