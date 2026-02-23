@@ -195,9 +195,17 @@ export async function generateKitSlipPdf(
           .text(lit.type.replace(/_/g, ' '), COL.type, y + 6, { width: 80, lineBreak: false })
           .text(sizeStr, COL.size, y + 6, { width: 55, lineBreak: false });
 
-        // Clickable link
+        // Clickable link — draw text first, then annotate separately to avoid NaN coords
+        const linkLabel = 'View PDF';
+        const linkX = COL.url;
+        const linkY = y + 6;
+        const linkW = 60;
+        const linkH = 10;
         doc.fillColor('#005A2B').fontSize(8)
-          .text('View PDF', COL.url, y + 6, { link: lit.filePath, underline: true, lineBreak: false });
+          .text(linkLabel, linkX, linkY, { width: linkW, lineBreak: false, underline: true });
+        if (lit.filePath && lit.filePath.startsWith('http')) {
+          doc.link(linkX, linkY, linkW, linkH, lit.filePath);
+        }
 
         y += rowH;
 
