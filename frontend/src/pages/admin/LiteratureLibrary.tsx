@@ -30,17 +30,44 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function TagInput({
-  value, onChange, placeholder,
-}: { value: string; onChange: (v: string) => void; placeholder: string }) {
+/** Count non-empty items in a comma/semicolon/newline separated string */
+function countItems(value: string): number {
+  return value.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean).length;
+}
+
+interface TagFieldProps {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  rows?: number;
+}
+
+function TagField({ label, hint, value, onChange, placeholder, rows = 3 }: TagFieldProps) {
+  const count = countItems(value);
   return (
-    <input
-      type="text"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="input w-full"
-      placeholder={placeholder}
-    />
+    <div>
+      <div className="flex items-baseline justify-between mb-1">
+        <label className="text-sm font-medium text-gray-700">
+          {label}
+          {count > 0 && (
+            <span className="ml-2 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+              {count}
+            </span>
+          )}
+        </label>
+        {hint && <span className="text-xs text-gray-400">{hint}</span>}
+      </div>
+      <textarea
+        rows={rows}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="input w-full resize-y font-mono text-sm leading-relaxed"
+        placeholder={placeholder}
+      />
+      <p className="text-xs text-gray-400 mt-0.5">Separate with commas, semicolons, or new lines</p>
+    </div>
   );
 }
 
@@ -122,22 +149,35 @@ function EditModal({ item, onClose, onSaved }: EditModalProps) {
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
             <input className="input w-full" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Part Numbers <span className="text-gray-400 font-normal">(catalog: 221-2301 or article: 51015188)</span></label>
-            <TagInput value={form.partNumbers} onChange={(v) => setForm((f) => ({ ...f, partNumbers: v }))} placeholder="221-2301, 51015188, 750-841" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Series <span className="text-gray-400 font-normal">(comma-separated)</span></label>
-            <TagInput value={form.seriesNames} onChange={(v) => setForm((f) => ({ ...f, seriesNames: v }))} placeholder="221 Series, 750 Series" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Keywords <span className="text-gray-400 font-normal">(comma-separated)</span></label>
-            <TagInput value={form.keywords} onChange={(v) => setForm((f) => ({ ...f, keywords: v }))} placeholder="CAGE CLAMP, push-in, terminal block" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Industry Tags <span className="text-gray-400 font-normal">(comma-separated)</span></label>
-            <TagInput value={form.industryTags} onChange={(v) => setForm((f) => ({ ...f, industryTags: v }))} placeholder="Automation, Panel Building, Rail" />
-          </div>
+          <TagField
+            label="Part Numbers"
+            hint="catalog: 221-2301 or article: 51015188"
+            value={form.partNumbers}
+            onChange={(v) => setForm((f) => ({ ...f, partNumbers: v }))}
+            placeholder="221-2301&#10;51015188&#10;750-841"
+            rows={4}
+          />
+          <TagField
+            label="Series"
+            value={form.seriesNames}
+            onChange={(v) => setForm((f) => ({ ...f, seriesNames: v }))}
+            placeholder="221 Series&#10;750 Series"
+            rows={2}
+          />
+          <TagField
+            label="Keywords"
+            value={form.keywords}
+            onChange={(v) => setForm((f) => ({ ...f, keywords: v }))}
+            placeholder="CAGE CLAMP&#10;push-in&#10;terminal block"
+            rows={3}
+          />
+          <TagField
+            label="Industry Tags"
+            value={form.industryTags}
+            onChange={(v) => setForm((f) => ({ ...f, industryTags: v }))}
+            placeholder="Automation&#10;Panel Building&#10;Rail"
+            rows={2}
+          />
         </div>
         {unresolvedParts.length > 0 && (
           <div className="mx-6 mb-2 p-3 rounded-lg bg-amber-50 border border-amber-300">
@@ -363,46 +403,35 @@ export default function LiteratureLibrary() {
                   onChange={(e) => setUploadForm((f) => ({ ...f, description: e.target.value }))}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Part Numbers</label>
-                <input
-                  type="text" className="input w-full"
-                  placeholder="221-2301, 750-841"
-                  value={uploadForm.partNumbers}
-                  onChange={(e) => setUploadForm((f) => ({ ...f, partNumbers: e.target.value }))}
-                />
-                <p className="text-xs text-gray-400 mt-1">Comma-separated — use catalog numbers (221-2301) or article/order numbers (51015188)</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Series</label>
-                <input
-                  type="text" className="input w-full"
-                  placeholder="221 Series, 750 Series"
-                  value={uploadForm.seriesNames}
-                  onChange={(e) => setUploadForm((f) => ({ ...f, seriesNames: e.target.value }))}
-                />
-                <p className="text-xs text-gray-400 mt-1">Comma-separated series names</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Keywords</label>
-                <input
-                  type="text" className="input w-full"
-                  placeholder="CAGE CLAMP, push-in, terminal block"
-                  value={uploadForm.keywords}
-                  onChange={(e) => setUploadForm((f) => ({ ...f, keywords: e.target.value }))}
-                />
-                <p className="text-xs text-gray-400 mt-1">Comma-separated search terms</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Industry Tags</label>
-                <input
-                  type="text" className="input w-full"
-                  placeholder="Automation, Panel Building, Rail"
-                  value={uploadForm.industryTags}
-                  onChange={(e) => setUploadForm((f) => ({ ...f, industryTags: e.target.value }))}
-                />
-                <p className="text-xs text-gray-400 mt-1">Comma-separated industry categories</p>
-              </div>
+              <TagField
+                label="Part Numbers"
+                hint="catalog: 221-2301 or article: 51015188"
+                value={uploadForm.partNumbers}
+                onChange={(v) => setUploadForm((f) => ({ ...f, partNumbers: v }))}
+                placeholder={"221-2301\n51015188\n750-841"}
+                rows={4}
+              />
+              <TagField
+                label="Series"
+                value={uploadForm.seriesNames}
+                onChange={(v) => setUploadForm((f) => ({ ...f, seriesNames: v }))}
+                placeholder={"221 Series\n750 Series"}
+                rows={2}
+              />
+              <TagField
+                label="Keywords"
+                value={uploadForm.keywords}
+                onChange={(v) => setUploadForm((f) => ({ ...f, keywords: v }))}
+                placeholder={"CAGE CLAMP\npush-in\nterminal block"}
+                rows={3}
+              />
+              <TagField
+                label="Industry Tags"
+                value={uploadForm.industryTags}
+                onChange={(v) => setUploadForm((f) => ({ ...f, industryTags: v }))}
+                placeholder={"Automation\nPanel Building\nRail"}
+                rows={2}
+              />
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">PDF File *</label>
                 <input
