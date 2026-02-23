@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, CheckCircle, DollarSign, Package, FolderKanban, Video, FileText, Library } from 'lucide-react';
+import { Plus, CheckCircle, DollarSign, Package, FolderKanban, Video, FileText, Library, BookOpen } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
-import { catalogApi, projectApi, quoteApi } from '@/lib/api';
+import { catalogApi, projectApi, quoteApi, literatureKitApi } from '@/lib/api';
 import { DashboardWorkflow } from '@/components/workflow/DashboardWorkflow';
 
 interface CatalogStats {
@@ -21,6 +21,8 @@ const Dashboard = () => {
   const [recentProjects, setRecentProjects] = useState<{ id: string; name: string; updatedAt: string }[]>([]);
   const [recentQuotes, setRecentQuotes] = useState<{ id: string; quoteNumber?: string; createdAt: string }[]>([]);
   const [catalogSummary, setCatalogSummary] = useState<{ catalogCount: number; averagePartsPerCatalog: number; totalPartsCount?: number } | null>(null);
+  const [kitsCount, setKitsCount] = useState<number | null>(null);
+  const [recentKits, setRecentKits] = useState<{ id: string; name: string; updatedAt: string; itemCount?: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -86,6 +88,24 @@ const Dashboard = () => {
             return null;
           })
         );
+        promises.push(
+          literatureKitApi.list().then((r) => {
+            const list = Array.isArray(r.data?.items) ? r.data.items : [];
+            setKitsCount(r.data?.total ?? list.length);
+            setRecentKits(
+              list.slice(0, 3).map((k: any) => ({
+                id: k.id,
+                name: k.name,
+                updatedAt: k.updatedAt,
+                itemCount: k.itemCount,
+              }))
+            );
+            return list;
+          }).catch(() => {
+            setKitsCount(0);
+            return null;
+          })
+        );
 
         await Promise.all(promises);
       } catch (error) {
@@ -106,6 +126,7 @@ const Dashboard = () => {
   const quotesLabel = quotesCount != null ? quotesCount : (loading ? '…' : 0);
   const catalogCountLabel = catalogSummary != null ? catalogSummary.catalogCount : (loading ? '…' : 0);
   const averagePartsPerCatalog = catalogSummary?.averagePartsPerCatalog ?? null;
+  const kitsLabel = kitsCount != null ? kitsCount : (loading ? '…' : 0);
 
   const formatRelativeTime = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -134,7 +155,7 @@ const Dashboard = () => {
       </div>
 
       {/* Stats Cards – wired to real data, link to relevant pages */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
         <Link
           to="/catalog-list"
           className="bg-gradient-to-br from-cyan-600 to-cyan-700 text-white p-6 rounded-xl shadow-lg hover:from-cyan-700 hover:to-cyan-800 transition-all block"
@@ -188,6 +209,16 @@ const Dashboard = () => {
           </div>
           <div className="text-sm opacity-90">Quotes</div>
         </Link>
+        <Link
+          to="/literature/kits"
+          className="bg-gradient-to-br from-teal-600 to-teal-700 text-white p-6 rounded-xl shadow-lg hover:from-teal-700 hover:to-teal-800 transition-all block"
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <BookOpen className="w-6 h-6 opacity-90" />
+            <span className="text-3xl font-bold">{kitsLabel}</span>
+          </div>
+          <div className="text-sm opacity-90">Lit Kits</div>
+        </Link>
       </div>
 
       {/* Row-based workflow: BOM → Project/Quote/Catalog → Review */}
@@ -227,6 +258,20 @@ const Dashboard = () => {
                   <span className="font-medium text-gray-900">Create Quote</span>
                 </div>
                 <svg className="w-5 h-5 text-gray-400 group-hover:text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+              <Link
+                to="/literature"
+                className="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors group"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center">
+                    <BookOpen className="w-5 h-5 text-white" />
+                  </div>
+                  <span className="font-medium text-gray-900">Browse Literature</span>
+                </div>
+                <svg className="w-5 h-5 text-gray-400 group-hover:text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </Link>
@@ -288,6 +333,25 @@ const Dashboard = () => {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900">Quote</p>
                     <p className="text-sm text-gray-600 truncate">{q.quoteNumber || q.id} • {formatRelativeTime(q.createdAt)}</p>
+                  </div>
+                </Link>
+              ))}
+              {recentKits.map((k) => (
+                <Link
+                  key={k.id}
+                  to={`/literature/kits/${k.id}`}
+                  className="flex items-start space-x-3 pb-4 border-b border-gray-100 last:border-0 last:pb-0 hover:bg-gray-50 -mx-2 px-2 py-1 rounded-lg transition-colors"
+                >
+                  <div className="w-10 h-10 bg-teal-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <BookOpen className="w-5 h-5 text-teal-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900">Literature Kit</p>
+                    <p className="text-sm text-gray-600 truncate">
+                      {k.name}
+                      {k.itemCount != null && ` • ${k.itemCount} item${k.itemCount !== 1 ? 's' : ''}`}
+                      {' • '}{formatRelativeTime(k.updatedAt)}
+                    </p>
                   </div>
                 </Link>
               ))}
