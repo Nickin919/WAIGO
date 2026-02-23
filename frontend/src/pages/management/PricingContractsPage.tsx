@@ -34,6 +34,13 @@ interface ByQuoteGroup {
   contracts: ContractRow[];
 }
 
+function fullYear(y: string | null | undefined): string {
+  if (!y) return '';
+  const n = parseInt(y, 10);
+  if (Number.isNaN(n)) return y;
+  return n < 100 ? String(2000 + n) : String(n);
+}
+
 const PricingContractsPage = () => {
   const { user } = useAuthStore();
   const [contracts, setContracts] = useState<ContractRow[]>([]);
@@ -790,18 +797,18 @@ const PricingContractsPage = () => {
         <div className="flex items-center gap-3 flex-wrap">
           {isAssignableMode && (
             <>
-              <div className="flex rounded-lg border border-gray-300 p-0.5 bg-gray-50">
+              <div className="flex rounded-xl border-2 border-green-300 p-1 bg-green-50 shadow-sm">
                 <button
                   type="button"
                   onClick={() => setListView('by-name')}
-                  className={`px-3 py-1.5 text-sm rounded-md ${listView === 'by-name' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
+                  className={`px-5 py-2 text-sm font-semibold rounded-lg transition-all ${listView === 'by-name' ? 'bg-green-700 text-white shadow' : 'text-green-700 hover:bg-green-100'}`}
                 >
-                  By name
+                  By Name
                 </button>
                 <button
                   type="button"
                   onClick={() => setListView('by-quote')}
-                  className={`px-3 py-1.5 text-sm rounded-md ${listView === 'by-quote' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
+                  className={`px-5 py-2 text-sm font-semibold rounded-lg transition-all ${listView === 'by-quote' ? 'bg-green-700 text-white shadow' : 'text-green-700 hover:bg-green-100'}`}
                 >
                   By Quote #
                 </button>
@@ -833,6 +840,70 @@ const PricingContractsPage = () => {
           </button>
         </div>
       </div>
+
+      {isAssignableMode && (
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+          <h2 className="text-lg font-bold text-gray-900 mb-4">How to create a pricing contract</h2>
+          <p className="text-sm text-gray-600 mb-5">Follow these steps to turn WAGO quote PDFs into contracts and CSV exports.</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="flex gap-3">
+              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-sm">1</div>
+              <div>
+                <p className="font-semibold text-gray-800 text-sm">Upload PDFs or create a contract</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Drop one or more WAGO quote PDFs in the zone below (or click to browse). Each PDF becomes a contract. You can also create an empty contract with "New Pricing Contract" and add PDFs later.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-sm">2</div>
+              <div>
+                <p className="font-semibold text-gray-800 text-sm">Open a contract to edit line items</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Click a contract name to see line items, set sell prices, upload more PDFs to the same contract, or re-check part numbers against the catalog.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-sm">3</div>
+              <div>
+                <p className="font-semibold text-gray-800 text-sm">Download the contract as CSV</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  From inside a contract, use "Download CSV" to export the contract as a CSV file for your records or downstream systems.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <div
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragActive(false);
+                const files = e.dataTransfer?.files;
+                if (!files?.length) return;
+                const pdfs = Array.from(files).filter((f) => f.name.toLowerCase().endsWith('.pdf'));
+                if (pdfs.length === 0) {
+                  toast.error('Please drop PDF files only');
+                  return;
+                }
+                setBatchFiles(pdfs);
+                setBatchResult(null);
+              }}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onClick={() => batchFileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                dragActive ? 'border-green-500 bg-green-50' : 'border-green-300 hover:border-green-500 bg-green-50/50'
+              }`}
+            >
+              <FileStack className="w-10 h-10 text-green-400 mx-auto mb-2" />
+              <p className="text-sm font-medium text-gray-700">Drop WAGO quote PDFs here, or click to browse</p>
+              <p className="text-xs text-gray-500 mt-1">Each PDF will be created as a separate pricing contract</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isAssignableMode && batchImporting && batchProgress && (
         <div className="card p-4 mb-6 bg-green-50 border border-green-200">
@@ -1072,8 +1143,9 @@ const PricingContractsPage = () => {
                 <div className="divide-y divide-gray-200">
                   {byQuoteData!.groups.map((g) => (
                     <div key={g.quoteKey} className="p-4">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                        Quote {[g.quoteCore, g.quoteYear].filter(Boolean).join(' ') || g.quoteKey}
+                      <h3 className="text-base font-semibold text-gray-800 mb-2">
+                        Quote {g.quoteCore || g.quoteKey}
+                        {g.quoteYear && <span className="text-gray-500 ml-1">({fullYear(g.quoteYear)})</span>}
                       </h3>
                       <table className="w-full text-sm">
                         <thead className="bg-gray-50">
