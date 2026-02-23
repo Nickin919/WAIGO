@@ -5,7 +5,7 @@ import { uploadLiterature, uploadCSV } from '../middleware/upload';
 
 const router = Router();
 
-// List and get: authenticated users who can access quotes/catalog
+// List and get: any authenticated user
 router.get('/', authenticate, literatureController.getLiteratureList);
 router.get('/sample-csv', authenticate, authorize('ADMIN'), literatureController.getSampleCsv);
 router.get('/export/pdf', authenticate, authorize('ADMIN'), literatureController.exportPdf);
@@ -16,8 +16,10 @@ router.post('/bulk-update-associations', authenticate, authorize('ADMIN'), uploa
 
 router.get('/:id', authenticate, literatureController.getLiterature);
 
-// Admin-only: upload, update associations
+// Admin-only: upload, update, delete
 router.post('/', authenticate, authorize('ADMIN'), uploadLiterature, literatureController.uploadLiterature);
+router.patch('/:id', authenticate, authorize('ADMIN'), literatureController.patchLiteratureMetadata);
 router.patch('/:id/associations', authenticate, authorize('ADMIN'), literatureController.patchLiteratureAssociations);
+router.delete('/:id', authenticate, authorize('ADMIN'), literatureController.deleteLiteratureHandler);
 
 export default router;

@@ -6,6 +6,8 @@ import {
   listLiterature,
   getLiteratureById,
   updateAssociations,
+  updateLiteratureMetadata,
+  deleteLiterature,
   updateZipMilestone,
   getZipMilestone,
   getAllLiteratureForExport,
@@ -16,41 +18,34 @@ import {
 } from '../lib/literatureService';
 import type { LiteratureType } from '@prisma/client';
 
-/**
- * Upload literature PDF with part/series associations (admin).
- */
+/** Upload literature PDF with part/series/keyword associations (admin). */
 export const uploadLiterature = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user) {
-      res.status(401).json({ error: 'Not authenticated' });
-      return;
-    }
+    if (!req.user) { res.status(401).json({ error: 'Not authenticated' }); return; }
     const file = req.file;
-    if (!file) {
-      res.status(400).json({ error: 'No file uploaded. Use field name "file" for PDF.' });
-      return;
-    }
+    if (!file) { res.status(400).json({ error: 'No file uploaded. Use field name "file" for PDF.' }); return; }
+
     const title = (req.body.title as string)?.trim();
     const type = (req.body.type as string)?.trim();
-    if (!title || !type) {
-      res.status(400).json({ error: 'title and type are required' });
-      return;
-    }
-    const partIdsRaw = req.body.partIds != null
-      ? (Array.isArray(req.body.partIds) ? req.body.partIds : [req.body.partIds]).map(String)
-      : [];
-    const partIds = partIdsRaw.flatMap((s: string) => s.split(/[,;\s]+/).map((p: string) => p.trim()).filter(Boolean));
-    const seriesNamesRaw = req.body.seriesNames != null
-      ? (Array.isArray(req.body.seriesNames) ? req.body.seriesNames : [req.body.seriesNames]).map((s: string) => String(s))
-      : [];
-    const seriesNames = seriesNamesRaw.flatMap((s: string) => s.split(/[,;\n]+/).map((x: string) => x.trim()).filter(Boolean));
+    if (!title || !type) { res.status(400).json({ error: 'title and type are required' }); return; }
 
-    const literature = await uploadLiteratureWithAssociations(
+    const parseList = (val: unknown): string[] => {
+      if (!val) return [];
+      const arr = Array.isArray(val) ? val : [val];
+      return arr.flatMap((s: unknown) => String(s).split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean));
+    };
+
+    const partNumbers = parseList(req.body.partNumbers);
+    const seriesNames = parseList(req.body.seriesNames);
+    const keywords = parseList(req.body.keywords);
+    const industryTags = parseList(req.body.industryTags);
+
+    const { literature, unresolvedParts } = await uploadLiteratureWithAssociations(
       file,
-      { title, description: req.body.description, type, partIds, seriesNames },
+      { title, description: req.body.description, type, partNumbers, seriesNames, keywords, industryTags },
       req.user.id
     );
-    res.status(201).json(literature);
+    res.status(201).json({ literature, unresolvedParts });
   } catch (error) {
     console.error('Upload literature error:', error);
     const message = error instanceof Error ? error.message : 'Failed to upload literature';
@@ -58,17 +53,20 @@ export const uploadLiterature = async (req: AuthRequest, res: Response): Promise
   }
 };
 
-/**
- * List literature with optional filters.
- */
+/** List literature with optional filters. */
 export const getLiteratureList = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const type = req.query.type as LiteratureType | undefined;
     const partId = req.query.partId as string | undefined;
+    const partNumber = req.query.partNumber as string | undefined;
     const seriesName = req.query.seriesName as string | undefined;
+    const search = req.query.search as string | undefined;
+    const keyword = req.query.keyword as string | undefined;
+    const industryTag = req.query.industryTag as string | undefined;
     const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : undefined;
     const offset = req.query.offset != null ? parseInt(String(req.query.offset), 10) : undefined;
-    const result = await listLiterature({ type, partId, seriesName, limit, offset });
+
+    const result = await listLiterature({ type, partId, partNumber, seriesName, search, keyword, industryTag, limit, offset });
     res.json(result);
   } catch (error) {
     console.error('List literature error:', error);
@@ -76,17 +74,12 @@ export const getLiteratureList = async (req: AuthRequest, res: Response): Promis
   }
 };
 
-/**
- * Get single literature by ID.
- */
+/** Get single literature by ID. */
 export const getLiterature = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const literature = await getLiteratureById(id);
-    if (!literature) {
-      res.status(404).json({ error: 'Literature not found' });
-      return;
-    }
+    if (!literature) { res.status(404).json({ error: 'Literature not found' }); return; }
     res.json(literature);
   } catch (error) {
     console.error('Get literature error:', error);
@@ -94,24 +87,47 @@ export const getLiterature = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
-/**
- * Update part/series associations for a literature item (admin).
- */
+/** Update metadata (title, description, type, keywords, industryTags) — admin only. */
+export const patchLiteratureMetadata = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { title, description, type, keywords, industryTags } = req.body;
+
+    const parseTagList = (val: unknown): string[] | undefined => {
+      if (val === undefined) return undefined;
+      if (Array.isArray(val)) return val.map(String).map((s) => s.trim()).filter(Boolean);
+      return String(val).split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean);
+    };
+
+    const literature = await updateLiteratureMetadata(id, {
+      title,
+      description,
+      type,
+      keywords: parseTagList(keywords),
+      industryTags: parseTagList(industryTags),
+    });
+    res.json(literature);
+  } catch (error) {
+    console.error('Update literature metadata error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to update literature';
+    res.status(400).json({ error: message });
+  }
+};
+
+/** Update part/series associations for a literature item (admin). */
 export const patchLiteratureAssociations = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const partIds = req.body.partIds != null
-      ? (Array.isArray(req.body.partIds) ? req.body.partIds : [req.body.partIds]).map(String).filter(Boolean)
-      : [];
-    const seriesNames = req.body.seriesNames != null
-      ? (Array.isArray(req.body.seriesNames) ? req.body.seriesNames : [req.body.seriesNames]).map((s: string) => String(s).trim()).filter(Boolean)
-      : [];
+    const parseList = (val: unknown): string[] => {
+      if (!val) return [];
+      const arr = Array.isArray(val) ? val : [val];
+      return arr.flatMap((s: unknown) => String(s).split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean));
+    };
+    const partNumbers = parseList(req.body.partNumbers);
+    const seriesNames = parseList(req.body.seriesNames);
 
-    const literature = await updateAssociations(id, partIds, seriesNames);
-    if (!literature) {
-      res.status(404).json({ error: 'Literature not found' });
-      return;
-    }
+    const literature = await updateAssociations(id, partNumbers, seriesNames);
+    if (!literature) { res.status(404).json({ error: 'Literature not found' }); return; }
     res.json(literature);
   } catch (error) {
     console.error('Update associations error:', error);
@@ -120,9 +136,20 @@ export const patchLiteratureAssociations = async (req: AuthRequest, res: Respons
   }
 };
 
-/**
- * Get zip milestone setting (admin).
- */
+/** Delete a literature item and its R2 file — admin only. */
+export const deleteLiteratureHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    await deleteLiterature(id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete literature error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to delete literature';
+    res.status(400).json({ error: message });
+  }
+};
+
+/** Get zip milestone setting (admin). */
 export const getZipMilestoneHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const value = await getZipMilestone();
@@ -133,9 +160,7 @@ export const getZipMilestoneHandler = async (req: AuthRequest, res: Response): P
   }
 };
 
-/**
- * Update zip milestone setting (admin).
- */
+/** Update zip milestone setting (admin). */
 export const putZipMilestoneHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const value = req.body.literature_zip_milestone ?? req.body.value;
@@ -152,9 +177,7 @@ export const putZipMilestoneHandler = async (req: AuthRequest, res: Response): P
   }
 };
 
-/**
- * Export literature report as PDF (admin).
- */
+/** Export literature report as PDF (admin). */
 export const exportPdf = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const buffer = await exportLiteraturePdfReport();
@@ -167,9 +190,7 @@ export const exportPdf = async (req: AuthRequest, res: Response): Promise<void> 
   }
 };
 
-/**
- * Export literature data as CSV (admin).
- */
+/** Export literature data as CSV (admin). */
 export const exportCsv = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const literature = await getAllLiteratureForExport();
@@ -183,9 +204,7 @@ export const exportCsv = async (req: AuthRequest, res: Response): Promise<void> 
   }
 };
 
-/**
- * Download sample CSV for bulk update template (admin).
- */
+/** Download sample CSV for bulk update template (admin). */
 export const getSampleCsv = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const csv = getSampleCsvContent();
@@ -198,20 +217,12 @@ export const getSampleCsv = async (req: AuthRequest, res: Response): Promise<voi
   }
 };
 
-/**
- * Bulk update associations from uploaded CSV (admin).
- */
+/** Bulk update associations from uploaded CSV (admin). */
 export const bulkUpdateAssociations = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user) {
-      res.status(401).json({ error: 'Not authenticated' });
-      return;
-    }
+    if (!req.user) { res.status(401).json({ error: 'Not authenticated' }); return; }
     const file = req.file;
-    if (!file) {
-      res.status(400).json({ error: 'No CSV file uploaded' });
-      return;
-    }
+    if (!file) { res.status(400).json({ error: 'No CSV file uploaded' }); return; }
     const csvContent = await fs.readFile(file.path, 'utf-8');
     const result = await bulkUpdateAssociationsFromCsv(csvContent, req.user.id);
     res.json(result);

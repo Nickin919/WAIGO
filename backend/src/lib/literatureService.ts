@@ -29,29 +29,49 @@ export async function uploadLiteratureWithAssociations(
     title: string;
     description?: string;
     type: string;
-    partIds?: string[];
+    partNumbers?: string[];   // plain part-number strings, resolved to IDs internally
     seriesNames?: string[];
+    keywords?: string[];
+    industryTags?: string[];
   },
   userId: string
 ) {
-  const partIds = (metadata.partIds ?? []).filter(Boolean);
+  const partNumberInputs = (metadata.partNumbers ?? []).filter(Boolean);
   const seriesNames = (metadata.seriesNames ?? []).map((s) => s.trim()).filter(Boolean);
-  if (partIds.length === 0 && seriesNames.length === 0) {
-    throw new Error('At least one product (part) or series association is required');
+  const keywords = (metadata.keywords ?? []).map((k) => k.trim()).filter(Boolean);
+  const industryTags = (metadata.industryTags ?? []).map((t) => t.trim()).filter(Boolean);
+
+  // Resolve part numbers → part IDs
+  const partIds: string[] = [];
+  const unresolvedParts: string[] = [];
+  for (const pn of partNumberInputs) {
+    const part = await prisma.part.findFirst({
+      where: { partNumber: pn.trim() },
+      select: { id: true },
+    });
+    if (part) {
+      partIds.push(part.id);
+    } else {
+      unresolvedParts.push(pn);
+    }
   }
+
   if (partIds.length > MAX_PARTS || seriesNames.length > MAX_SERIES) {
     throw new Error(`Maximum ${MAX_PARTS} parts and ${MAX_SERIES} series per item`);
   }
 
-  // Upload to R2 public bucket; store the full CDN URL in filePath so it can be
-  // used directly as a hyperlink in emails and generated quote PDFs
+  // At least one of parts/series/keywords must be provided
+  if (partIds.length === 0 && seriesNames.length === 0 && keywords.length === 0) {
+    throw new Error('At least one part number, series name, or keyword is required');
+  }
+
   const ext = path.extname(file.originalname) || '.pdf';
   const base = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9._-]/g, '_');
   const r2Key = `literature/${Date.now()}-${base}${ext}`;
   await uploadToR2(R2_PUBLIC_BUCKET, r2Key, file.buffer, file.mimetype || 'application/pdf');
   const publicUrl = getPublicUrl(r2Key);
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const lit = await tx.literature.create({
       data: {
         title: metadata.title.trim(),
@@ -59,6 +79,8 @@ export async function uploadLiteratureWithAssociations(
         type: metadata.type as PrismaLiteratureType,
         filePath: publicUrl,
         fileSize: file.size,
+        keywords,
+        industryTags,
         uploadedById: userId,
       },
     });
@@ -81,6 +103,55 @@ export async function uploadLiteratureWithAssociations(
       include: { parts: { include: { part: { select: { id: true, partNumber: true } } } }, series: true },
     });
   });
+
+  return { literature: result, unresolvedParts };
+}
+
+export async function updateLiteratureMetadata(
+  id: string,
+  fields: {
+    title?: string;
+    description?: string;
+    type?: string;
+    keywords?: string[];
+    industryTags?: string[];
+  }
+) {
+  const data: Record<string, unknown> = {};
+  if (fields.title !== undefined) data.title = fields.title.trim();
+  if (fields.description !== undefined) data.description = fields.description?.trim() || null;
+  if (fields.type !== undefined) data.type = fields.type as PrismaLiteratureType;
+  if (fields.keywords !== undefined) data.keywords = fields.keywords.map((k) => k.trim()).filter(Boolean);
+  if (fields.industryTags !== undefined) data.industryTags = fields.industryTags.map((t) => t.trim()).filter(Boolean);
+
+  return prisma.literature.update({
+    where: { id },
+    data,
+    include: literatureInclude,
+  });
+}
+
+export async function deleteLiterature(id: string) {
+  const lit = await prisma.literature.findUnique({ where: { id }, select: { filePath: true } });
+  if (!lit) throw new Error('Literature not found');
+
+  // Remove from R2
+  try {
+    const publicBase = (process.env.R2_PUBLIC_URL || '').replace(/\/$/, '');
+    let r2Key: string | null = null;
+    if (publicBase && lit.filePath.startsWith(publicBase)) {
+      r2Key = lit.filePath.slice(publicBase.length + 1);
+    } else if (isR2Key(lit.filePath)) {
+      r2Key = lit.filePath;
+    }
+    if (r2Key) {
+      await deleteFromR2(R2_PUBLIC_BUCKET, r2Key);
+    }
+  } catch (err) {
+    console.warn('Could not delete R2 object for literature', id, err);
+  }
+
+  await prisma.literature.delete({ where: { id } });
 }
 
 export async function getSuggestedLiteratureForQuote(quoteId: string) {
@@ -190,10 +261,9 @@ export async function generateLiteraturePack(quoteId: string): Promise<{
 }
 
 /** Fetch a literature file buffer from R2 (new CDN URL or key) or local disk (legacy). */
-async function getLiteratureBuffer(filePath: string): Promise<Buffer> {
+export async function getLiteratureBuffer(filePath: string): Promise<Buffer> {
   const publicBase = (process.env.R2_PUBLIC_URL || '').replace(/\/$/, '');
   if (publicBase && filePath.startsWith(publicBase)) {
-    // Full CDN URL — extract the key after the base
     const r2Key = filePath.slice(publicBase.length + 1);
     return bufferFromR2(R2_PUBLIC_BUCKET, r2Key);
   }
@@ -204,7 +274,7 @@ async function getLiteratureBuffer(filePath: string): Promise<Buffer> {
   return fs.readFile(resolved);
 }
 
-async function createZipBuffer(literature: { id: string; title: string; filePath: string }[]): Promise<Buffer> {
+export async function createZipBuffer(literature: { id: string; title: string; filePath: string }[]): Promise<Buffer> {
   return new Promise(async (resolve, reject) => {
     try {
       const chunks: Buffer[] = [];
@@ -240,14 +310,21 @@ export async function updateZipMilestone(valueBytes: number) {
 
 export async function updateAssociations(
   literatureId: string,
-  partIds: string[],
+  partNumbers: string[],
   seriesNames: string[]
 ) {
+  // Resolve part numbers → IDs
+  const partIds: string[] = [];
+  for (const pn of partNumbers) {
+    const part = await prisma.part.findFirst({
+      where: { partNumber: pn.trim() },
+      select: { id: true },
+    });
+    if (part) partIds.push(part.id);
+  }
+
   if (partIds.length > MAX_PARTS || seriesNames.length > MAX_SERIES) {
     throw new Error(`Maximum ${MAX_PARTS} parts and ${MAX_SERIES} series per item`);
-  }
-  if (partIds.length === 0 && seriesNames.length === 0) {
-    throw new Error('At least one part or series association is required');
   }
 
   return prisma.$transaction(async (tx) => {
@@ -281,24 +358,71 @@ const literatureInclude = {
 export async function listLiterature(options?: {
   type?: PrismaLiteratureType;
   partId?: string;
+  partNumber?: string;
   seriesName?: string;
+  search?: string;
+  keyword?: string;
+  industryTag?: string;
   limit?: number;
   offset?: number;
 }) {
-  const where: { type?: PrismaLiteratureType; parts?: { some: { partId?: string } }; series?: { some: { seriesName?: string } } } = {};
-  if (options?.type) where.type = options.type;
-  if (options?.partId) where.parts = { some: { partId: options.partId } };
-  if (options?.seriesName) where.series = { some: { seriesName: options.seriesName } };
+  // Build where clause
+  const andClauses: object[] = [];
+
+  if (options?.type) {
+    andClauses.push({ type: options.type });
+  }
+
+  if (options?.partId) {
+    andClauses.push({ parts: { some: { partId: options.partId } } });
+  }
+
+  if (options?.partNumber) {
+    const part = await prisma.part.findFirst({
+      where: { partNumber: options.partNumber },
+      select: { id: true },
+    });
+    if (part) {
+      andClauses.push({ parts: { some: { partId: part.id } } });
+    } else {
+      // No matching part → return empty
+      return { items: [], total: 0 };
+    }
+  }
+
+  if (options?.seriesName) {
+    andClauses.push({ series: { some: { seriesName: { contains: options.seriesName, mode: 'insensitive' } } } });
+  }
+
+  if (options?.search) {
+    andClauses.push({
+      OR: [
+        { title: { contains: options.search, mode: 'insensitive' } },
+        { description: { contains: options.search, mode: 'insensitive' } },
+        { keywords: { has: options.search } },
+      ],
+    });
+  }
+
+  if (options?.keyword) {
+    andClauses.push({ keywords: { hasSome: [options.keyword] } });
+  }
+
+  if (options?.industryTag) {
+    andClauses.push({ industryTags: { hasSome: [options.industryTag] } });
+  }
+
+  const where = andClauses.length > 0 ? { AND: andClauses } : undefined;
 
   const [items, total] = await Promise.all([
     prisma.literature.findMany({
-      where: Object.keys(where).length ? where : undefined,
+      where,
       include: literatureInclude,
       orderBy: { createdAt: 'desc' },
       take: options?.limit ?? 50,
       skip: options?.offset ?? 0,
     }),
-    prisma.literature.count({ where: Object.keys(where).length ? where : undefined }),
+    prisma.literature.count({ where }),
   ]);
   return { items, total };
 }
@@ -321,21 +445,21 @@ export async function getAllLiteratureForExport() {
 }
 
 export function getSampleCsvContent(): string {
-  const header = 'literature_id,title,type,part_ids,series_names';
-  const example = '00000000-0000-0000-0000-000000000000,Sample Title,FLYER,"P001,P002","Series A, Series B"';
-  const note = '# part_ids and series_names are comma-separated within the cell. Edit and upload via bulk-update-associations.';
+  const header = 'literature_id,title,type,part_numbers,series_names';
+  const example = '00000000-0000-0000-0000-000000000000,Sample Title,FLYER,"221-2301,750-841","221 Series, 750 Series"';
+  const note = '# part_numbers and series_names are comma-separated within the cell. Edit and upload via bulk-update-associations.';
   return [header, example, note].join('\n');
 }
 
 export function exportLiteratureCsv(literature: Awaited<ReturnType<typeof getAllLiteratureForExport>>): string {
   const rows = literature.map((lit) => {
-    const partIds = lit.parts.map((p) => p.part.partNumber ?? p.partId).join('; ');
+    const partNums = lit.parts.map((p) => p.part.partNumber ?? p.partId).join('; ');
     const seriesNames = lit.series.map((s) => s.seriesName).join('; ');
     return {
       literature_id: lit.id,
       title: lit.title,
       type: lit.type,
-      part_ids: partIds,
+      part_numbers: partNums,
       series_names: seriesNames,
     };
   });
@@ -374,9 +498,9 @@ const BULK_CSV_MAX_ROWS = 2000;
 
 export async function bulkUpdateAssociationsFromCsv(
   csvContent: string,
-  userId: string
+  _userId: string
 ): Promise<{ updated: number; errors: string[] }> {
-  const parsed = Papa.parse<{ literature_id: string; part_ids?: string; series_names?: string }>(csvContent, {
+  const parsed = Papa.parse<{ literature_id: string; part_numbers?: string; series_names?: string }>(csvContent, {
     header: true,
     skipEmptyLines: true,
   });
@@ -397,28 +521,18 @@ export async function bulkUpdateAssociationsFromCsv(
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const literatureId = String(row.literature_id).trim();
-    const partIdsRaw = (row.part_ids ?? '').toString().split(/[,;]/).map((s) => s.trim()).filter(Boolean);
+    const partNumbersRaw = (row.part_numbers ?? '').toString().split(/[,;]/).map((s) => s.trim()).filter(Boolean);
     const seriesNames = (row.series_names ?? '')
       .toString()
       .split(/[,;]/)
       .map((s) => s.trim())
       .filter(Boolean);
 
-    const partIds: string[] = [];
-    for (const p of partIdsRaw) {
-      const part = await prisma.part.findFirst({
-        where: { OR: [{ id: p }, { partNumber: p }] },
-        select: { id: true },
-      });
-      if (part) partIds.push(part.id);
-      else if (p) errors.push(`Row ${i + 2}: Part not found: ${p}`);
-    }
-
-    if (partIds.length === 0 && seriesNames.length === 0) {
-      errors.push(`Row ${i + 2}: At least one part or series required for ${literatureId}`);
+    if (partNumbersRaw.length === 0 && seriesNames.length === 0) {
+      errors.push(`Row ${i + 2}: At least one part number or series required for ${literatureId}`);
       continue;
     }
-    if (partIds.length > MAX_PARTS || seriesNames.length > MAX_SERIES) {
+    if (partNumbersRaw.length > MAX_PARTS || seriesNames.length > MAX_SERIES) {
       errors.push(`Row ${i + 2}: Exceeds max parts/series for ${literatureId}`);
       continue;
     }
@@ -433,7 +547,7 @@ export async function bulkUpdateAssociationsFromCsv(
     }
 
     try {
-      await updateAssociations(literatureId, partIds, seriesNames);
+      await updateAssociations(literatureId, partNumbersRaw, seriesNames);
       updated++;
     } catch (e) {
       errors.push(`Row ${i + 2}: ${e instanceof Error ? e.message : String(e)}`);

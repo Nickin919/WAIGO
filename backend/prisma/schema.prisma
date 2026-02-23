@@ -139,6 +139,7 @@ model User {
   priceChanges    PriceHistory[] @relation("PriceChanges")
   salesCustomers  SalesCustomer[] @relation("SalesCustomerRsm")
   literatureUploaded Literature[] @relation("LiteratureUploader")
+  literatureKits     LiteratureKit[]
   crossReferencesCreated CrossReference[] @relation("CrossReferenceCreator")
 
   @@map("users")
@@ -406,13 +407,17 @@ model Literature {
   type         LiteratureType
   filePath     String         @map("file_path")
   fileSize     Int            @map("file_size") // bytes
+  keywords     String[]       // searchable tags e.g. "CAGE CLAMP", "push-in terminal"
+  industryTags String[]       @map("industry_tags") // e.g. "Automation", "Panel Building"
   uploadedById String         @map("uploaded_by_id")
   createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
 
-  uploadedBy   User            @relation("LiteratureUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
+  uploadedBy      User                @relation("LiteratureUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
   quoteLiterature QuoteLiterature[]
-  parts        LiteraturePart[]
-  series       LiteratureSeries[]
+  parts           LiteraturePart[]
+  series          LiteratureSeries[]
+  kitItems        LiteratureKitItem[]
 
   @@index([type])
   @@map("literature")
@@ -457,6 +462,35 @@ model QuoteLiterature {
   @@index([quoteId])
   @@index([literatureId])
   @@map("quote_literature")
+}
+
+model LiteratureKit {
+  id        String              @id @default(uuid())
+  name      String
+  notes     String?             @db.Text
+  userId    String              @map("user_id")
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+
+  user  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items LiteratureKitItem[]
+
+  @@index([userId])
+  @@map("literature_kits")
+}
+
+model LiteratureKitItem {
+  kitId        String   @map("kit_id")
+  literatureId String   @map("literature_id")
+  addedAt      DateTime @default(now()) @map("added_at")
+
+  kit        LiteratureKit @relation(fields: [kitId], references: [id], onDelete: Cascade)
+  literature Literature    @relation(fields: [literatureId], references: [id], onDelete: Cascade)
+
+  @@id([kitId, literatureId])
+  @@index([kitId])
+  @@index([literatureId])
+  @@map("literature_kit_items")
 }
 
 model Settings {

@@ -320,13 +320,32 @@ export const quoteApi = {
 // ============================================================================
 
 export const literatureApi = {
-  list: (params?: { type?: string; partId?: string; seriesName?: string; limit?: number; offset?: number }) =>
-    api.get<{ items: any[]; total: number }>('/literature', { params }),
+  list: (params?: {
+    type?: string;
+    partId?: string;
+    partNumber?: string;
+    seriesName?: string;
+    search?: string;
+    keyword?: string;
+    industryTag?: string;
+    limit?: number;
+    offset?: number;
+  }) => api.get<{ items: any[]; total: number }>('/literature', { params }),
   getById: (id: string) => api.get(`/literature/${id}`),
   upload: (formData: FormData) =>
-    api.post('/literature', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  updateAssociations: (id: string, data: { partIds: string[]; seriesNames: string[] }) =>
+    api.post<{ literature: any; unresolvedParts: string[] }>('/literature', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  updateMetadata: (id: string, data: {
+    title?: string;
+    description?: string;
+    type?: string;
+    keywords?: string[];
+    industryTags?: string[];
+  }) => api.patch(`/literature/${id}`, data),
+  updateAssociations: (id: string, data: { partNumbers: string[]; seriesNames: string[] }) =>
     api.patch(`/literature/${id}/associations`, data),
+  delete: (id: string) => api.delete(`/literature/${id}`),
   getZipMilestone: () => api.get<{ literature_zip_milestone: number }>('/literature/settings/zip-milestone'),
   updateZipMilestone: (valueBytes: number) =>
     api.put('/literature/settings/zip-milestone', { literature_zip_milestone: valueBytes }),
@@ -340,6 +359,25 @@ export const literatureApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
+};
+
+// ============================================================================
+// Literature Kit API
+// ============================================================================
+
+export const literatureKitApi = {
+  list: () => api.get<{ items: any[]; total: number }>('/literature-kits'),
+  create: (data: { name: string; notes?: string }) => api.post<any>('/literature-kits', data),
+  getById: (id: string) => api.get<any>(`/literature-kits/${id}`),
+  update: (id: string, data: { name?: string; notes?: string }) => api.patch<any>(`/literature-kits/${id}`, data),
+  delete: (id: string) => api.delete(`/literature-kits/${id}`),
+  addItems: (id: string, literatureIds: string[]) =>
+    api.post<any>(`/literature-kits/${id}/items`, { literatureIds }),
+  removeItem: (id: string, litId: string) => api.delete(`/literature-kits/${id}/items/${litId}`),
+  getZipUrl: (id: string) => `${api.defaults.baseURL}/literature-kits/${id}/zip`,
+  getSlipUrl: (id: string) => `${api.defaults.baseURL}/literature-kits/${id}/slip`,
+  downloadZip: (id: string) => api.get(`/literature-kits/${id}/zip`, { responseType: 'blob' }),
+  downloadSlip: (id: string) => api.get(`/literature-kits/${id}/slip`, { responseType: 'blob' }),
 };
 
 // ============================================================================

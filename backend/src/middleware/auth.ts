@@ -8,6 +8,8 @@ export interface AuthRequest extends Request {
     id: string;
     email: string;
     role: string;
+    firstName?: string | null;
+    lastName?: string | null;
     accountId?: string | null;
     catalogId?: string | null;
     assignedToDistributorId?: string | null;
@@ -51,6 +53,8 @@ export const authenticate = async (
         id: true,
         email: true,
         role: true,
+        firstName: true,
+        lastName: true,
         accountId: true,
         catalogId: true,
         assignedToDistributorId: true,
@@ -67,6 +71,8 @@ export const authenticate = async (
       id: user.id,
       email: user.email ?? '',
       role: user.role,
+      firstName: user.firstName,
+      lastName: user.lastName,
       accountId: user.accountId ?? null,
       catalogId: user.catalogId,
       assignedToDistributorId: user.assignedToDistributorId

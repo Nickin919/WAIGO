@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Home, Grid3x3, PlayCircle, FolderKanban, DollarSign, Users, Calculator, Settings, BarChart3, Search, Link2, TrendingUp, UserCircle, ClipboardList } from 'lucide-react';
+import { Home, Grid3x3, PlayCircle, FolderKanban, DollarSign, Users, Calculator, Settings, BarChart3, Search, Link2, TrendingUp, UserCircle, ClipboardList, BookOpen } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 import { publicApi } from '@/lib/api';
@@ -33,6 +33,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     { path: '/videos', icon: PlayCircle, label: 'Video Academy', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
     { path: '/projects', icon: FolderKanban, label: 'Projects', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
     { path: '/quotes', icon: DollarSign, label: 'Quotes', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
+    { path: '/literature', icon: BookOpen, label: 'Literature Library', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
     { path: '/customers', icon: UserCircle, label: 'Manage my customers', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN', 'TURNKEY', 'BASIC', 'DISTRIBUTOR'] },
     { path: '/my-price-contracts', icon: Calculator, label: 'My Price Contracts', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
   ];

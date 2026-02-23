@@ -42,6 +42,9 @@ import BomAnalyzer from './pages/public/BomAnalyzer';
 import SalesDashboard from './pages/sales/SalesDashboard';
 import NotificationsPage from './pages/NotificationsPage';
 import NotFound from './pages/NotFound';
+import LiteratureBrowse from './pages/literature/LiteratureBrowse';
+import LiteratureKits from './pages/literature/LiteratureKits';
+import LiteratureKitDetail from './pages/literature/LiteratureKitDetail';
 
 // Redirect /assignments and /managed-users to /accounts (optionally with userId from query)
 const AssignmentsRedirect = () => {
@@ -140,6 +143,9 @@ function App() {
         <Route path="/my-price-contracts" element={<MyPriceContractsPage />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/literature" element={<LiteratureBrowse />} />
+        <Route path="/literature/kits" element={<LiteratureKits />} />
+        <Route path="/literature/kits/:id" element={<LiteratureKitDetail />} />
       </Route>
 
       {/* Admin routes */}
