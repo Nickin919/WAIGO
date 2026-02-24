@@ -246,10 +246,12 @@ export const approveVideo = async (req: AuthRequest, res: Response): Promise<voi
     });
 
     // Send notifications to catalog users
-    for (const user of video.part.catalog.users) {
-      if (user.email) {
-        sendVideoApprovalEmail(user.email, video.title, video.part.partNumber)
-          .catch(console.error);
+    if (video.part) {
+      for (const user of video.part.catalog.users) {
+        if (user.email) {
+          sendVideoApprovalEmail(user.email, video.title, video.part.partNumber)
+            .catch(console.error);
+        }
       }
     }
 

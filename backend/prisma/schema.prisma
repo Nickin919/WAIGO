@@ -141,6 +141,8 @@ model User {
   literatureUploaded Literature[] @relation("LiteratureUploader")
   literatureKits     LiteratureKit[]
   crossReferencesCreated CrossReference[] @relation("CrossReferenceCreator")
+  videoFavorites     VideoFavorite[]
+  videoPlaylists     VideoPlaylist[]
 
   @@map("users")
 }
@@ -338,6 +340,7 @@ model Part {
   catalogItems  CatalogItem[]
   priceContractItems PriceContractItem[]
   literature     LiteraturePart[]
+  videoLibrary   VideoLibraryPart[]
 
   @@unique([catalogId, partNumber])
   @@index([catalogId])
@@ -512,15 +515,29 @@ enum VideoStatus {
   REJECTED
 }
 
+enum VideoType {
+  TECHNICAL
+  APPLICATION
+  TESTIMONIAL
+  TUTORIAL
+  PRODUCT_DEMO
+  WEBINAR
+  TRAINING
+  OTHER
+}
+
 model Video {
   id            String      @id @default(uuid())
-  partId        String      @map("part_id")
+  partId        String?     @map("part_id")
   videoUrl      String      @map("video_url")
   title         String
   description   String?     @db.Text
   duration      Int?        // Duration in seconds
   level         Int         @default(1) // 1, 2, or 3
   status        VideoStatus @default(PENDING)
+  videoType     VideoType   @default(TECHNICAL) @map("video_type")
+  keywords      String[]
+  industryTags  String[]    @map("industry_tags")
   thumbnailUrl  String?     @map("thumbnail_url")
   uploadedById  String?     @map("uploaded_by_id")
   approvedById  String?     @map("approved_by_id")
@@ -529,15 +546,20 @@ model Video {
   approvedAt    DateTime?   @map("approved_at")
 
   // Relations
-  part          Part        @relation(fields: [partId], references: [id], onDelete: Cascade)
+  part          Part?       @relation(fields: [partId], references: [id], onDelete: SetNull)
   uploadedBy    User?       @relation("VideoUploader", fields: [uploadedById], references: [id])
   approvedBy    User?       @relation("VideoApprover", fields: [approvedById], references: [id])
   views         UserVideoView[]
   comments      Comment[]
+  libraryParts  VideoLibraryPart[]
+  librarySeries VideoLibrarySeries[]
+  favorites     VideoFavorite[]
+  playlistItems VideoPlaylistItem[]
 
   @@index([partId])
   @@index([status])
   @@index([level])
+  @@index([videoType])
   @@map("videos")
 }
 
@@ -581,6 +603,79 @@ model Comment {
   @@index([userId])
   @@index([parentId])
   @@map("comments")
+}
+
+model VideoLibraryPart {
+  videoId    String   @map("video_id")
+  partId     String   @map("part_id")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  video      Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  part       Part     @relation(fields: [partId], references: [id], onDelete: Cascade)
+
+  @@id([videoId, partId])
+  @@index([videoId])
+  @@index([partId])
+  @@map("video_library_parts")
+}
+
+model VideoLibrarySeries {
+  videoId    String   @map("video_id")
+  seriesName String   @map("series_name")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  video      Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@id([videoId, seriesName])
+  @@index([videoId])
+  @@index([seriesName])
+  @@map("video_library_series")
+}
+
+model VideoFavorite {
+  userId    String   @map("user_id")
+  videoId   String   @map("video_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@id([userId, videoId])
+  @@index([userId])
+  @@index([videoId])
+  @@map("video_favorites")
+}
+
+model VideoPlaylist {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  name        String
+  description String?  @db.Text
+  isPublic    Boolean  @default(false) @map("is_public")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items       VideoPlaylistItem[]
+
+  @@index([userId])
+  @@map("video_playlists")
+}
+
+model VideoPlaylistItem {
+  id         String   @id @default(uuid())
+  playlistId String   @map("playlist_id")
+  videoId    String   @map("video_id")
+  order      Int      @default(0)
+  addedAt    DateTime @default(now()) @map("added_at")
+
+  playlist   VideoPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  video      Video         @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, videoId])
+  @@index([playlistId])
+  @@index([videoId])
+  @@map("video_playlist_items")
 }
 
 // ============================================================================

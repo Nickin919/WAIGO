@@ -45,6 +45,9 @@ import NotFound from './pages/NotFound';
 import LiteratureBrowse from './pages/literature/LiteratureBrowse';
 import LiteratureKits from './pages/literature/LiteratureKits';
 import LiteratureKitDetail from './pages/literature/LiteratureKitDetail';
+import VideoLibraryBrowse from './pages/videos/VideoLibraryBrowse';
+import MyPlaylists from './pages/videos/MyPlaylists';
+import VideoLibrary from './pages/admin/VideoLibrary';
 
 // Redirect /assignments and /managed-users to /accounts (optionally with userId from query)
 const AssignmentsRedirect = () => {
@@ -146,6 +149,8 @@ function App() {
         <Route path="/literature" element={<LiteratureBrowse />} />
         <Route path="/literature/kits" element={<LiteratureKits />} />
         <Route path="/literature/kits/:id" element={<LiteratureKitDetail />} />
+        <Route path="/videos/library" element={<VideoLibraryBrowse />} />
+        <Route path="/videos/library/playlists" element={<MyPlaylists />} />
       </Route>
 
       {/* Admin routes */}
@@ -155,6 +160,7 @@ function App() {
         <Route path="/admin/import-cross-references" element={<CrossReferenceImport />} />
         <Route path="/admin/data-management" element={<DataManagement />} />
         <Route path="/admin/literature" element={<LiteratureLibrary />} />
+        <Route path="/admin/video-library" element={<VideoLibrary />} />
       </Route>
 
       {/* 404 */}

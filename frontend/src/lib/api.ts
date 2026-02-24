@@ -572,3 +572,77 @@ export const adminApi = {
     });
   },
 };
+
+// ============================================================================
+// Video Library API
+// ============================================================================
+
+export const videoLibraryApi = {
+  list: (params?: {
+    videoType?: string;
+    partId?: string;
+    partNumber?: string;
+    seriesName?: string;
+    search?: string;
+    keyword?: string;
+    industryTag?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }) => api.get<{ items: any[]; total: number }>('/video-library', { params }),
+
+  getById: (id: string) => api.get<any>(`/video-library/${id}`),
+
+  upload: (formData: FormData) =>
+    api.post<{ video: any; unresolvedParts: string[] }>('/video-library', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
+  updateMetadata: (id: string, data: {
+    title?: string;
+    description?: string;
+    videoType?: string;
+    keywords?: string[];
+    industryTags?: string[];
+    duration?: number;
+  }) => api.patch<any>(`/video-library/${id}`, data),
+
+  updateAssociations: (id: string, data: { partNumbers: string[]; seriesNames: string[] }) =>
+    api.patch<{ video: any; unresolvedParts: string[] }>(`/video-library/${id}/associations`, data),
+
+  delete: (id: string) => api.delete(`/video-library/${id}`),
+
+  trackView: (id: string) => api.post(`/video-library/${id}/view`),
+
+  toggleFavorite: (id: string) => api.post<{ favorited: boolean }>(`/video-library/${id}/favorite`),
+
+  getFavorites: (params?: { limit?: number; offset?: number }) =>
+    api.get<{ items: any[]; total: number }>('/video-library/me/favorites', { params }),
+
+  getHistory: (params?: { limit?: number }) =>
+    api.get<any[]>('/video-library/me/history', { params }),
+
+  getComments: (id: string) => api.get<any[]>(`/video-library/${id}/comments`),
+
+  postComment: (id: string, data: { content: string; parentId?: string }) =>
+    api.post<any>(`/video-library/${id}/comments`, data),
+
+  getRelated: (id: string) => api.get<any[]>(`/video-library/${id}/related`),
+
+  // Playlists
+  getPlaylists: () => api.get<any[]>('/video-library/playlists'),
+  createPlaylist: (data: { name: string; description?: string }) =>
+    api.post<any>('/video-library/playlists', data),
+  getPlaylist: (playlistId: string) => api.get<any>(`/video-library/playlists/${playlistId}`),
+  deletePlaylist: (playlistId: string) => api.delete(`/video-library/playlists/${playlistId}`),
+  addToPlaylist: (playlistId: string, videoId: string) =>
+    api.post<any>(`/video-library/playlists/${playlistId}/items`, { videoId }),
+  removeFromPlaylist: (playlistId: string, videoId: string) =>
+    api.delete(`/video-library/playlists/${playlistId}/items/${videoId}`),
+  reorderPlaylistItem: (playlistId: string, videoId: string, order: number) =>
+    api.patch(`/video-library/playlists/${playlistId}/reorder`, { videoId, order }),
+
+  // Admin
+  getAnalytics: () => api.get<any>('/video-library/admin/analytics'),
+  exportCsv: () => api.get('/video-library/export/csv', { responseType: 'blob' }),
+};

@@ -104,4 +104,15 @@ export const uploadMultiple = upload.array('files', 10);
 export const uploadVideo = memUpload.single('video');
 export const uploadLiterature = memUpload.single('file');
 
+// Video library upload: video file + optional thumbnail (both memory-stored for R2)
+const memUploadVideoLib = multer({
+  storage: multer.memoryStorage(),
+  fileFilter,
+  limits: { fileSize: parseInt(process.env.MAX_VIDEO_SIZE || '524288000') }, // 500MB default
+});
+export const uploadVideoLibrary = memUploadVideoLib.fields([
+  { name: 'video', maxCount: 1 },
+  { name: 'thumbnail', maxCount: 1 },
+]);
+
 export default upload;
