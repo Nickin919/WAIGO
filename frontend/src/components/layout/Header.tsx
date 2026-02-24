@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Bell, User, Search, Menu, LogIn } from 'lucide-react';
 import { useAuthStore, isGuestUser } from '@/stores/authStore';
 import { notificationApi } from '@/lib/api';
@@ -32,6 +32,8 @@ interface HeaderProps {
 const Header = ({ onMenuClick }: HeaderProps) => {
   const { user } = useAuthStore();
   const isGuest = useAuthStore(isGuestUser);
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState('');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -136,16 +138,25 @@ const Header = ({ onMenuClick }: HeaderProps) => {
           </Link>
         </div>
 
-        <div className="hidden md:flex flex-1 max-w-lg mx-8">
+        <form
+          className="hidden md:flex flex-1 max-w-lg mx-8"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const q = searchQuery.trim();
+            if (q) navigate(`/catalog?search=${encodeURIComponent(q)}`);
+          }}
+        >
           <div className="relative w-full">
-            <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+            <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search parts, projects..."
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-wago-green focus:border-transparent"
             />
           </div>
-        </div>
+        </form>
 
         <div className="flex items-center space-x-4">
           {/* Notifications – only when logged in */}

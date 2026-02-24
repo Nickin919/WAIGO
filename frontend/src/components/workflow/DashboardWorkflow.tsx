@@ -222,20 +222,17 @@ export function DashboardWorkflow() {
   return (
     <div className="space-y-0">
       {/* Row 1: START HERE */}
-      <WorkflowRow bannerLabel="Start here">
-        <div className="flex flex-col items-center gap-4">
-          <motion.button
-            type="button"
-            className="flex items-center justify-center gap-2 rounded-xl font-bold text-white shadow-lg transition-all hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white/50 min-w-[200px] h-14 px-6"
-            style={{ backgroundColor: WORKFLOW_GREEN }}
-            onClick={() => {}}
-            aria-label="BOM – Start here"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            <Cog className="w-6 h-6" aria-hidden />
-            <span>BOM</span>
-          </motion.button>
+      <WorkflowRow bannerLabel="Start Here">
+        <div className="flex flex-col items-center gap-5 text-center">
+          <div>
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <Cog className="w-6 h-6" style={{ color: WORKFLOW_GREEN }} aria-hidden />
+              <h3 className="text-lg font-bold text-gray-900">Build Your BOM</h3>
+            </div>
+            <p className="text-sm text-gray-500 max-w-sm">
+              A Bill of Materials (BOM) is your starting point. Upload a CSV file or build one manually using the Product Finder.
+            </p>
+          </div>
           <div className="flex flex-wrap justify-center gap-3">
             <input
               ref={fileInputRef}
@@ -247,11 +244,11 @@ export function DashboardWorkflow() {
             />
             <motion.button
               type="button"
-              className="flex items-center gap-2 rounded-lg border-2 px-4 py-2 font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-60"
-              style={{ borderColor: WORKFLOW_GREEN, color: WORKFLOW_GREEN }}
+              className="flex items-center gap-2 rounded-lg px-6 py-3 font-semibold text-white shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-60"
+              style={{ backgroundColor: WORKFLOW_GREEN }}
               onClick={handleUploadClick}
               disabled={uploading}
-              aria-label="Upload BOM from file"
+              aria-label="Upload BOM CSV file"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
@@ -260,31 +257,36 @@ export function DashboardWorkflow() {
               ) : (
                 <UploadCloud className="w-5 h-5" aria-hidden />
               )}
-              <span>Upload</span>
+              <span>Upload CSV</span>
             </motion.button>
             <motion.button
               type="button"
-              className="flex items-center gap-2 rounded-lg border-2 px-4 py-2 font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2"
+              className="flex items-center gap-2 rounded-lg border-2 px-6 py-3 font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-offset-2"
               style={{ borderColor: WORKFLOW_GREEN, color: WORKFLOW_GREEN }}
               onClick={() => setBuildModalOpen(true)}
-              aria-label="Build BOM with product finder"
+              aria-label="Build BOM manually with Product Finder"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
               <Search className="w-5 h-5" aria-hidden />
-              <span>Build</span>
+              <span>Build Manually</span>
             </motion.button>
           </div>
+          {hasBom && bomData && (
+            <p className="text-sm font-medium" style={{ color: WORKFLOW_GREEN }}>
+              ✓ BOM ready — {bomData.name || 'Your BOM'} {bomData.itemCount != null ? `(${bomData.itemCount} items)` : ''}
+            </p>
+          )}
         </div>
       </WorkflowRow>
 
       <FlowConnectorDown />
 
       {/* Row 2: STEP 2 */}
-      <WorkflowRow bannerLabel="Step 2" disabled={step2Disabled}>
+      <WorkflowRow bannerLabel="Step 2 – Use Your BOM" disabled={step2Disabled}>
         {step2Disabled && (
           <p className="text-sm text-gray-500 mb-4 text-center" role="status">
-            Create or upload a BOM above to enable these options.
+            Complete Step 1 above — upload or build a BOM to unlock these options.
           </p>
         )}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-2 items-stretch">
@@ -359,7 +361,7 @@ export function DashboardWorkflow() {
       <FlowConnectorDown />
 
       {/* Row 3: REVIEW */}
-      <WorkflowRow bannerLabel="Review" disabled={!hasBom}>
+      <WorkflowRow bannerLabel="Step 3 – Review" disabled={!hasBom}>
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="card p-4">

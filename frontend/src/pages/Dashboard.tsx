@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, CheckCircle, DollarSign, Package, FolderKanban, Video, FileText, Library, BookOpen } from 'lucide-react';
+import { CheckCircle, DollarSign, Package, FolderKanban, Video, FileText, Library, BookOpen } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 import { catalogApi, projectApi, quoteApi, literatureKitApi } from '@/lib/api';
@@ -155,69 +155,69 @@ const Dashboard = () => {
       </div>
 
       {/* Stats Cards – wired to real data, link to relevant pages */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
         <Link
           to="/catalog-list"
-          className="bg-gradient-to-br from-cyan-600 to-cyan-700 text-white p-6 rounded-xl shadow-lg hover:from-cyan-700 hover:to-cyan-800 transition-all block"
+          className="bg-white border border-gray-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-wago-blue transition-all block group"
         >
-          <div className="flex items-center gap-2 mb-1">
-            <Library className="w-6 h-6 opacity-90" />
-            <span className="text-3xl font-bold">{catalogCountLabel}</span>
+          <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center mb-3">
+            <Library className="w-5 h-5 text-wago-blue" />
           </div>
-          <div className="text-sm opacity-90">Catalogs</div>
+          <div className="text-2xl font-bold text-gray-900">{catalogCountLabel}</div>
+          <div className="text-sm text-gray-500 mt-0.5">Catalogs</div>
           {averagePartsPerCatalog != null && (
-            <div className="text-xs opacity-80 mt-1">Avg {averagePartsPerCatalog.toLocaleString()} parts/catalog</div>
+            <div className="text-xs text-gray-400 mt-1">Avg {averagePartsPerCatalog.toLocaleString()} parts</div>
           )}
         </Link>
         <Link
           to={user?.catalogId ? '/catalog' : '/catalog-list'}
-          className="bg-gradient-to-br from-green-600 to-green-700 text-white p-6 rounded-xl shadow-lg hover:from-green-700 hover:to-green-800 transition-all block"
+          className="bg-white border border-gray-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-wago-green transition-all block group"
         >
-          <div className="flex items-center gap-2 mb-1">
-            <Package className="w-6 h-6 opacity-90" />
-            <span className="text-3xl font-bold">{partsLabel}</span>
+          <div className="w-9 h-9 bg-green-50 rounded-lg flex items-center justify-center mb-3">
+            <Package className="w-5 h-5 text-wago-green" />
           </div>
-          <div className="text-sm opacity-90">Total Parts</div>
+          <div className="text-2xl font-bold text-gray-900">{partsLabel}</div>
+          <div className="text-sm text-gray-500 mt-0.5">Total Parts</div>
         </Link>
         <Link
           to="/projects"
-          className="bg-gradient-to-br from-blue-600 to-blue-700 text-white p-6 rounded-xl shadow-lg hover:from-blue-700 hover:to-blue-800 transition-all block"
+          className="bg-white border border-gray-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-blue-500 transition-all block group"
         >
-          <div className="flex items-center gap-2 mb-1">
-            <FolderKanban className="w-6 h-6 opacity-90" />
-            <span className="text-3xl font-bold">{projectsLabel}</span>
+          <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center mb-3">
+            <FolderKanban className="w-5 h-5 text-blue-600" />
           </div>
-          <div className="text-sm opacity-90">Projects</div>
+          <div className="text-2xl font-bold text-gray-900">{projectsLabel}</div>
+          <div className="text-sm text-gray-500 mt-0.5">Projects</div>
         </Link>
         <Link
           to="/videos"
-          className="bg-gradient-to-br from-purple-600 to-purple-700 text-white p-6 rounded-xl shadow-lg hover:from-purple-700 hover:to-purple-800 transition-all block"
+          className="bg-white border border-gray-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-purple-500 transition-all block group"
         >
-          <div className="flex items-center gap-2 mb-1">
-            <Video className="w-6 h-6 opacity-90" />
-            <span className="text-3xl font-bold">{videosLabel}</span>
+          <div className="w-9 h-9 bg-purple-50 rounded-lg flex items-center justify-center mb-3">
+            <Video className="w-5 h-5 text-purple-600" />
           </div>
-          <div className="text-sm opacity-90">Videos</div>
+          <div className="text-2xl font-bold text-gray-900">{videosLabel}</div>
+          <div className="text-sm text-gray-500 mt-0.5">Videos</div>
         </Link>
         <Link
           to="/quotes"
-          className="bg-gradient-to-br from-orange-600 to-orange-700 text-white p-6 rounded-xl shadow-lg hover:from-orange-700 hover:to-orange-800 transition-all block"
+          className="bg-white border border-gray-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-orange-500 transition-all block group"
         >
-          <div className="flex items-center gap-2 mb-1">
-            <FileText className="w-6 h-6 opacity-90" />
-            <span className="text-3xl font-bold">{quotesLabel}</span>
+          <div className="w-9 h-9 bg-orange-50 rounded-lg flex items-center justify-center mb-3">
+            <FileText className="w-5 h-5 text-orange-600" />
           </div>
-          <div className="text-sm opacity-90">Quotes</div>
+          <div className="text-2xl font-bold text-gray-900">{quotesLabel}</div>
+          <div className="text-sm text-gray-500 mt-0.5">Quotes</div>
         </Link>
         <Link
           to="/literature/kits"
-          className="bg-gradient-to-br from-teal-600 to-teal-700 text-white p-6 rounded-xl shadow-lg hover:from-teal-700 hover:to-teal-800 transition-all block"
+          className="bg-white border border-gray-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-teal-500 transition-all block group"
         >
-          <div className="flex items-center gap-2 mb-1">
-            <BookOpen className="w-6 h-6 opacity-90" />
-            <span className="text-3xl font-bold">{kitsLabel}</span>
+          <div className="w-9 h-9 bg-teal-50 rounded-lg flex items-center justify-center mb-3">
+            <BookOpen className="w-5 h-5 text-teal-600" />
           </div>
-          <div className="text-sm opacity-90">Lit Kits</div>
+          <div className="text-2xl font-bold text-gray-900">{kitsLabel}</div>
+          <div className="text-sm text-gray-500 mt-0.5">Literature Kits</div>
         </Link>
       </div>
 
@@ -226,138 +226,61 @@ const Dashboard = () => {
         <DashboardWorkflow />
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Quick Actions */}
-        <div className="lg:col-span-1">
-          <div className="card p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-            <div className="space-y-3">
-              <Link
-                to="/projects"
-                className="flex items-center justify-between p-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors group"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
-                    <Plus className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="font-medium text-gray-900">New Project</span>
-                </div>
-                <svg className="w-5 h-5 text-gray-400 group-hover:text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </Link>
-              <Link
-                to="/quotes"
-                className="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors group"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
-                    <Plus className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="font-medium text-gray-900">Create Quote</span>
-                </div>
-                <svg className="w-5 h-5 text-gray-400 group-hover:text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </Link>
-              <Link
-                to="/literature"
-                className="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors group"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center">
-                    <BookOpen className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="font-medium text-gray-900">Browse Literature</span>
-                </div>
-                <svg className="w-5 h-5 text-gray-400 group-hover:text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </Link>
-              <button className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors group">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                    <Plus className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="font-medium text-gray-900">Upload BOM</span>
-                </div>
-                <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
-          </div>
+      {/* Recent Activity – sorted by date, name as headline */}
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
+          <Link
+            to={user?.role && ['DISTRIBUTOR_REP', 'RSM', 'ADMIN'].includes(effectiveRole(user.role)) ? '/activity' : '/projects'}
+            className="text-sm text-wago-green font-medium hover:underline"
+          >
+            View All
+          </Link>
         </div>
+        {(() => {
+          const combined = [
+            ...recentProjects.map((p) => ({ id: p.id, name: p.name, date: p.updatedAt, type: 'project' as const, href: `/projects/${p.id}` })),
+            ...recentQuotes.map((q) => ({ id: q.id, name: q.quoteNumber || q.id, date: q.createdAt, type: 'quote' as const, href: `/quotes/${q.id}` })),
+            ...recentKits.map((k) => ({ id: k.id, name: k.name, date: k.updatedAt, type: 'kit' as const, href: `/literature/kits/${k.id}`, itemCount: k.itemCount })),
+          ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 8);
 
-        {/* Recent Activity – from recent projects and quotes */}
-        <div className="lg:col-span-2">
-          <div className="card p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
-              <Link
-                to={user?.role && ['DISTRIBUTOR_REP', 'RSM', 'ADMIN'].includes(effectiveRole(user.role)) ? '/activity' : '/projects'}
-                className="text-sm text-green-600 font-medium hover:underline"
-              >
-                View All
-              </Link>
+          const typeConfig = {
+            project: { label: 'Project', icon: CheckCircle, iconClass: 'text-blue-600', bgClass: 'bg-blue-50', badgeClass: 'bg-blue-100 text-blue-700' },
+            quote: { label: 'Quote', icon: DollarSign, iconClass: 'text-orange-600', bgClass: 'bg-orange-50', badgeClass: 'bg-orange-100 text-orange-700' },
+            kit: { label: 'Literature Kit', icon: BookOpen, iconClass: 'text-teal-600', bgClass: 'bg-teal-50', badgeClass: 'bg-teal-100 text-teal-700' },
+          };
+
+          if (combined.length === 0 && !loading) {
+            return <p className="text-sm text-gray-500">No recent activity yet. Start by uploading a BOM above.</p>;
+          }
+
+          return (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {combined.map((item) => {
+                const cfg = typeConfig[item.type];
+                const Icon = cfg.icon;
+                return (
+                  <Link
+                    key={`${item.type}-${item.id}`}
+                    to={item.href}
+                    className="flex items-start gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-300 hover:shadow-sm transition-all"
+                  >
+                    <div className={`w-9 h-9 ${cfg.bgClass} rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                      <Icon className={`w-4 h-4 ${cfg.iconClass}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900 text-sm truncate">{item.name}</p>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${cfg.badgeClass}`}>{cfg.label}</span>
+                        <span className="text-xs text-gray-400">{formatRelativeTime(item.date)}</span>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
-            <div className="space-y-4">
-              {recentProjects.length === 0 && recentQuotes.length === 0 && !loading && (
-                <p className="text-sm text-gray-500">No recent projects or quotes yet.</p>
-              )}
-              {recentProjects.map((p) => (
-                <Link
-                  key={p.id}
-                  to={`/projects/${p.id}`}
-                  className="flex items-start space-x-3 pb-4 border-b border-gray-100 last:border-0 last:pb-0 hover:bg-gray-50 -mx-2 px-2 py-1 rounded-lg transition-colors"
-                >
-                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900">Project</p>
-                    <p className="text-sm text-gray-600 truncate">{p.name} • {formatRelativeTime(p.updatedAt)}</p>
-                  </div>
-                </Link>
-              ))}
-              {recentQuotes.map((q) => (
-                <Link
-                  key={q.id}
-                  to={`/quotes/${q.id}`}
-                  className="flex items-start space-x-3 pb-4 border-b border-gray-100 last:border-0 last:pb-0 hover:bg-gray-50 -mx-2 px-2 py-1 rounded-lg transition-colors"
-                >
-                  <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <DollarSign className="w-5 h-5 text-orange-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900">Quote</p>
-                    <p className="text-sm text-gray-600 truncate">{q.quoteNumber || q.id} • {formatRelativeTime(q.createdAt)}</p>
-                  </div>
-                </Link>
-              ))}
-              {recentKits.map((k) => (
-                <Link
-                  key={k.id}
-                  to={`/literature/kits/${k.id}`}
-                  className="flex items-start space-x-3 pb-4 border-b border-gray-100 last:border-0 last:pb-0 hover:bg-gray-50 -mx-2 px-2 py-1 rounded-lg transition-colors"
-                >
-                  <div className="w-10 h-10 bg-teal-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <BookOpen className="w-5 h-5 text-teal-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900">Literature Kit</p>
-                    <p className="text-sm text-gray-600 truncate">
-                      {k.name}
-                      {k.itemCount != null && ` • ${k.itemCount} item${k.itemCount !== 1 ? 's' : ''}`}
-                      {' • '}{formatRelativeTime(k.updatedAt)}
-                    </p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </div>
+          );
+        })()}
       </div>
     </div>
   );
