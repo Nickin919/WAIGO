@@ -6,6 +6,8 @@
 import PDFDocument from 'pdfkit';
 import path from 'path';
 import fs from 'fs';
+import https from 'https';
+import http from 'http';
 import { getUploadDir } from './uploadPath';
 
 const MARGIN = 50;
@@ -79,24 +81,39 @@ export interface QuoteForPdf {
   } & ContactForPdf;
 }
 
-/** Resolve user logo URL (e.g. /uploads/logos/xxx.png) to filesystem path. Uses same upload base as multer (Railway volume-aware). */
-function resolveLogoPath(logoUrl: string | null | undefined): string | null {
-  if (!logoUrl || typeof logoUrl !== 'string') return null;
-  const uploadBase = getUploadDir();
-  const basename = path.basename(logoUrl);
-  if (!basename) return null;
-  const full = path.join(uploadBase, 'logos', basename);
-  return fs.existsSync(full) ? full : null;
-}
+/**
+ * Fetch an image as a Buffer from either:
+ *   - a full HTTP/HTTPS URL (R2 public URL, or any CDN)
+ *   - a legacy /uploads/... relative path (local disk on Railway volume)
+ * Returns null if the image cannot be fetched/found.
+ */
+async function fetchImageBuffer(url: string | null | undefined): Promise<Buffer | null> {
+  if (!url || typeof url !== 'string') return null;
 
-/** Resolve avatar URL (e.g. /uploads/avatars/xxx.jpg) to filesystem path. */
-function resolveAvatarPath(avatarUrl: string | null | undefined): string | null {
-  if (!avatarUrl || typeof avatarUrl !== 'string') return null;
-  const uploadBase = getUploadDir();
-  const basename = path.basename(avatarUrl);
-  if (!basename) return null;
-  const full = path.join(uploadBase, 'avatars', basename);
-  return fs.existsSync(full) ? full : null;
+  // Full HTTP/HTTPS URL — fetch from network (R2 public bucket, etc.)
+  if (url.startsWith('https://') || url.startsWith('http://')) {
+    return new Promise((resolve) => {
+      const client = url.startsWith('https://') ? https : http;
+      client.get(url, (res) => {
+        if (res.statusCode !== 200) { res.resume(); resolve(null); return; }
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => resolve(Buffer.concat(chunks)));
+        res.on('error', () => resolve(null));
+      }).on('error', () => resolve(null));
+    });
+  }
+
+  // Legacy local path — /uploads/logos/... or /uploads/avatars/...
+  if (url.startsWith('/uploads/')) {
+    const uploadBase = getUploadDir();
+    const full = path.join(uploadBase, url.replace(/^\/uploads\/?/, ''));
+    if (fs.existsSync(full)) {
+      try { return fs.readFileSync(full); } catch { return null; }
+    }
+  }
+
+  return null;
 }
 
 const AVATAR_SIZE = 48; // diameter in points for contact circles
@@ -111,7 +128,7 @@ function drawHeader(
   doc: PDFDoc,
   pageNum: number,
   totalPages: number,
-  opts: { proposalNumber: string; dateStr: string; rsmLogoPath: string | null; distLogoPath: string | null }
+  opts: { proposalNumber: string; dateStr: string; rsmLogoPath: Buffer | null; distLogoPath: Buffer | null }
 ) {
   const y0 = MARGIN;
   doc.rect(0, y0, PAGE_WIDTH, HEADER_BAR_HEIGHT).fill('#ffffff');
@@ -179,21 +196,30 @@ function drawContinuationFooter(doc: PDFDoc, pageNum: number, totalPages: number
  * Build Pricing Proposal PDF buffer for a quote (Style B).
  */
 export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
+  const proposalNumber = quote.quoteNumber;
+  const dateStr = formatDate(quote.createdAt);
+
+  const rsmLogoUrl =
+    quote.user.role === 'RSM' ? quote.user.logoUrl : quote.user.assignedToRsm?.logoUrl ?? undefined;
+  const distLogoUrl =
+    quote.user.role === 'DISTRIBUTOR_REP' ? quote.user.logoUrl : quote.user.assignedToDistributor?.logoUrl ?? undefined;
+  const rsmContact = quote.user.role === 'RSM' ? quote.user : quote.user.assignedToRsm;
+  const distContact = quote.user.role === 'DISTRIBUTOR_REP' ? quote.user : quote.user.assignedToDistributor;
+
+  // Pre-fetch all images before starting PDF generation (supports R2 URLs and legacy local paths)
+  const [rsmLogoPath, distLogoPath, rsmAvatarBuf, distAvatarBuf] = await Promise.all([
+    fetchImageBuffer(rsmLogoUrl),
+    fetchImageBuffer(distLogoUrl),
+    fetchImageBuffer(rsmContact?.avatarUrl),
+    fetchImageBuffer(distContact?.avatarUrl),
+  ]);
+
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 0, size: 'A4' });
     const chunks: Buffer[] = [];
     doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
-
-    const proposalNumber = quote.quoteNumber;
-    const dateStr = formatDate(quote.createdAt);
-    const rsmLogoUrl =
-      quote.user.role === 'RSM' ? quote.user.logoUrl : quote.user.assignedToRsm?.logoUrl ?? undefined;
-    const distLogoUrl =
-      quote.user.role === 'DISTRIBUTOR_REP' ? quote.user.logoUrl : quote.user.assignedToDistributor?.logoUrl ?? undefined;
-    const rsmLogoPath = resolveLogoPath(rsmLogoUrl ?? null);
-    const distLogoPath = resolveLogoPath(distLogoUrl ?? null);
 
     let pageNum = 1;
     let totalPages = 1; // will update if we add pages
@@ -316,8 +342,6 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     doc.fontSize(10).fillColor('#6b7280').text('CONTACT', MARGIN, doc.y);
     row(16);
     const contactStartY = y;
-    const rsmContact = quote.user.role === 'RSM' ? quote.user : quote.user.assignedToRsm;
-    const distContact = quote.user.role === 'DISTRIBUTOR_REP' ? quote.user : quote.user.assignedToDistributor;
     const rsmName = rsmContact ? [rsmContact.firstName, rsmContact.lastName].filter(Boolean).join(' ') || '—' : '—';
     const rsmEmail = rsmContact?.email ?? '—';
     const rsmPhone = rsmContact?.phone ?? '—';
@@ -326,15 +350,14 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     const distPhone = distContact?.phone ?? '—';
 
     const r = AVATAR_SIZE / 2;
-    const drawContactAvatar = (cardX: number, avatarUrl: string | null | undefined) => {
+    const drawContactAvatar = (cardX: number, avatarBuf: Buffer | null) => {
       const cx = cardX + r;
       const cy = contactStartY + r;
-      const avatarPath = resolveAvatarPath(avatarUrl);
-      if (avatarPath) {
+      if (avatarBuf) {
         try {
           doc.save();
           doc.circle(cx, cy, r).clip();
-          doc.image(avatarPath, cardX, contactStartY, { width: AVATAR_SIZE, height: AVATAR_SIZE, fit: [AVATAR_SIZE, AVATAR_SIZE] });
+          doc.image(avatarBuf, cardX, contactStartY, { width: AVATAR_SIZE, height: AVATAR_SIZE, fit: [AVATAR_SIZE, AVATAR_SIZE] });
           doc.restore();
         } catch {
           doc.circle(cx, cy, r).fill('#e5e7eb');
@@ -345,13 +368,13 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     };
 
     const card1X = MARGIN;
-    drawContactAvatar(card1X, rsmContact?.avatarUrl ?? undefined);
+    drawContactAvatar(card1X, rsmAvatarBuf);
     doc.fontSize(10).fillColor('#6b7280').text('Your WAGO Contact', card1X + 56, contactStartY);
     doc.fontSize(12).fillColor('#111827').text(rsmName, card1X + 56, contactStartY + 12);
     doc.fontSize(10).fillColor('#4b5563').text(rsmEmail, card1X + 56, contactStartY + 26);
     doc.text(rsmPhone, card1X + 56, contactStartY + 40);
     const card2X = MARGIN + 270;
-    drawContactAvatar(card2X, distContact?.avatarUrl ?? undefined);
+    drawContactAvatar(card2X, distAvatarBuf);
     doc.fontSize(10).fillColor('#6b7280').text('Your Distributor', card2X + 56, contactStartY);
     doc.fontSize(12).fillColor('#111827').text(distName, card2X + 56, contactStartY + 12);
     doc.fontSize(10).fillColor('#4b5563').text(distEmail, card2X + 56, contactStartY + 26);

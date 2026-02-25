@@ -2,12 +2,11 @@ import { Response } from 'express';
 import { validationResult } from 'express-validator';
 import bcrypt from 'bcrypt';
 import path from 'path';
-import fs from 'fs';
 import { prisma } from '../lib/prisma';
 import { generateToken } from '../lib/jwt';
 import { sendWelcomeEmail } from '../lib/email';
 import { AuthRequest } from '../middleware/auth';
-import { getUploadDir } from '../lib/uploadPath';
+import { uploadToR2, deleteFromR2, getPublicUrl, R2_PUBLIC_BUCKET, isR2Key } from '../lib/r2';
 
 /**
  * Register a new user
@@ -447,7 +446,7 @@ export const getMyActivity = async (req: AuthRequest, res: Response): Promise<vo
 
 /**
  * Upload avatar for current user. Expects multipart field "avatar" (image file).
- * Stores file in uploads/avatars and sets user.avatarUrl to /uploads/avatars/filename.
+ * Stores file in R2 public bucket under avatars/ and sets user.avatarUrl to the public URL.
  */
 export const uploadAvatar = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -455,18 +454,24 @@ export const uploadAvatar = async (req: AuthRequest, res: Response): Promise<voi
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
-    if (!req.file || !req.file.path) {
+    if (!req.file || !req.file.buffer) {
       res.status(400).json({ error: 'No avatar file uploaded' });
       return;
     }
-    const relativePath = `/uploads/avatars/${path.basename(req.file.path)}`;
+
+    const ext = path.extname(req.file.originalname) || '.jpg';
+    const key = `avatars/${req.user.id}-${Date.now()}${ext}`;
+    await uploadToR2(R2_PUBLIC_BUCKET, key, req.file.buffer, req.file.mimetype);
+    const avatarUrl = getPublicUrl(key);
+
     const previous = await prisma.user.findUnique({
       where: { id: req.user.id },
       select: { avatarUrl: true }
     });
+
     const updatedUser = await prisma.user.update({
       where: { id: req.user.id },
-      data: { avatarUrl: relativePath },
+      data: { avatarUrl },
       select: {
         id: true,
         email: true,
@@ -482,16 +487,12 @@ export const uploadAvatar = async (req: AuthRequest, res: Response): Promise<voi
         updatedAt: true
       }
     });
-    if (previous?.avatarUrl) {
-      const oldPath = path.join(getUploadDir(), previous.avatarUrl.replace(/^\/uploads\/?/, ''));
-      if (fs.existsSync(oldPath)) {
-        try {
-          fs.unlinkSync(oldPath);
-        } catch {
-          // ignore cleanup errors
-        }
-      }
+
+    // Delete old avatar from R2 if it was previously stored there
+    if (previous?.avatarUrl && isR2Key(previous.avatarUrl)) {
+      deleteFromR2(R2_PUBLIC_BUCKET, previous.avatarUrl).catch(() => {});
     }
+
     res.json(updatedUser);
   } catch (error) {
     console.error('Upload avatar error:', error);
@@ -501,7 +502,7 @@ export const uploadAvatar = async (req: AuthRequest, res: Response): Promise<voi
 
 /**
  * Upload company logo for current user (RSM / Distributor). Used in Pricing Proposal header.
- * Expects multipart field "logo" (image file). Stores in uploads/logos, sets user.logoUrl.
+ * Expects multipart field "logo" (image file). Stores in R2 public bucket under logos/, sets user.logoUrl.
  */
 export const uploadLogo = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -509,18 +510,24 @@ export const uploadLogo = async (req: AuthRequest, res: Response): Promise<void>
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
-    if (!req.file || !req.file.path) {
+    if (!req.file || !req.file.buffer) {
       res.status(400).json({ error: 'No logo file uploaded' });
       return;
     }
-    const relativePath = `/uploads/logos/${path.basename(req.file.path)}`;
+
+    const ext = path.extname(req.file.originalname) || '.png';
+    const key = `logos/${req.user.id}-${Date.now()}${ext}`;
+    await uploadToR2(R2_PUBLIC_BUCKET, key, req.file.buffer, req.file.mimetype);
+    const logoUrl = getPublicUrl(key);
+
     const previous = await prisma.user.findUnique({
       where: { id: req.user.id },
       select: { logoUrl: true }
     });
+
     const updatedUser = await prisma.user.update({
       where: { id: req.user.id },
-      data: { logoUrl: relativePath },
+      data: { logoUrl },
       select: {
         id: true,
         email: true,
@@ -537,16 +544,12 @@ export const uploadLogo = async (req: AuthRequest, res: Response): Promise<void>
         updatedAt: true
       }
     });
-    if (previous?.logoUrl) {
-      const oldPath = path.join(getUploadDir(), previous.logoUrl.replace(/^\/uploads\/?/, ''));
-      if (fs.existsSync(oldPath)) {
-        try {
-          fs.unlinkSync(oldPath);
-        } catch {
-          // ignore
-        }
-      }
+
+    // Delete old logo from R2 if it was previously stored there
+    if (previous?.logoUrl && isR2Key(previous.logoUrl)) {
+      deleteFromR2(R2_PUBLIC_BUCKET, previous.logoUrl).catch(() => {});
     }
+
     res.json(updatedUser);
   } catch (error) {
     console.error('Upload logo error:', error);

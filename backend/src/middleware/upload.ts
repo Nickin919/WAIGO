@@ -96,13 +96,13 @@ export const uploadCSV = upload.single('csv');
 export const uploadExcel = upload.single('excel');
 export const uploadDocument = upload.single('document');
 export const uploadPDF = upload.single('pdf');
-export const uploadAvatar = upload.single('avatar');
-export const uploadLogo = upload.single('logo');
 export const uploadMultiple = upload.array('files', 10);
 
 // Memory-storage exports — controller is responsible for pushing to R2
 export const uploadVideo = memUpload.single('video');
 export const uploadLiterature = memUpload.single('file');
+export const uploadAvatar = memUpload.single('avatar');
+export const uploadLogo = memUpload.single('logo');
 
 // Video library upload: video file + optional thumbnail (both memory-stored for R2)
 const memUploadVideoLib = multer({

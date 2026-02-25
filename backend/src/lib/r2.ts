@@ -62,5 +62,15 @@ export function getPublicUrl(key: string): string {
 
 /** Returns true if filePath looks like an R2 object key rather than a local disk path. */
 export function isR2Key(filePath: string): boolean {
-  return filePath.startsWith('literature/') || filePath.startsWith('videos/');
+  return (
+    filePath.startsWith('literature/') ||
+    filePath.startsWith('videos/') ||
+    filePath.startsWith('avatars/') ||
+    filePath.startsWith('logos/')
+  );
+}
+
+/** Returns true if the value is a full public R2 URL (rather than a local /uploads path). */
+export function isR2PublicUrl(url: string): boolean {
+  return R2_PUBLIC_BASE_URL.length > 0 && url.startsWith(R2_PUBLIC_BASE_URL);
 }
