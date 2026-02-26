@@ -61,18 +61,11 @@ PORT=3001
 4. Go to "Settings" tab
 5. Set "Root Directory" to `backend`
 6. Set "Build Command" to `npm install && npx prisma generate && npm run build`
-7. Set "Start Command" to `npm start`
+7. Set "Start Command" to `npx prisma migrate deploy && npm start` (migrations run before start; do not use `prisma db push` with the current schema)
 
 ### 5. Run Database Migrations
 
-After backend deploys:
-
-1. Go to backend service
-2. Click on "Deploy Logs"
-3. Open a new deployment
-4. Railway will run migrations automatically through the build process
-
-Alternatively, use Railway CLI:
+Migrations run automatically on each deploy via the start command (`prisma migrate deploy`). To run them manually:
 
 ```bash
 railway run npx prisma migrate deploy
