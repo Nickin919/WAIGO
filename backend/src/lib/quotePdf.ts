@@ -219,14 +219,13 @@ function drawFooter(doc: PDFDoc, accentColor: string) {
   );
 }
 
-function drawContinuationFooter(doc: PDFDoc, pageNum: number, totalPages: number) {
+function drawContinuationFooter(doc: PDFDoc) {
   const y = CONTINUED_FOOTER_Y;
   doc.moveTo(MARGIN, y).lineTo(COL.end, y).strokeColor('#e5e7eb').lineWidth(1).stroke();
   doc.rect(MARGIN, y, CONTENT_WIDTH, CONTINUED_FOOTER_HEIGHT).fill('#fafafa');
   doc.moveTo(MARGIN, y + CONTINUED_FOOTER_HEIGHT).lineTo(COL.end, y + CONTINUED_FOOTER_HEIGHT).strokeColor('#e5e7eb').stroke();
   doc.fontSize(9).fillColor('#9ca3af');
-  doc.text('Continued on the next page', MARGIN, y + 8, { align: 'center', width: CONTENT_WIDTH });
-  doc.text(`Page ${pageNum} of ${totalPages}`, MARGIN, y + 18, { align: 'center', width: CONTENT_WIDTH });
+  doc.text('Continued on the next page  →', MARGIN, y + 10, { align: 'center', width: CONTENT_WIDTH });
 }
 
 /**
@@ -275,6 +274,9 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     fetchImageBuffer(quote.bannerUrl ?? null),
   ]);
 
+  // A4 page height = 842pt. Content wraps before FOOTER_Y.
+  const USABLE_BOTTOM = FOOTER_Y - 10; // 780pt — leave room for footer
+
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 0, size: 'A4' });
     const chunks: Buffer[] = [];
@@ -283,73 +285,91 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     doc.on('error', reject);
 
     let pageNum = 1;
-    let totalPages = 1; // will update if we add pages
     let y = CONTENT_TOP;
 
-    const row = (dy: number, redrawTableHead = false) => {
+    const headerOpts = { proposalNumber, dateStr, validUntilStr, rsmLogoPath, distLogoPath, accentColor };
+
+    // Used ONLY during line-items table: advances cursor and breaks page with "Continued" footer
+    const itemRow = (dy: number, redrawTableHead = false) => {
       y += dy;
       doc.y = y;
       if (y > 718) {
-        drawContinuationFooter(doc, pageNum, totalPages);
+        drawContinuationFooter(doc);
         doc.addPage({ margin: 0 });
         pageNum++;
-        totalPages = pageNum;
-        drawHeader(doc, pageNum, totalPages, { proposalNumber, dateStr, validUntilStr, rsmLogoPath, distLogoPath, accentColor });
+        drawHeader(doc, pageNum, pageNum, headerOpts); // totalPages = pageNum (best estimate)
         y = CONTENT_TOP;
         doc.y = y;
         if (redrawTableHead) {
-          doc.rect(MARGIN, y, CONTENT_WIDTH, TABLE_HEAD_HEIGHT).fill('#e5e7eb');
-          doc.fontSize(10).fillColor('#4b5563');
-          doc.text('Part Number', COL.part + 4, y + 7);
-          doc.text('Description', COL.desc + 4, y + 7);
-          doc.text('MOQ', COL.moq, y + 7, { width: COL_WIDTHS.moq, align: 'right' });
-          doc.text('Qty', COL.qty, y + 7, { width: COL_WIDTHS.qty, align: 'right' });
-          doc.text('Price', COL.price, y + 7, { width: COL_WIDTHS.price, align: 'right' });
-          doc.text('Total', COL.total, y + 7, { width: COL_WIDTHS.total, align: 'right' });
+          drawTableHeader(doc, y);
           y += TABLE_HEAD_HEIGHT;
           doc.y = y;
         }
       }
     };
 
-    drawHeader(doc, pageNum, totalPages, { proposalNumber, dateStr, validUntilStr, rsmLogoPath, distLogoPath, accentColor });
+    // Used AFTER line-items table: breaks page silently (no "Continued" footer)
+    const ensureSpace = (needed: number) => {
+      if (y + needed > USABLE_BOTTOM) {
+        doc.addPage({ margin: 0 });
+        pageNum++;
+        drawHeader(doc, pageNum, pageNum, headerOpts);
+        y = CONTENT_TOP;
+        doc.y = y;
+      }
+    };
+
+    // Advance y without triggering a page break (used for known-safe small offsets)
+    const advance = (dy: number) => {
+      y += dy;
+      doc.y = y;
+    };
+
+    // ── Page 1 header ──────────────────────────────────────────────────────────
+    drawHeader(doc, pageNum, pageNum, headerOpts);
     doc.y = y;
 
+    // ── Meta bar ──────────────────────────────────────────────────────────────
     const metaY = y;
-    doc.rect(MARGIN, metaY, CONTENT_WIDTH, META_HEIGHT).fill('#f9fafb');
-    doc.moveTo(MARGIN, metaY + META_HEIGHT).lineTo(COL.end, metaY + META_HEIGHT).strokeColor('#e5e7eb').stroke();
+    const metaBarH = validUntilStr ? 46 : META_HEIGHT;
+    doc.rect(MARGIN, metaY, CONTENT_WIDTH, metaBarH).fill('#f9fafb');
+    doc.moveTo(MARGIN, metaY + metaBarH).lineTo(COL.end, metaY + metaBarH).strokeColor('#e5e7eb').stroke();
     doc.fontSize(10).fillColor('#6b7280');
-    doc.text(`Proposal #: ${proposalNumber}`, MARGIN + 8, metaY + 10);
+    doc.text(`Proposal #:`, MARGIN + 8, metaY + 10);
+    doc.fillColor('#111827').font('Helvetica-Bold').text(` ${proposalNumber}`, MARGIN + 66, metaY + 10);
+    doc.font('Helvetica').fillColor('#6b7280');
     doc.text(`Date: ${dateStr}`, MARGIN + 140, metaY + 10);
+    if (validUntilStr) {
+      doc.fillColor('#059669').font('Helvetica-Bold')
+        .text(`Valid until: ${validUntilStr}`, MARGIN + 8, metaY + 28);
+      doc.font('Helvetica').fillColor('#6b7280');
+    }
     if (quote.priceContract?.name) {
       doc.text(`Price Contract: ${quote.priceContract.name}`, MARGIN + 280, metaY + 10);
     }
-    row(META_HEIGHT + 4);
+    advance(metaBarH + 4);
 
-    doc.fontSize(10).fillColor('#6b7280').text('BILL TO', MARGIN, doc.y);
-    row(14);
+    // ── Bill To ───────────────────────────────────────────────────────────────
+    doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold').text('BILL TO', MARGIN, y);
+    doc.font('Helvetica');
+    advance(13);
     const billToY = y;
     const customerName = quote.customerName || quote.customer?.name || '—';
-    doc.fillColor('#111827').fontSize(11).text(customerName, MARGIN, billToY);
-    if (quote.customer?.address) doc.fillColor('#1f2937').text(quote.customer.address, MARGIN, billToY + 14);
+    doc.fillColor('#111827').fontSize(11).font('Helvetica-Bold').text(customerName, MARGIN, billToY);
+    doc.font('Helvetica').fontSize(10).fillColor('#4b5563');
+    let billOffset = 15;
+    if (quote.customer?.address) { doc.text(quote.customer.address, MARGIN, billToY + billOffset); billOffset += 13; }
     if (quote.customer?.city || quote.customer?.state || quote.customer?.zipCode) {
-      const cityStateZip = [quote.customer.city, quote.customer.state, quote.customer.zipCode].filter(Boolean).join(', ');
-      doc.text(cityStateZip, MARGIN, billToY + (quote.customer?.address ? 28 : 14));
+      doc.text([quote.customer?.city, quote.customer?.state, quote.customer?.zipCode].filter(Boolean).join(', '), MARGIN, billToY + billOffset);
+      billOffset += 13;
     }
     const emailLine = quote.customerEmail || quote.customer?.email;
-    if (emailLine) doc.text(emailLine, MARGIN, billToY + (quote.customer?.address ? 42 : quote.customer?.city ? 28 : 14));
-    row(56);
+    if (emailLine) { doc.text(emailLine, MARGIN, billToY + billOffset); billOffset += 13; }
+    advance(Math.max(48, billOffset + 8));
 
-    // Table header
-    doc.rect(MARGIN, y, CONTENT_WIDTH, TABLE_HEAD_HEIGHT).fill('#e5e7eb');
-    doc.fontSize(9).fillColor('#4b5563');
-    doc.text('Part Number', COL.part + 4, y + 7);
-    doc.text('Description', COL.desc + 4, y + 7);
-    doc.text('MOQ', COL.moq, y + 7, { width: COL_WIDTHS.moq, align: 'right' });
-    doc.text('Qty', COL.qty, y + 7, { width: COL_WIDTHS.qty, align: 'right' });
-    doc.text('Price', COL.price, y + 7, { width: COL_WIDTHS.price, align: 'right' });
-    doc.text('Total', COL.total, y + 7, { width: COL_WIDTHS.total, align: 'right' });
-    row(TABLE_HEAD_HEIGHT);
+    // ── Line items table ───────────────────────────────────────────────────────
+    drawTableHeader(doc, y);
+    advance(TABLE_HEAD_HEIGHT);
 
     const items = quote.items;
     for (let i = 0; i < items.length; i++) {
@@ -365,75 +385,83 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
       const rowY = y;
       doc.rect(MARGIN, rowY, CONTENT_WIDTH, ROW_HEIGHT).fill(i % 2 === 0 ? '#ffffff' : '#f9fafb');
 
-      // Thumbnail (22×18pt, vertically centered in row)
+      // Thumbnail
       const thumbBuf = getThumbBuf(it);
       if (thumbBuf) {
         try {
-          doc.image(thumbBuf, COL.thumb, rowY + 1, { width: THUMB_COL_W, height: ROW_HEIGHT - 2, fit: [THUMB_COL_W, ROW_HEIGHT - 2] });
+          doc.image(thumbBuf, COL.thumb, rowY + 1, { fit: [THUMB_COL_W, ROW_HEIGHT - 2] });
         } catch { /* skip if corrupt */ }
       }
 
-      doc.fillColor('#1f2937').fontSize(9);
+      doc.fillColor('#1f2937').fontSize(9).font('Helvetica');
       const partNumWithGap = pn + (sym ? '  ' : '');
-      doc.text(partNumWithGap, COL.part + 2, rowY + 5);
+      doc.text(partNumWithGap, COL.part + 2, rowY + 5, { lineBreak: false });
       if (sym) {
-        const symX = COL.part + 2 + doc.widthOfString(partNumWithGap);
-        doc.fillColor(symColor).text(sym, symX, rowY + 5);
+        doc.fillColor(symColor).text(sym, COL.part + 2 + doc.widthOfString(partNumWithGap), rowY + 5, { lineBreak: false });
       }
-      doc.fillColor('#1f2937').text(desc.slice(0, 30), COL.desc + 4, rowY + 5);
-      doc.text(String(moq), COL.moq, rowY + 5, { width: COL_WIDTHS.moq, align: 'right' });
-      doc.text(String(it.quantity), COL.qty, rowY + 5, { width: COL_WIDTHS.qty, align: 'right' });
-      doc.text('$' + price.toFixed(2), COL.price, rowY + 5, { width: COL_WIDTHS.price, align: 'right' });
-      doc.text('$' + total.toFixed(2), COL.total, rowY + 5, { width: COL_WIDTHS.total, align: 'right' });
-      doc.moveTo(MARGIN, rowY + ROW_HEIGHT).lineTo(COL.end, rowY + ROW_HEIGHT).strokeColor('#e5e7eb').stroke();
-      row(ROW_HEIGHT, true);
+      doc.fillColor('#1f2937').text(desc.slice(0, 32), COL.desc + 4, rowY + 5, { lineBreak: false });
+      doc.text(String(moq), COL.moq, rowY + 5, { width: COL_WIDTHS.moq, align: 'right', lineBreak: false });
+      doc.text(String(it.quantity), COL.qty, rowY + 5, { width: COL_WIDTHS.qty, align: 'right', lineBreak: false });
+      doc.text('$' + price.toFixed(2), COL.price, rowY + 5, { width: COL_WIDTHS.price, align: 'right', lineBreak: false });
+      doc.text('$' + total.toFixed(2), COL.total, rowY + 5, { width: COL_WIDTHS.total, align: 'right', lineBreak: false });
+      doc.moveTo(MARGIN, rowY + ROW_HEIGHT).lineTo(COL.end, rowY + ROW_HEIGHT).strokeColor('#e5e7eb').lineWidth(0.5).stroke();
+      itemRow(ROW_HEIGHT, true);
     }
 
-    row(8);
-
-    // Total section
+    // ── Totals ────────────────────────────────────────────────────────────────
+    ensureSpace(70);
+    advance(8);
     doc.moveTo(MARGIN, y).lineTo(COL.end, y).strokeColor(accentColor).lineWidth(2).stroke();
-    row(12);
+    advance(10);
     const totalsY = y;
-    doc.rect(MARGIN, totalsY - 2, CONTENT_WIDTH, 46).fill('#f9fafb');
-    doc.fontSize(11).fillColor('#1f2937').text(`Subtotal: $${quote.total.toFixed(2)}`, MARGIN, totalsY + 4, { width: CONTENT_WIDTH, align: 'right' });
-    doc.fontSize(18).fillColor('#111827').font('Helvetica-Bold').text(`TOTAL: $${quote.total.toFixed(2)}`, MARGIN, totalsY + 20, { width: CONTENT_WIDTH - 4, align: 'right' });
+    doc.rect(MARGIN, totalsY, CONTENT_WIDTH, 48).fill('#f9fafb');
+    doc.fontSize(10).fillColor('#6b7280').text(`Subtotal: $${quote.total.toFixed(2)}`, MARGIN, totalsY + 6, { width: CONTENT_WIDTH - 8, align: 'right' });
+    doc.fontSize(16).fillColor('#111827').font('Helvetica-Bold').text(`TOTAL:  $${quote.total.toFixed(2)}`, MARGIN, totalsY + 22, { width: CONTENT_WIDTH - 8, align: 'right' });
     doc.font('Helvetica');
-    row(48);
+    advance(56);
 
-    // Terms
-    doc.moveTo(MARGIN, y).lineTo(COL.end, y).strokeColor('#e5e7eb').stroke();
-    row(12);
-    doc.fontSize(10).fillColor('#6b7280').text('Terms', MARGIN, doc.y);
-    row(14);
-    doc.fontSize(10).fillColor('#1f2937').text(quote.terms || 'Net 30. Valid for 30 days from proposal date.', MARGIN, doc.y, { width: CONTENT_WIDTH });
-    row(22);
+    // ── Terms ─────────────────────────────────────────────────────────────────
+    const termsText = quote.terms || 'Net 30. Valid for 30 days from proposal date.';
+    ensureSpace(50);
+    doc.moveTo(MARGIN, y).lineTo(COL.end, y).strokeColor('#e5e7eb').lineWidth(1).stroke();
+    advance(10);
+    doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold').text('TERMS', MARGIN, y);
+    doc.font('Helvetica');
+    advance(13);
+    doc.fontSize(10).fillColor('#1f2937').text(termsText, MARGIN, y, { width: CONTENT_WIDTH });
+    advance(24);
+
+    // ── Notes ─────────────────────────────────────────────────────────────────
     if (quote.notes) {
-      doc.fontSize(10).fillColor('#6b7280').text('Notes', MARGIN, doc.y);
-      row(14);
-      doc.fontSize(10).fillColor('#1f2937').text(quote.notes.slice(0, 200), MARGIN, doc.y, { width: CONTENT_WIDTH });
-      row(22);
+      ensureSpace(44);
+      doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold').text('NOTES', MARGIN, y);
+      doc.font('Helvetica');
+      advance(13);
+      doc.fontSize(10).fillColor('#1f2937').text(quote.notes.slice(0, 200), MARGIN, y, { width: CONTENT_WIDTH });
+      advance(24);
     }
 
-    // Contact cards
+    // ── Contact cards ─────────────────────────────────────────────────────────
+    const contactBlockH = 110; // label + cards
+    ensureSpace(contactBlockH);
     doc.moveTo(MARGIN, y).lineTo(COL.end, y).strokeColor('#e5e7eb').lineWidth(1).stroke();
-    row(14);
-    doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold').text('CONTACT', MARGIN, doc.y);
+    advance(12);
+    doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold').text('CONTACT', MARGIN, y);
     doc.font('Helvetica');
-    row(16);
+    advance(14);
     const contactStartY = y;
 
     const r = AVATAR_SIZE / 2;
     const drawContactCard = (cardX: number, avatarBuf: Buffer | null, label: string, name: string, email: string, phone: string, cardWidth: number) => {
-      doc.rect(cardX, contactStartY - 4, cardWidth, 64).fill('#f9fafb');
-      doc.moveTo(cardX, contactStartY - 4).lineTo(cardX, contactStartY + 60).strokeColor(accentColor).lineWidth(2).stroke();
-      const cx = cardX + 12 + r;
-      const cy = contactStartY + r + 4;
+      doc.rect(cardX, contactStartY, cardWidth, 66).fill('#f9fafb');
+      doc.moveTo(cardX, contactStartY).lineTo(cardX, contactStartY + 66).strokeColor(accentColor).lineWidth(2).stroke();
+      const cx = cardX + 14 + r;
+      const cy = contactStartY + r + 9;
       if (avatarBuf) {
         try {
           doc.save();
           doc.circle(cx, cy, r).clip();
-          doc.image(avatarBuf, cardX + 12, contactStartY + 4, { width: AVATAR_SIZE, height: AVATAR_SIZE, fit: [AVATAR_SIZE, AVATAR_SIZE] });
+          doc.image(avatarBuf, cardX + 14, contactStartY + 9, { fit: [AVATAR_SIZE, AVATAR_SIZE] });
           doc.restore();
         } catch {
           doc.circle(cx, cy, r).fill('#d1d5db');
@@ -441,46 +469,56 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
       } else {
         doc.circle(cx, cy, r).fill('#d1d5db');
       }
-      const textX = cardX + 12 + AVATAR_SIZE + 10;
-      doc.fontSize(8).fillColor('#6b7280').text(label, textX, contactStartY + 2);
-      doc.fontSize(11).fillColor('#111827').font('Helvetica-Bold').text(name, textX, contactStartY + 13);
-      doc.font('Helvetica').fontSize(9).fillColor('#4b5563').text(email, textX, contactStartY + 28);
-      doc.text(phone, textX, contactStartY + 40);
+      const textX = cardX + 14 + AVATAR_SIZE + 10;
+      doc.fontSize(8).fillColor('#6b7280').text(label, textX, contactStartY + 6);
+      doc.fontSize(11).fillColor('#111827').font('Helvetica-Bold').text(name, textX, contactStartY + 18);
+      doc.font('Helvetica').fontSize(9).fillColor('#4b5563').text(email, textX, contactStartY + 33);
+      doc.text(phone, textX, contactStartY + 46);
     };
 
     const rsmName = rsmContact ? [rsmContact.firstName, rsmContact.lastName].filter(Boolean).join(' ') || '—' : '—';
-    const rsmEmail = rsmContact?.email ?? '—';
-    const rsmPhone = rsmContact?.phone ?? '—';
 
     if (rsmContact && distContact) {
-      drawContactCard(MARGIN, rsmAvatarBuf, 'Your WAGO Contact', rsmName, rsmEmail, rsmPhone, 230);
+      drawContactCard(MARGIN, rsmAvatarBuf, 'Your WAGO Contact', rsmName, rsmContact.email ?? '—', rsmContact.phone ?? '—', 232);
       const distName = [distContact.firstName, distContact.lastName].filter(Boolean).join(' ') || '—';
-      drawContactCard(MARGIN + 250, distAvatarBuf, 'Your Distributor', distName, distContact.email ?? '—', distContact.phone ?? '—', 230);
+      drawContactCard(MARGIN + 252, distAvatarBuf, 'Your Distributor', distName, distContact.email ?? '—', distContact.phone ?? '—', 232);
     } else if (rsmContact) {
-      drawContactCard(MARGIN, rsmAvatarBuf, 'Your WAGO Contact', rsmName, rsmEmail, rsmPhone, CONTENT_WIDTH);
+      drawContactCard(MARGIN, rsmAvatarBuf, 'Your WAGO Contact', rsmName, rsmContact.email ?? '—', rsmContact.phone ?? '—', CONTENT_WIDTH);
     } else if (distContact) {
       const distName = [distContact.firstName, distContact.lastName].filter(Boolean).join(' ') || '—';
       drawContactCard(MARGIN, distAvatarBuf, 'Your Distributor', distName, distContact.email ?? '—', distContact.phone ?? '—', CONTENT_WIDTH);
     }
-    row(72);
 
+    // ── Footer (drawn at absolute position on last content page) ──────────────
     drawFooter(doc, accentColor);
 
-    // Banner page (full-width image on a new final page)
+    // ── Banner page ───────────────────────────────────────────────────────────
     if (bannerBuf) {
       doc.addPage({ margin: 0 });
-      // Accent bars top and bottom
       doc.rect(0, 0, PAGE_WIDTH, ACCENT_BAR_HEIGHT).fill(accentColor);
       doc.rect(0, 837, PAGE_WIDTH, ACCENT_BAR_HEIGHT).fill(accentColor);
-      // Center the banner on the page
       const bannerMaxW = PAGE_WIDTH - 2 * MARGIN;
       const bannerMaxH = 842 - 2 * MARGIN - 2 * ACCENT_BAR_HEIGHT;
-      const bannerY = MARGIN + ACCENT_BAR_HEIGHT;
+      const bannerStartY = MARGIN + ACCENT_BAR_HEIGHT;
       try {
-        doc.image(bannerBuf, MARGIN, bannerY, { width: bannerMaxW, height: bannerMaxH, fit: [bannerMaxW, bannerMaxH], align: 'center', valign: 'center' });
+        // Use ONLY fit[] — never set width+height together as they override fit and ignore aspect ratio
+        doc.image(bannerBuf, MARGIN, bannerStartY, { fit: [bannerMaxW, bannerMaxH], align: 'center', valign: 'center' });
       } catch { /* skip if corrupt */ }
     }
 
     doc.end();
   });
+}
+
+// ── Shared helper: draw the items table header row ───────────────────────────
+function drawTableHeader(doc: PDFDoc, y: number) {
+  doc.rect(MARGIN, y, CONTENT_WIDTH, TABLE_HEAD_HEIGHT).fill('#e5e7eb');
+  doc.fontSize(9).fillColor('#4b5563').font('Helvetica-Bold');
+  doc.text('Part Number', COL.part + 4, y + 8, { lineBreak: false });
+  doc.text('Description', COL.desc + 4, y + 8, { lineBreak: false });
+  doc.text('MOQ', COL.moq, y + 8, { width: COL_WIDTHS.moq, align: 'right', lineBreak: false });
+  doc.text('Qty', COL.qty, y + 8, { width: COL_WIDTHS.qty, align: 'right', lineBreak: false });
+  doc.text('Price', COL.price, y + 8, { width: COL_WIDTHS.price, align: 'right', lineBreak: false });
+  doc.text('Total', COL.total, y + 8, { width: COL_WIDTHS.total, align: 'right', lineBreak: false });
+  doc.font('Helvetica');
 }

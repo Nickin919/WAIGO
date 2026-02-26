@@ -146,7 +146,7 @@ export const createQuote = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const { catalogId, priceContractId, customerId, customerName, customerEmail, customerCompany, notes, terms: bodyTerms, items } = req.body;
+    const { catalogId, priceContractId, customerId, customerName, customerEmail, customerCompany, notes, terms: bodyTerms, items, validUntil: validUntilRaw } = req.body;
 
     if (!catalogId) {
       res.status(400).json({ error: 'catalogId is required' });
@@ -265,6 +265,7 @@ export const createQuote = async (req: AuthRequest, res: Response): Promise<void
         notes: notes || null,
         total,
         terms: termsValue,
+        validUntil: validUntilRaw ? new Date(validUntilRaw) : null,
       },
     });
 
@@ -301,7 +302,7 @@ export const updateQuote = async (req: AuthRequest, res: Response): Promise<void
     }
 
     const { id } = req.params;
-    const { customerId, customerName, customerEmail, customerCompany, notes, terms: bodyTerms, priceContractId, items } = req.body;
+    const { customerId, customerName, customerEmail, customerCompany, notes, terms: bodyTerms, priceContractId, items, validUntil: validUntilRaw } = req.body;
 
     const existing = await prisma.quote.findUnique({
       where: { id },
@@ -413,13 +414,14 @@ export const updateQuote = async (req: AuthRequest, res: Response): Promise<void
       });
     }
 
-    const updateData: { customerId?: string | null; customerName?: string | null; customerEmail?: string; customerCompany?: string; notes?: string | null; terms?: string; total: number; priceContractId?: string | null } = {
+    const updateData: { customerId?: string | null; customerName?: string | null; customerEmail?: string; customerCompany?: string; notes?: string | null; terms?: string; total: number; priceContractId?: string | null; validUntil?: Date | null } = {
       customerId: customerId || null,
       customerName: displayName || null,
       customerEmail: customerEmail || undefined,
       customerCompany: customerCompany || undefined,
       notes: notes || null,
       total,
+      validUntil: validUntilRaw !== undefined ? (validUntilRaw ? new Date(validUntilRaw) : null) : undefined,
     };
     if (priceContractId !== undefined) {
       updateData.priceContractId = priceContractId || null;
