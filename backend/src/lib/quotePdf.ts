@@ -141,11 +141,12 @@ type PDFDoc = InstanceType<typeof PDFDocument>;
 function drawHeader(
   doc: PDFDoc,
   pageNum: number,
-  totalPages: number,
+  _totalPages: number,
   opts: {
     proposalNumber: string;
     dateStr: string;
     validUntilStr?: string;
+    priceContractName?: string | null;
     rsmLogoPath: Buffer | null;
     distLogoPath: Buffer | null;
     accentColor: string;
@@ -163,7 +164,7 @@ function drawHeader(
     .strokeColor('#e5e7eb').lineWidth(1).stroke();
 
   // Row 1: RSM logo | PRICING PROPOSAL title | Distributor logo
-  const logoTopOffset = ACCENT_BAR_HEIGHT;  // logos start just after accent bar
+  const logoTopOffset = ACCENT_BAR_HEIGHT;
   const rsmX = MARGIN;
   const rsmY = y0 + logoTopOffset + (HEADER_ROW1_HEIGHT - RSM_LOGO_HEIGHT_PT) / 2;
   const centerLeft = rsmX + RSM_LOGO_WIDTH_PT + HEADER_GAP;
@@ -181,7 +182,7 @@ function drawHeader(
   }
 
   doc.fontSize(17).fillColor('#111827').font('Helvetica-Bold')
-    .text('PRICING PROPOSAL', centerLeft, y0 + logoTopOffset + 10, { width: centerWidth, align: 'center' });
+    .text('PRICING PROPOSAL', centerLeft, y0 + logoTopOffset + 10, { width: centerWidth, align: 'center', lineBreak: false });
   doc.font('Helvetica');
 
   if (opts.distLogoPath) {
@@ -192,12 +193,21 @@ function drawHeader(
     }
   }
 
-  // Row 2: meta line
-  const metaY = y0 + logoTopOffset + HEADER_ROW1_HEIGHT + 6;
-  let metaText = `Proposal #${opts.proposalNumber}  ·  ${opts.dateStr}`;
-  if (opts.validUntilStr) metaText += `  ·  Valid until ${opts.validUntilStr}`;
-  metaText += `  ·  Page ${pageNum} of ${totalPages}`;
-  doc.fontSize(8).fillColor('#6b7280').text(metaText, MARGIN, metaY, { width: CONTENT_WIDTH, align: 'right' });
+  // Row 2: document metadata — left side: proposal info | right side: page number
+  const row2Y = y0 + logoTopOffset + HEADER_ROW1_HEIGHT + 7;
+
+  // Build the left-side info string
+  let leftMeta = `Proposal #${opts.proposalNumber}   ·   ${opts.dateStr}`;
+  if (opts.validUntilStr) leftMeta += `   ·   Valid until ${opts.validUntilStr}`;
+  if (opts.priceContractName) leftMeta += `   ·   Contract: ${opts.priceContractName}`;
+
+  // Page number right-aligned (reserved width ~46pt)
+  doc.fontSize(9).fillColor('#6b7280').font('Helvetica')
+    .text(`Page ${pageNum}`, MARGIN, row2Y, { width: CONTENT_WIDTH, align: 'right', lineBreak: false });
+
+  // Document info left-aligned (leave room for page number)
+  doc.fontSize(9).fillColor('#6b7280')
+    .text(leftMeta, MARGIN, row2Y, { width: CONTENT_WIDTH - 50, lineBreak: false });
 
   doc.y = CONTENT_TOP;
 }
@@ -292,7 +302,15 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     let pageNum = 1;
     let y = CONTENT_TOP;
 
-    const headerOpts = { proposalNumber, dateStr, validUntilStr, rsmLogoPath, distLogoPath, accentColor };
+    const headerOpts = {
+      proposalNumber,
+      dateStr,
+      validUntilStr,
+      priceContractName: quote.priceContract?.name ?? null,
+      rsmLogoPath,
+      distLogoPath,
+      accentColor,
+    };
 
     // Used ONLY during line-items table: advances cursor and breaks page with "Continued" footer
     const itemRow = (dy: number, redrawTableHead = false) => {
@@ -333,26 +351,6 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     // ── Page 1 header ──────────────────────────────────────────────────────────
     drawHeader(doc, pageNum, pageNum, headerOpts);
     doc.y = y;
-
-    // ── Meta bar ──────────────────────────────────────────────────────────────
-    const metaY = y;
-    const metaBarH = validUntilStr ? 46 : META_HEIGHT;
-    doc.rect(MARGIN, metaY, CONTENT_WIDTH, metaBarH).fill('#f9fafb');
-    doc.moveTo(MARGIN, metaY + metaBarH).lineTo(COL.end, metaY + metaBarH).strokeColor('#e5e7eb').stroke();
-    doc.fontSize(10).fillColor('#6b7280');
-    doc.text(`Proposal #:`, MARGIN + 8, metaY + 10);
-    doc.fillColor('#111827').font('Helvetica-Bold').text(` ${proposalNumber}`, MARGIN + 66, metaY + 10);
-    doc.font('Helvetica').fillColor('#6b7280');
-    doc.text(`Date: ${dateStr}`, MARGIN + 140, metaY + 10);
-    if (validUntilStr) {
-      doc.fillColor('#059669').font('Helvetica-Bold')
-        .text(`Valid until: ${validUntilStr}`, MARGIN + 8, metaY + 28);
-      doc.font('Helvetica').fillColor('#6b7280');
-    }
-    if (quote.priceContract?.name) {
-      doc.text(`Price Contract: ${quote.priceContract.name}`, MARGIN + 280, metaY + 10);
-    }
-    advance(metaBarH + 4);
 
     // ── Bill To ───────────────────────────────────────────────────────────────
     doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold').text('BILL TO', MARGIN, y);
