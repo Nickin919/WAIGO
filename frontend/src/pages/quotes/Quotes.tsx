@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Plus, FileText, ChevronRight } from 'lucide-react';
 import { quoteApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
+import { effectiveRole } from '@/lib/quoteConstants';
 
 interface Quote {
   id: string;
@@ -17,6 +18,7 @@ const Quotes = () => {
   const { user } = useAuthStore();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
+  const isRsm = ['RSM', 'ADMIN'].includes((effectiveRole(user?.role || '') || '').toUpperCase());
 
   useEffect(() => {
     quoteApi.getAll().then((res) => {
@@ -35,6 +37,11 @@ const Quotes = () => {
           <Plus className="w-5 h-5" /> New Quote
         </Link>
       </div>
+      {isRsm && (
+        <p className="text-sm text-gray-600 mb-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
+          When creating a quote, use the <strong>Company</strong> dropdown to select a distributor company, then choose a customer from that company&apos;s list.
+        </p>
+      )}
 
       {loading ? (
         <div className="space-y-3">

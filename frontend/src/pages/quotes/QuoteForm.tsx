@@ -133,7 +133,7 @@ const QuoteForm = () => {
   const someMarginSelected = items.some((i) => i.marginSelected);
   const someDiscountSelected = items.some((i) => i.discountSelected);
   const effective = effectiveRole(user?.role || '');
-  const isRsm = effective === 'RSM' || effective === 'ADMIN';
+  const isRsm = ['RSM', 'ADMIN'].includes((effective || '').toUpperCase());
   const showMargin = ['ADMIN', 'RSM', 'DISTRIBUTOR', 'DISTRIBUTOR_REP'].includes(effective); // Basic and Direct users never see margin
   const showDiscount = !['BASIC', 'BASIC_USER'].includes(effective); // Basic users never see discount
 
@@ -818,7 +818,7 @@ const QuoteForm = () => {
               ))}
             </select>
           </div>
-          {isRsm && companies.length > 0 && (
+          {isRsm && (
             <div className="min-w-0">
               <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
               <select
@@ -830,12 +830,16 @@ const QuoteForm = () => {
                   setShowCustomerPicker(false);
                 }}
                 className="input w-full max-w-[220px]"
+                title={companies.length === 0 ? 'No distributor companies assigned yet. Select a company to see customers created by distributors.' : undefined}
               >
                 <option value="">My customers</option>
                 {companies.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
+              {companies.length === 0 && (
+                <p className="text-xs text-gray-500 mt-0.5">No distributor companies assigned</p>
+              )}
             </div>
           )}
           <div className="min-w-0 flex-1 lg:min-w-[200px]">
@@ -843,6 +847,9 @@ const QuoteForm = () => {
               <label className="block text-sm font-medium text-gray-700">Customer</label>
               <Link to="/customers" className="text-xs text-green-600 hover:underline">Manage</Link>
             </div>
+            {isRsm && selectedCompanyName && (
+              <p className="text-xs text-gray-500 mb-1">Showing customers from {selectedCompanyName}</p>
+            )}
             <div className="relative">
               <input
                 type="text"
