@@ -49,6 +49,8 @@ const ProjectBookCreator = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   
+  const [totalProductCount, setTotalProductCount] = useState<number | null>(null);
+
   // Search & bulk import
   const [search, setSearch] = useState('');
   const [quickAddPartNumber, setQuickAddPartNumber] = useState('');
@@ -123,14 +125,16 @@ const ProjectBookCreator = () => {
         // #endregion
         const productsRes = await api.get('/catalog-creator/products-for-catalog', {
           params: { sourceCatalogId: effectiveSourceId },
-          timeout: 15000
+          timeout: 30000
         });
         // #region agent log
         const _fetchMs = Date.now() - _fetchStart;
         const _productCount = (productsRes.data.products || []).length;
-        fetch('http://127.0.0.1:7242/ingest/3b168631-beca-4109-b9fb-808d8bac595c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1aa897'},body:JSON.stringify({sessionId:'1aa897',location:'ProjectBookCreator.tsx:loadData',message:'H1/H3: Products fetch completed',data:{fetchMs:_fetchMs,productCount:_productCount,responseSize:JSON.stringify(productsRes.data).length},timestamp:Date.now()})}).catch(()=>{});
+        const _totalCount = productsRes.data.totalCount ?? null;
+        fetch('http://127.0.0.1:7242/ingest/3b168631-beca-4109-b9fb-808d8bac595c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1aa897'},body:JSON.stringify({sessionId:'1aa897',location:'ProjectBookCreator.tsx:loadData',message:'H1/H3: Products fetch completed',data:{fetchMs:_fetchMs,productCount:_productCount,totalCount:_totalCount,responseSize:JSON.stringify(productsRes.data).length},timestamp:Date.now()})}).catch(()=>{});
         // #endregion
         setProducts(productsRes.data.products || []);
+        setTotalProductCount(productsRes.data.totalCount ?? null);
       }
     } catch (error: any) {
       // #region agent log
@@ -731,6 +735,18 @@ const ProjectBookCreator = () => {
                 data-testid="input-search-products"
               />
             </div>
+
+            {/* Truncation banner */}
+            {totalProductCount !== null && totalProductCount > products.length && (
+              <div className="mb-3 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm text-amber-800">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>
+                  Showing <strong>{products.length.toLocaleString()}</strong> of{' '}
+                  <strong>{totalProductCount.toLocaleString()}</strong> products in the Master Catalog.
+                  Use the search or quick-add by part number to find specific items.
+                </span>
+              </div>
+            )}
 
             {/* Tree */}
             <div className="border border-gray-200 rounded-lg p-4 max-h-[500px] overflow-y-auto">

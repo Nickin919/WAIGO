@@ -445,6 +445,7 @@ export const getProductsForCatalog = async (req: AuthRequest, res: Response): Pr
     }
 
     if (sourceCatalog.isMaster) {
+      const PRODUCT_LIMIT = 5000;
       // #region agent log
       const _dbStart = Date.now();
       // #endregion
@@ -473,17 +474,17 @@ export const getProductsForCatalog = async (req: AuthRequest, res: Response): Pr
           { category: { name: 'asc' } },
           { partNumber: 'asc' }
         ],
-        take: 10000
+        take: PRODUCT_LIMIT
       });
       // #region agent log
       const _queryMs = Date.now() - _queryStart;
       const _jsonStart = Date.now();
-      const jsonPayload = JSON.stringify({ products });
+      const jsonPayload = JSON.stringify({ products, totalCount });
       const _jsonMs = Date.now() - _jsonStart;
       const _payloadKb = Math.round(jsonPayload.length / 1024);
       console.log(`[DEBUG-1aa897] H2/H5: Returned ${products.length}/${totalCount} products, query=${_queryMs}ms, json=${_jsonMs}ms, payload=${_payloadKb}KB`);
       // #endregion
-      res.json({ products });
+      res.json({ products, totalCount });
       return;
     }
 
