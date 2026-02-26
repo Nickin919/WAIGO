@@ -431,7 +431,8 @@ export const priceContractApi = {
 // ============================================================================
 
 export const customerApi = {
-  getAll: (params?: { search?: string }) => api.get('/customers', { params }),
+  getCompanies: () => api.get('/customers/companies'),
+  getAll: (params?: { search?: string; companyName?: string }) => api.get('/customers', { params }),
   create: (data: { name: string; company?: string; email?: string; phone?: string; address?: string; city?: string; state?: string; zipCode?: string }) =>
     api.post('/customers', data),
   update: (id: string, data: { name?: string; company?: string; email?: string; phone?: string; address?: string; city?: string; state?: string; zipCode?: string }) =>

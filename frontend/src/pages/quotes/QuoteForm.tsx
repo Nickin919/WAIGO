@@ -84,6 +84,8 @@ const QuoteForm = () => {
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<LineItem[]>([]);
 
+  const [selectedCompanyName, setSelectedCompanyName] = useState('');
+  const [companies, setCompanies] = useState<string[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [showCustomerPicker, setShowCustomerPicker] = useState(false);
@@ -131,6 +133,7 @@ const QuoteForm = () => {
   const someMarginSelected = items.some((i) => i.marginSelected);
   const someDiscountSelected = items.some((i) => i.discountSelected);
   const effective = effectiveRole(user?.role || '');
+  const isRsm = effective === 'RSM' || effective === 'ADMIN';
   const showMargin = ['ADMIN', 'RSM', 'DISTRIBUTOR', 'DISTRIBUTOR_REP'].includes(effective); // Basic and Direct users never see margin
   const showDiscount = !['BASIC', 'BASIC_USER'].includes(effective); // Basic users never see discount
 
@@ -222,17 +225,26 @@ const QuoteForm = () => {
     }
   }, [isEdit, quoteId]);
 
+  // Load companies for RSM (distributor company names)
   useEffect(() => {
-    if (showCustomerPicker && customerSearch.trim()) {
-      customerApi.getAll({ search: customerSearch }).then((res) => {
-        setCustomers(Array.isArray(res.data) ? res.data : []);
-      }).catch(() => setCustomers([]));
-    } else {
-      customerApi.getAll().then((res) => {
+    if (isRsm) {
+      customerApi.getCompanies().then((res) => {
+        const data = res.data as { companies?: string[] };
+        setCompanies(data?.companies ?? []);
+      }).catch(() => setCompanies([]));
+    }
+  }, [isRsm]);
+
+  useEffect(() => {
+    if (showCustomerPicker) {
+      const params: { search?: string; companyName?: string } = {};
+      if (customerSearch.trim()) params.search = customerSearch;
+      if (isRsm && selectedCompanyName.trim()) params.companyName = selectedCompanyName;
+      customerApi.getAll(params).then((res) => {
         setCustomers(Array.isArray(res.data) ? res.data : []);
       }).catch(() => setCustomers([]));
     }
-  }, [showCustomerPicker, customerSearch]);
+  }, [showCustomerPicker, customerSearch, selectedCompanyName, isRsm]);
 
   useEffect(() => {
     const el = marginSelectAllRef.current;
@@ -780,45 +792,58 @@ const QuoteForm = () => {
         <h1 className="text-2xl font-bold">{isEdit ? 'Edit Quote' : 'New Quote'}</h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Catalog */}
-        {catalogs.length > 0 && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Catalog</label>
-            <select value={catalogId} onChange={(e) => setCatalogId(e.target.value)} className="input max-w-md">
-              {catalogs.map((c) => (
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Quote setup bar - compact horizontal layout */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          {catalogs.length > 0 && (
+            <div className="min-w-0">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Catalog</label>
+              <select value={catalogId} onChange={(e) => setCatalogId(e.target.value)} className="input w-full max-w-[220px]">
+                {catalogs.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="min-w-0">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Price contract</label>
+            <select
+              value={priceContractId}
+              onChange={(e) => setPriceContractId(e.target.value)}
+              className="input w-full max-w-[220px]"
+            >
+              <option value="">Standard pricing</option>
+              {priceContracts.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
           </div>
-        )}
-
-        {/* Price contract (optional special pricing) */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Price contract</label>
-          <select
-            value={priceContractId}
-            onChange={(e) => setPriceContractId(e.target.value)}
-            className="input max-w-md"
-          >
-            <option value="">Standard pricing</option>
-            {priceContracts.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-          {priceContractId && (
-            <p className="text-xs text-gray-500 mt-1">Products added will use contract cost and suggested sell when eligible.</p>
+          {isRsm && companies.length > 0 && (
+            <div className="min-w-0">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
+              <select
+                value={selectedCompanyName}
+                onChange={(e) => {
+                  setSelectedCompanyName(e.target.value);
+                  setCustomerId(null);
+                  setCustomerName('');
+                  setShowCustomerPicker(false);
+                }}
+                className="input w-full max-w-[220px]"
+              >
+                <option value="">My customers</option>
+                {companies.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
           )}
-        </div>
-
-        {/* Customer */}
-        <div>
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <label className="block text-sm font-medium text-gray-700">Customer</label>
-            <Link to="/customers" className="text-sm text-green-600 hover:underline">Manage my customers</Link>
-          </div>
-          <div className="flex gap-2">
-            <div className="relative flex-1 max-w-md">
+          <div className="min-w-0 flex-1 lg:min-w-[200px]">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <label className="block text-sm font-medium text-gray-700">Customer</label>
+              <Link to="/customers" className="text-xs text-green-600 hover:underline">Manage</Link>
+            </div>
+            <div className="relative">
               <input
                 type="text"
                 value={customerName || customerSearch}
@@ -827,7 +852,7 @@ const QuoteForm = () => {
                   if (!showCustomerPicker) setShowCustomerPicker(true);
                 }}
                 onFocus={() => setShowCustomerPicker(true)}
-                placeholder="Select or type customer name"
+                placeholder="Select or search customer"
                 className="input w-full"
               />
               {customerName && (
@@ -836,7 +861,7 @@ const QuoteForm = () => {
                 </button>
               )}
               {showCustomerPicker && (
-                <div className="absolute z-10 mt-1 w-full bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                <div className="absolute z-10 mt-1 left-0 right-0 min-w-[280px] bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
                   <button type="button" onClick={() => { setShowCustomerPicker(false); setShowNewCustomer(true); }} className="w-full px-4 py-2 text-left text-green-600 hover:bg-gray-50 flex items-center gap-2">
                     <UserPlus className="w-4 h-4" /> New Customer
                   </button>
@@ -850,6 +875,9 @@ const QuoteForm = () => {
             </div>
           </div>
         </div>
+        {priceContractId && (
+          <p className="text-xs text-gray-500 -mt-2">Products added will use contract cost and suggested sell when eligible.</p>
+        )}
 
         {/* New Customer Modal */}
         {showNewCustomer && (
@@ -875,13 +903,13 @@ const QuoteForm = () => {
 
         {/* Notes */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="input" rows={2} placeholder="Optional notes" />
+          <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+          <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} className="input w-full" placeholder="Optional notes" />
         </div>
 
         {/* Line Items */}
         <div>
-          <h2 className="text-lg font-bold mb-4">Line Items</h2>
+          <h2 className="text-lg font-bold mb-3">Line Items</h2>
 
           {/* Quick-add: type part number with autocomplete, Enter or Add */}
           <div className="flex gap-2 mb-4">

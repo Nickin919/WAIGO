@@ -4,6 +4,7 @@ import { authenticate, authorize } from '../middleware/auth';
 
 const router = Router();
 
+router.get('/companies', authenticate, authorize('ADMIN', 'RSM'), customerController.getCompaniesForRsm);
 router.get('/', authenticate, authorize('ADMIN', 'RSM', 'DISTRIBUTOR', 'TURNKEY', 'BASIC'), customerController.getCustomers);
 router.post('/', authenticate, authorize('ADMIN', 'RSM', 'DISTRIBUTOR', 'TURNKEY', 'BASIC'), customerController.createCustomer);
 router.post('/bulk', authenticate, authorize('ADMIN', 'RSM', 'DISTRIBUTOR', 'TURNKEY', 'BASIC'), customerController.bulkCreateCustomers);

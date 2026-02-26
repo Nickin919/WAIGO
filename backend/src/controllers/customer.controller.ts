@@ -3,7 +3,40 @@ import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 
 /**
- * Get customers for the current user (and subordinates for managers)
+ * Get companies (distributor company names) for RSM - distinct company names from distributors assigned to this RSM.
+ * GET /api/customers/companies
+ */
+export const getCompaniesForRsm = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const role = (req.user.role || '').toUpperCase();
+    if (role !== 'RSM' && role !== 'ADMIN') {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    const distributors = await prisma.user.findMany({
+      where: {
+        role: { in: ['DISTRIBUTOR', 'DISTRIBUTOR_REP'] },
+        assignedToRsmId: req.user.id,
+        companyName: { not: null },
+      },
+      select: { companyName: true },
+    });
+
+    const companies = [...new Set(distributors.map((d) => d.companyName!).filter(Boolean))].sort();
+    res.json({ companies });
+  } catch (error) {
+    console.error('Get companies error:', error);
+    res.status(500).json({ error: 'Failed to fetch companies' });
+  }
+};
+
+/**
+ * Get customers for the current user (and subordinates for RSM when companyName is provided)
  */
 export const getCustomers = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -12,11 +45,45 @@ export const getCustomers = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    const { search } = req.query;
-    const where: any = { createdById: req.user.id };
+    const { search, companyName } = req.query;
+    const role = (req.user.role || '').toUpperCase();
+    const isRsm = role === 'RSM' || role === 'ADMIN';
+
+    let createdByIdIn: string[] | null = null;
+
+    if (isRsm && typeof companyName === 'string' && companyName.trim()) {
+      const cn = companyName.trim();
+      const distributors = await prisma.user.findMany({
+        where: {
+          role: { in: ['DISTRIBUTOR', 'DISTRIBUTOR_REP'] },
+          assignedToRsmId: req.user.id,
+          companyName: { equals: cn, mode: 'insensitive' },
+        },
+        select: { id: true },
+      });
+      const distributorIds = distributors.map((d) => d.id);
+      if (distributorIds.length === 0) {
+        res.json([]);
+        return;
+      }
+      const underDistributors = await prisma.user.findMany({
+        where: {
+          OR: [
+            { id: { in: distributorIds } },
+            { assignedToDistributorId: { in: distributorIds } },
+          ],
+        },
+        select: { id: true },
+      });
+      createdByIdIn = underDistributors.map((u) => u.id);
+    }
+
+    const where: any =
+      createdByIdIn != null
+        ? { createdById: { in: createdByIdIn } }
+        : { createdById: req.user.id };
 
     if (typeof search === 'string' && search.trim()) {
-      const term = `%${search.trim()}%`;
       where.OR = [
         { name: { contains: search.trim(), mode: 'insensitive' } },
         { company: { contains: search.trim(), mode: 'insensitive' } },
