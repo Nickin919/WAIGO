@@ -351,9 +351,10 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     // ── Page 1 header ──────────────────────────────────────────────────────────
     drawHeader(doc, pageNum, pageNum, headerOpts);
     doc.y = y;
+    advance(12); // breathing room below the header border line
 
     // ── Bill To ───────────────────────────────────────────────────────────────
-    doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold').text('BILL TO', MARGIN, y);
+    doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold').text('BILL TO', MARGIN, y, { lineBreak: false });
     doc.font('Helvetica');
     advance(13);
     const billToY = y;
@@ -510,22 +511,27 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
       drawContactCard(MARGIN, distAvatarBuf, 'Your Distributor', distName, distContact.email ?? '—', distContact.phone ?? '—', CONTENT_WIDTH);
     }
 
-    // ── Footer (drawn at absolute position on last content page) ──────────────
-    drawFooter(doc, accentColor);
+    // ── Inline banner (only if it fits on the current page without adding a page) ──
+    // Banner sits between the bottom of contact cards and the footer.
+    // Bottom of contact cards = contactStartY + 66pt card height.
+    const cardBottom = contactStartY + 66;
+    const bannerGap = 14;                         // gap above banner
+    const bannerAvailH = FOOTER_Y - cardBottom - bannerGap - 8; // space before footer, minus gap
 
-    // ── Banner page ───────────────────────────────────────────────────────────
-    if (bannerBuf) {
-      doc.addPage({ margin: 0 });
-      doc.rect(0, 0, PAGE_WIDTH, ACCENT_BAR_HEIGHT).fill(accentColor);
-      doc.rect(0, 837, PAGE_WIDTH, ACCENT_BAR_HEIGHT).fill(accentColor);
-      const bannerMaxW = PAGE_WIDTH - 2 * MARGIN;
-      const bannerMaxH = 842 - 2 * MARGIN - 2 * ACCENT_BAR_HEIGHT;
-      const bannerStartY = MARGIN + ACCENT_BAR_HEIGHT;
+    if (bannerBuf && bannerAvailH >= 60) {
+      // Enough vertical room — draw the banner inline, scaled to fit the available area.
       try {
-        // Use ONLY fit[] — never set width+height together as they override fit and ignore aspect ratio
-        doc.image(bannerBuf, MARGIN, bannerStartY, { fit: [bannerMaxW, bannerMaxH], align: 'center', valign: 'center' });
+        doc.image(bannerBuf, MARGIN, cardBottom + bannerGap, {
+          fit: [CONTENT_WIDTH, bannerAvailH],
+          align: 'center',
+          valign: 'center',
+        });
       } catch { /* skip if corrupt */ }
     }
+    // If bannerAvailH < 60pt, we simply skip the banner — no extra page is ever added.
+
+    // ── Footer (drawn at absolute position on last content page) ──────────────
+    drawFooter(doc, accentColor);
 
     doc.end();
   });

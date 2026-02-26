@@ -15,6 +15,7 @@ interface User {
   address?: string | null;
   phone?: string | null;
   defaultTerms?: string | null;
+  accentColor?: string | null;
 }
 
 interface AuthState {

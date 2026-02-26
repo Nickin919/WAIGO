@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { LogOut, User, Mail, Lock, FileText, FolderKanban, Users, Loader2, Camera, MapPin, Phone, FileSignature, Image } from 'lucide-react';
+import { LogOut, User, Mail, Lock, FileText, FolderKanban, Users, Loader2, Camera, MapPin, Phone, FileSignature, Image, Palette } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
-import { authApi } from '@/lib/api';
+import { authApi, userAccentApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -42,6 +42,25 @@ const Profile = () => {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
 
+  const [accentColor, setAccentColor] = useState(user?.accentColor ?? '#059669');
+  const [savingColor, setSavingColor] = useState(false);
+
+  const COLOR_PRESETS = ['#059669', '#2563eb', '#dc2626', '#d97706', '#7c3aed', '#0891b2', '#111827', '#374151'];
+
+  const handleSaveColor = async () => {
+    if (savingColor || !user?.id) return;
+    setSavingColor(true);
+    try {
+      await userAccentApi.setColor(user.id, accentColor || null);
+      updateUser({ accentColor: accentColor || null });
+      toast.success('Brand color updated');
+    } catch {
+      toast.error('Failed to update brand color');
+    } finally {
+      setSavingColor(false);
+    }
+  };
+
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -60,7 +79,8 @@ const Profile = () => {
     setAddress(user?.address ?? '');
     setPhone(user?.phone ?? '');
     setDefaultTerms(user?.defaultTerms ?? '');
-  }, [user?.email, user?.address, user?.phone, user?.defaultTerms]);
+    setAccentColor(user?.accentColor ?? '#059669');
+  }, [user?.email, user?.address, user?.phone, user?.defaultTerms, user?.accentColor]);
 
   const showLogoSection = user?.role === 'RSM' || user?.role === 'DISTRIBUTOR_REP' || user?.role === 'ADMIN';
   const logoSizeHint = user?.role === 'RSM' ? '180×60 px recommended' : user?.role === 'DISTRIBUTOR_REP' ? '120×40 px recommended' : '180×60 (RSM) or 120×40 (Distributor) px';
@@ -462,6 +482,77 @@ const Profile = () => {
                 <div className="text-sm text-gray-500">
                   {logoSizeHint}. PNG or JPG.
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* PDF Brand Color – RSM / Distributor */}
+          {showLogoSection && (
+            <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
+              <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                <Palette className="w-4 h-4" /> PDF Brand Color
+              </h3>
+              <p className="text-xs text-gray-500">
+                Sets the accent color used in your Pricing Proposal PDFs — accent bars, contact card borders, and totals line. Defaults to WAGO green if not set.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Live swatch + native color picker */}
+                <div className="relative">
+                  <div
+                    className="w-10 h-10 rounded-lg border border-gray-300 cursor-pointer shadow-sm"
+                    style={{ backgroundColor: accentColor || '#059669' }}
+                    onClick={() => (document.getElementById('profile-color-input') as HTMLInputElement)?.click()}
+                  />
+                  <input
+                    id="profile-color-input"
+                    type="color"
+                    value={accentColor || '#059669'}
+                    onChange={(e) => setAccentColor(e.target.value)}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  />
+                </div>
+                {/* Hex input */}
+                <input
+                  type="text"
+                  value={accentColor}
+                  onChange={(e) => setAccentColor(e.target.value)}
+                  placeholder="#059669"
+                  maxLength={7}
+                  className="input w-28 font-mono text-sm"
+                />
+                {/* Presets */}
+                <div className="flex flex-wrap gap-1.5">
+                  {COLOR_PRESETS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setAccentColor(c)}
+                      title={c}
+                      className="w-7 h-7 rounded-md border-2 transition-transform hover:scale-110"
+                      style={{
+                        backgroundColor: c,
+                        borderColor: accentColor === c ? '#111827' : 'transparent',
+                      }}
+                    />
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveColor}
+                  disabled={savingColor}
+                  className="btn btn-primary text-sm"
+                >
+                  {savingColor ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save color'}
+                </button>
+                {accentColor && (
+                  <button
+                    type="button"
+                    onClick={() => { setAccentColor('#059669'); }}
+                    className="text-xs text-gray-400 hover:text-gray-600 underline"
+                  >
+                    Reset to default
+                  </button>
+                )}
               </div>
             </div>
           )}
