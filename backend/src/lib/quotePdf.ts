@@ -15,7 +15,7 @@ const MARGIN = 50;
 const PAGE_WIDTH = 595;
 const CONTENT_WIDTH = PAGE_WIDTH - 2 * MARGIN;
 const ACCENT_BAR_HEIGHT = 5;        // thin brand color bar at very top
-const ACCENT_COLOR = '#059669';      // WAGO green
+const DEFAULT_ACCENT_COLOR = '#059669';  // WAGO green fallback
 const HEADER_BAR_HEIGHT = 78;        // increased to accommodate accent bar
 const HEADER_ROW1_HEIGHT = 46;
 const RSM_LOGO_WIDTH_PT = 112;
@@ -32,16 +32,19 @@ const TABLE_HEAD_HEIGHT = 24;
 const CONTINUED_FOOTER_Y = 795;
 const CONTINUED_FOOTER_HEIGHT = 28;
 
+// Thumbnail column (22pt) + part number col shifted right by 24pt
+const THUMB_COL_W = 22;
 const COL = {
-  part: MARGIN,
-  desc: MARGIN + 92,
-  moq: MARGIN + 278,
-  qty: MARGIN + 314,
-  price: MARGIN + 374,
-  total: MARGIN + 434,
+  thumb: MARGIN,
+  part: MARGIN + THUMB_COL_W + 2,
+  desc: MARGIN + THUMB_COL_W + 2 + 88,
+  moq: MARGIN + THUMB_COL_W + 2 + 88 + 178,
+  qty: MARGIN + THUMB_COL_W + 2 + 88 + 178 + 32,
+  price: MARGIN + THUMB_COL_W + 2 + 88 + 178 + 32 + 52,
+  total: MARGIN + THUMB_COL_W + 2 + 88 + 178 + 32 + 52 + 52,
   end: MARGIN + CONTENT_WIDTH,
 };
-const COL_WIDTHS = { part: 90, desc: 182, moq: 32, qty: 56, price: 56, total: 61 };
+const COL_WIDTHS = { part: 88, desc: 178, moq: 32, qty: 52, price: 52, total: 61 };
 
 export interface QuoteItemForPdf {
   partNumber: string;
@@ -54,6 +57,7 @@ export interface QuoteItemForPdf {
   lineTotal: number;
   isCostAffected: boolean;
   isSellAffected: boolean;
+  thumbnailUrl?: string | null;
 }
 
 export interface ContactForPdf {
@@ -63,6 +67,7 @@ export interface ContactForPdf {
   phone: string | null;
   logoUrl?: string | null;
   avatarUrl?: string | null;
+  accentColor?: string | null;
 }
 
 export interface QuoteForPdf {
@@ -77,10 +82,14 @@ export interface QuoteForPdf {
   createdAt: Date;
   priceContract?: { name: string } | null;
   customer?: { name?: string; email?: string | null; address?: string | null; city?: string | null; state?: string | null; zipCode?: string | null } | null;
+  accentColor?: string | null;
+  bannerUrl?: string | null;
+  genericThumbnailUrl?: string | null;
   items: QuoteItemForPdf[];
   user: {
     role: string;
     logoUrl?: string | null;
+    accentColor?: string | null;
     assignedToRsm?: ContactForPdf | null;
     assignedToDistributor?: ContactForPdf | null;
   } & ContactForPdf;
@@ -139,10 +148,11 @@ function drawHeader(
     validUntilStr?: string;
     rsmLogoPath: Buffer | null;
     distLogoPath: Buffer | null;
+    accentColor: string;
   }
 ) {
   // Accent bar across the full top
-  doc.rect(0, 0, PAGE_WIDTH, ACCENT_BAR_HEIGHT).fill(ACCENT_COLOR);
+  doc.rect(0, 0, PAGE_WIDTH, ACCENT_BAR_HEIGHT).fill(opts.accentColor);
 
   const y0 = MARGIN;
   doc.rect(0, y0, PAGE_WIDTH, HEADER_BAR_HEIGHT).fill('#ffffff');
@@ -192,9 +202,9 @@ function drawHeader(
   doc.y = CONTENT_TOP;
 }
 
-function drawFooter(doc: PDFDoc) {
+function drawFooter(doc: PDFDoc, accentColor: string) {
   // Accent bar at very bottom
-  doc.rect(0, 837, PAGE_WIDTH, ACCENT_BAR_HEIGHT).fill(ACCENT_COLOR);
+  doc.rect(0, 837, PAGE_WIDTH, ACCENT_BAR_HEIGHT).fill(accentColor);
   // Light footer band
   doc.rect(MARGIN, FOOTER_Y, CONTENT_WIDTH, FOOTER_HEIGHT).fill('#f9fafb');
   doc.moveTo(MARGIN, FOOTER_Y).lineTo(COL.end, FOOTER_Y).strokeColor('#e5e7eb').lineWidth(1).stroke();
@@ -227,6 +237,9 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
   const dateStr = formatDate(quote.createdAt);
   const validUntilStr = quote.validUntil ? formatDate(quote.validUntil) : undefined;
 
+  // Resolve accent color: caller-provided > default WAGO green
+  const accentColor = quote.accentColor || '#059669';
+
   // Use effectiveRole so deprecated DB values (DISTRIBUTOR, TURNKEY, BASIC) map correctly
   const userRole = effectiveRole(quote.user.role);
 
@@ -243,12 +256,23 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
   const rsmContact = (userRole === 'RSM' || userRole === 'ADMIN') ? quote.user : quote.user.assignedToRsm;
   const distContact = userRole === 'DISTRIBUTOR_REP' ? quote.user : quote.user.assignedToDistributor;
 
+  // Pre-fetch thumbnail buffers for line items (use generic as fallback)
+  const thumbUrls = quote.items.map((it) => it.thumbnailUrl || quote.genericThumbnailUrl || null);
+  const uniqueThumbUrls = [...new Set(thumbUrls.filter(Boolean) as string[])];
+  const thumbBufMap = new Map<string, Buffer | null>();
+  await Promise.all(uniqueThumbUrls.map(async (url) => {
+    thumbBufMap.set(url, await fetchImageBuffer(url));
+  }));
+  const getThumbBuf = (it: QuoteItemForPdf): Buffer | null =>
+    thumbBufMap.get(it.thumbnailUrl || quote.genericThumbnailUrl || '') ?? null;
+
   // Pre-fetch all images before starting PDF generation (supports R2 URLs and legacy local paths)
-  const [rsmLogoPath, distLogoPath, rsmAvatarBuf, distAvatarBuf] = await Promise.all([
+  const [rsmLogoPath, distLogoPath, rsmAvatarBuf, distAvatarBuf, bannerBuf] = await Promise.all([
     fetchImageBuffer(rsmLogoUrl),
     fetchImageBuffer(distLogoUrl),
     fetchImageBuffer(rsmContact?.avatarUrl),
     fetchImageBuffer(distContact?.avatarUrl),
+    fetchImageBuffer(quote.bannerUrl ?? null),
   ]);
 
   return new Promise((resolve, reject) => {
@@ -270,13 +294,13 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
         doc.addPage({ margin: 0 });
         pageNum++;
         totalPages = pageNum;
-        drawHeader(doc, pageNum, totalPages, { proposalNumber, dateStr, validUntilStr, rsmLogoPath, distLogoPath });
+        drawHeader(doc, pageNum, totalPages, { proposalNumber, dateStr, validUntilStr, rsmLogoPath, distLogoPath, accentColor });
         y = CONTENT_TOP;
         doc.y = y;
         if (redrawTableHead) {
           doc.rect(MARGIN, y, CONTENT_WIDTH, TABLE_HEAD_HEIGHT).fill('#e5e7eb');
           doc.fontSize(10).fillColor('#4b5563');
-          doc.text('Part Number', COL.part + 6, y + 7);
+          doc.text('Part Number', COL.part + 4, y + 7);
           doc.text('Description', COL.desc + 4, y + 7);
           doc.text('MOQ', COL.moq, y + 7, { width: COL_WIDTHS.moq, align: 'right' });
           doc.text('Qty', COL.qty, y + 7, { width: COL_WIDTHS.qty, align: 'right' });
@@ -288,7 +312,7 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
       }
     };
 
-    drawHeader(doc, pageNum, totalPages, { proposalNumber, dateStr, validUntilStr, rsmLogoPath, distLogoPath });
+    drawHeader(doc, pageNum, totalPages, { proposalNumber, dateStr, validUntilStr, rsmLogoPath, distLogoPath, accentColor });
     doc.y = y;
 
     const metaY = y;
@@ -316,9 +340,10 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     if (emailLine) doc.text(emailLine, MARGIN, billToY + (quote.customer?.address ? 42 : quote.customer?.city ? 28 : 14));
     row(56);
 
+    // Table header
     doc.rect(MARGIN, y, CONTENT_WIDTH, TABLE_HEAD_HEIGHT).fill('#e5e7eb');
-    doc.fontSize(10).fillColor('#4b5563');
-    doc.text('Part Number', COL.part + 6, y + 7);
+    doc.fontSize(9).fillColor('#4b5563');
+    doc.text('Part Number', COL.part + 4, y + 7);
     doc.text('Description', COL.desc + 4, y + 7);
     doc.text('MOQ', COL.moq, y + 7, { width: COL_WIDTHS.moq, align: 'right' });
     doc.text('Qty', COL.qty, y + 7, { width: COL_WIDTHS.qty, align: 'right' });
@@ -335,36 +360,48 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
       const price = it.sellPrice ?? 0;
       const total = it.lineTotal;
       const sym = it.isCostAffected ? '*' : it.isSellAffected ? '†' : '';
-      const symColor = it.isSellAffected ? '#059669' : '#6b7280';
-      const partNumWithGap = pn + (sym ? '   ' : ''); // extra space before * or † for readability
+      const symColor = it.isSellAffected ? accentColor : '#6b7280';
 
       const rowY = y;
       doc.rect(MARGIN, rowY, CONTENT_WIDTH, ROW_HEIGHT).fill(i % 2 === 0 ? '#ffffff' : '#f9fafb');
-      doc.fillColor('#1f2937').fontSize(10);
-      doc.text(partNumWithGap, COL.part + 4, rowY + 4);
-      if (sym) {
-        const symX = COL.part + 4 + doc.widthOfString(partNumWithGap);
-        doc.fillColor(symColor).text(sym, symX, rowY + 4);
+
+      // Thumbnail (22×18pt, vertically centered in row)
+      const thumbBuf = getThumbBuf(it);
+      if (thumbBuf) {
+        try {
+          doc.image(thumbBuf, COL.thumb, rowY + 1, { width: THUMB_COL_W, height: ROW_HEIGHT - 2, fit: [THUMB_COL_W, ROW_HEIGHT - 2] });
+        } catch { /* skip if corrupt */ }
       }
-      doc.fillColor('#1f2937').text(desc.slice(0, 28), COL.desc + 4, rowY + 4);
-      doc.text(String(moq), COL.moq, rowY + 4, { width: COL_WIDTHS.moq, align: 'right' });
-      doc.text(String(it.quantity), COL.qty, rowY + 4, { width: COL_WIDTHS.qty, align: 'right' });
-      doc.text('$' + price.toFixed(2), COL.price, rowY + 4, { width: COL_WIDTHS.price, align: 'right' });
-      doc.text('$' + total.toFixed(2), COL.total, rowY + 4, { width: COL_WIDTHS.total, align: 'right' });
+
+      doc.fillColor('#1f2937').fontSize(9);
+      const partNumWithGap = pn + (sym ? '  ' : '');
+      doc.text(partNumWithGap, COL.part + 2, rowY + 5);
+      if (sym) {
+        const symX = COL.part + 2 + doc.widthOfString(partNumWithGap);
+        doc.fillColor(symColor).text(sym, symX, rowY + 5);
+      }
+      doc.fillColor('#1f2937').text(desc.slice(0, 30), COL.desc + 4, rowY + 5);
+      doc.text(String(moq), COL.moq, rowY + 5, { width: COL_WIDTHS.moq, align: 'right' });
+      doc.text(String(it.quantity), COL.qty, rowY + 5, { width: COL_WIDTHS.qty, align: 'right' });
+      doc.text('$' + price.toFixed(2), COL.price, rowY + 5, { width: COL_WIDTHS.price, align: 'right' });
+      doc.text('$' + total.toFixed(2), COL.total, rowY + 5, { width: COL_WIDTHS.total, align: 'right' });
       doc.moveTo(MARGIN, rowY + ROW_HEIGHT).lineTo(COL.end, rowY + ROW_HEIGHT).strokeColor('#e5e7eb').stroke();
       row(ROW_HEIGHT, true);
     }
 
     row(8);
 
-    doc.moveTo(MARGIN, y).lineTo(COL.end, y).strokeColor('#059669').lineWidth(2).stroke();
+    // Total section
+    doc.moveTo(MARGIN, y).lineTo(COL.end, y).strokeColor(accentColor).lineWidth(2).stroke();
     row(12);
     const totalsY = y;
-    doc.rect(MARGIN, totalsY - 2, CONTENT_WIDTH, 46).fill('#f0fdf4');
+    doc.rect(MARGIN, totalsY - 2, CONTENT_WIDTH, 46).fill('#f9fafb');
     doc.fontSize(11).fillColor('#1f2937').text(`Subtotal: $${quote.total.toFixed(2)}`, MARGIN, totalsY + 4, { width: CONTENT_WIDTH, align: 'right' });
-    doc.fontSize(18).fillColor('#111827').text(`TOTAL: $${quote.total.toFixed(2)}`, MARGIN, totalsY + 24, { width: CONTENT_WIDTH, align: 'right' });
+    doc.fontSize(18).fillColor('#111827').font('Helvetica-Bold').text(`TOTAL: $${quote.total.toFixed(2)}`, MARGIN, totalsY + 20, { width: CONTENT_WIDTH - 4, align: 'right' });
+    doc.font('Helvetica');
     row(48);
 
+    // Terms
     doc.moveTo(MARGIN, y).lineTo(COL.end, y).strokeColor('#e5e7eb').stroke();
     row(12);
     doc.fontSize(10).fillColor('#6b7280').text('Terms', MARGIN, doc.y);
@@ -378,35 +415,18 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
       row(22);
     }
 
-    // Signature / acceptance line
-    doc.moveTo(MARGIN, y).lineTo(COL.end, y).strokeColor('#e5e7eb').stroke();
-    row(14);
-    doc.rect(MARGIN, y, CONTENT_WIDTH, 42).fill('#fafafa');
-    doc.moveTo(MARGIN, y).lineTo(COL.end, y).strokeColor('#e5e7eb').lineWidth(1).stroke();
-    doc.moveTo(MARGIN, y + 42).lineTo(COL.end, y + 42).strokeColor('#e5e7eb').stroke();
-    const sigY = y + 10;
-    // Signature line left
-    doc.moveTo(MARGIN + 8, sigY + 22).lineTo(MARGIN + 180, sigY + 22).strokeColor('#9ca3af').lineWidth(0.5).stroke();
-    doc.fontSize(8).fillColor('#9ca3af').text('Authorized Signature', MARGIN + 8, sigY + 25);
-    // Date line right
-    doc.moveTo(COL.end - 180, sigY + 22).lineTo(COL.end - 8, sigY + 22).strokeColor('#9ca3af').lineWidth(0.5).stroke();
-    doc.fontSize(8).fillColor('#9ca3af').text('Date', COL.end - 180, sigY + 25);
-    doc.fontSize(9).fillColor('#6b7280').text('By signing above, you accept the terms of this pricing proposal.', MARGIN + 200, sigY + 14, { width: 180, align: 'center' });
-    row(56);
-
     // Contact cards
     doc.moveTo(MARGIN, y).lineTo(COL.end, y).strokeColor('#e5e7eb').lineWidth(1).stroke();
     row(14);
-    doc.fontSize(10).fillColor('#6b7280').text('CONTACT', MARGIN, doc.y);
+    doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold').text('CONTACT', MARGIN, doc.y);
+    doc.font('Helvetica');
     row(16);
     const contactStartY = y;
 
     const r = AVATAR_SIZE / 2;
     const drawContactCard = (cardX: number, avatarBuf: Buffer | null, label: string, name: string, email: string, phone: string, cardWidth: number) => {
-      // Light card background
       doc.rect(cardX, contactStartY - 4, cardWidth, 64).fill('#f9fafb');
-      doc.moveTo(cardX, contactStartY - 4).lineTo(cardX, contactStartY + 60).strokeColor(ACCENT_COLOR).lineWidth(2).stroke();
-
+      doc.moveTo(cardX, contactStartY - 4).lineTo(cardX, contactStartY + 60).strokeColor(accentColor).lineWidth(2).stroke();
       const cx = cardX + 12 + r;
       const cy = contactStartY + r + 4;
       if (avatarBuf) {
@@ -421,7 +441,6 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
       } else {
         doc.circle(cx, cy, r).fill('#d1d5db');
       }
-
       const textX = cardX + 12 + AVATAR_SIZE + 10;
       doc.fontSize(8).fillColor('#6b7280').text(label, textX, contactStartY + 2);
       doc.fontSize(11).fillColor('#111827').font('Helvetica-Bold').text(name, textX, contactStartY + 13);
@@ -434,21 +453,34 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     const rsmPhone = rsmContact?.phone ?? '—';
 
     if (rsmContact && distContact) {
-      // Two-card layout: RSM left, Distributor right
       drawContactCard(MARGIN, rsmAvatarBuf, 'Your WAGO Contact', rsmName, rsmEmail, rsmPhone, 230);
       const distName = [distContact.firstName, distContact.lastName].filter(Boolean).join(' ') || '—';
       drawContactCard(MARGIN + 250, distAvatarBuf, 'Your Distributor', distName, distContact.email ?? '—', distContact.phone ?? '—', 230);
     } else if (rsmContact) {
-      // Only RSM — full-width card
       drawContactCard(MARGIN, rsmAvatarBuf, 'Your WAGO Contact', rsmName, rsmEmail, rsmPhone, CONTENT_WIDTH);
     } else if (distContact) {
-      // Only Distributor — full-width card
       const distName = [distContact.firstName, distContact.lastName].filter(Boolean).join(' ') || '—';
       drawContactCard(MARGIN, distAvatarBuf, 'Your Distributor', distName, distContact.email ?? '—', distContact.phone ?? '—', CONTENT_WIDTH);
     }
     row(72);
 
-    drawFooter(doc);
+    drawFooter(doc, accentColor);
+
+    // Banner page (full-width image on a new final page)
+    if (bannerBuf) {
+      doc.addPage({ margin: 0 });
+      // Accent bars top and bottom
+      doc.rect(0, 0, PAGE_WIDTH, ACCENT_BAR_HEIGHT).fill(accentColor);
+      doc.rect(0, 837, PAGE_WIDTH, ACCENT_BAR_HEIGHT).fill(accentColor);
+      // Center the banner on the page
+      const bannerMaxW = PAGE_WIDTH - 2 * MARGIN;
+      const bannerMaxH = 842 - 2 * MARGIN - 2 * ACCENT_BAR_HEIGHT;
+      const bannerY = MARGIN + ACCENT_BAR_HEIGHT;
+      try {
+        doc.image(bannerBuf, MARGIN, bannerY, { width: bannerMaxW, height: bannerMaxH, fit: [bannerMaxW, bannerMaxH], align: 'center', valign: 'center' });
+      } catch { /* skip if corrupt */ }
+    }
+
     doc.end();
   });
 }

@@ -82,8 +82,8 @@ const upload = multer({
   limits: { fileSize: fileSizeLimit }
 });
 
-// Memory-based multer for R2 uploads (video, literature)
-const memUpload = multer({
+// Memory-based multer for R2 uploads (video, literature, banners, settings)
+export const memUpload = multer({
   storage: multer.memoryStorage(),
   fileFilter,
   limits: { fileSize: fileSizeLimit }

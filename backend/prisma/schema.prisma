@@ -100,6 +100,7 @@ model User {
   // Profile (optional)
   avatarUrl       String?   @map("avatar_url")
   logoUrl         String?   @map("logo_url")   // Company logo for Pricing Proposal header (RSM / Distributor)
+  accentColor     String?   @map("accent_color") // Hex color for branded PDF (e.g. "#059669"). RSM/Distributor only.
   address         String?   @db.Text
   phone           String?
   defaultTerms    String?   @map("default_terms") @db.Text // Default Terms text for Pricing Proposal PDF (RSM/Distributor)
@@ -1074,4 +1075,33 @@ model MonthlySale {
   @@index([source])
   @@index([distributorName])
   @@map("monthly_sales")
+}
+
+// ============================================================================
+// QUOTE BANNERS (Admin-managed product advertisement images for PDF)
+// ============================================================================
+
+model QuoteBanner {
+  id        String   @id @default(uuid())
+  url       String   // R2 public URL (banners/<filename>)
+  r2Key     String   @map("r2_key") // R2 object key for deletion
+  label     String?  // Optional admin label / description
+  active    Boolean  @default(true)
+  order     Int      @default(0) // Display/selection order
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([active])
+  @@map("quote_banners")
+}
+
+// ============================================================================
+// APP SETTINGS (Global key-value store for admin-controlled settings)
+// ============================================================================
+
+model AppSetting {
+  key       String   @id  // e.g. "genericThumbnailUrl", "genericThumbnailR2Key"
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
 }

@@ -647,3 +647,43 @@ export const videoLibraryApi = {
   getAnalytics: () => api.get<any>('/video-library/admin/analytics'),
   exportCsv: () => api.get('/video-library/export/csv', { responseType: 'blob' }),
 };
+
+// ============================================================================
+// BANNERS (Admin-managed product advertisement images for PDF)
+// ============================================================================
+
+export const bannerApi = {
+  list: () => api.get<any[]>('/banners'),
+  upload: (file: File, label?: string) => {
+    const form = new FormData();
+    form.append('image', file);
+    if (label) form.append('label', label);
+    return api.post<any>('/banners', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  update: (id: string, data: { label?: string; active?: boolean; order?: number }) =>
+    api.patch<any>(`/banners/${id}`, data),
+  remove: (id: string) => api.delete(`/banners/${id}`),
+};
+
+// ============================================================================
+// APP SETTINGS (Generic thumbnail, global config)
+// ============================================================================
+
+export const appSettingsApi = {
+  getGenericThumbnail: () => api.get<{ url: string | null }>('/app-settings/generic-thumbnail'),
+  uploadGenericThumbnail: (file: File) => {
+    const form = new FormData();
+    form.append('image', file);
+    return api.post<{ url: string }>('/app-settings/generic-thumbnail', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  deleteGenericThumbnail: () => api.delete('/app-settings/generic-thumbnail'),
+};
+
+// ============================================================================
+// USER MANAGEMENT EXTRAS
+// ============================================================================
+
+export const userAccentApi = {
+  setColor: (userId: string, accentColor: string | null) =>
+    api.patch<{ id: string; accentColor: string | null }>(`/user-management/${userId}/accent-color`, { accentColor }),
+};

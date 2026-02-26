@@ -65,6 +65,7 @@ export const getUsers = async (req: AuthRequest, res: Response): Promise<void> =
         role: true,
         isActive: true,
         accountId: true,
+        accentColor: true,
         assignedToDistributorId: true,
         assignedToRsmId: true,
         createdAt: true,
@@ -347,6 +348,45 @@ export const updateUserRole = async (req: AuthRequest, res: Response): Promise<v
   } catch (error) {
     console.error('Update role error:', error);
     res.status(500).json({ error: 'Failed to update role' });
+  }
+};
+
+/**
+ * Update accent color for an RSM or Distributor user. Admin can update any; users can update their own.
+ * PATCH /api/user-management/:userId/accent-color   body: { accentColor: "#hex" | null }
+ */
+export const updateAccentColor = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const { userId } = req.params;
+    const isAdmin = effectiveRole(req.user.role) === 'ADMIN';
+    const isSelf = req.user.id === userId;
+    if (!isAdmin && !isSelf) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    const { accentColor } = req.body;
+    // Validate hex color if provided
+    const hexRe = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+    const color = accentColor === null || accentColor === '' ? null : String(accentColor).trim();
+    if (color && !hexRe.test(color)) {
+      res.status(400).json({ error: 'Invalid color — must be a hex value like #059669' });
+      return;
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: { accentColor: color },
+      select: { id: true, accentColor: true },
+    });
+    res.json(updated);
+  } catch (error) {
+    console.error('Update accent color error:', error);
+    res.status(500).json({ error: 'Failed to update accent color' });
   }
 };
 

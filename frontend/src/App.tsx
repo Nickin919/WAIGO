@@ -48,6 +48,7 @@ import LiteratureKitDetail from './pages/literature/LiteratureKitDetail';
 import VideoLibraryBrowse from './pages/videos/VideoLibraryBrowse';
 import MyPlaylists from './pages/videos/MyPlaylists';
 import VideoLibrary from './pages/admin/VideoLibrary';
+import QuoteBanners from './pages/admin/QuoteBanners';
 
 // Redirect /assignments and /managed-users to /accounts (optionally with userId from query)
 const AssignmentsRedirect = () => {
@@ -161,6 +162,7 @@ function App() {
         <Route path="/admin/data-management" element={<DataManagement />} />
         <Route path="/admin/literature" element={<LiteratureLibrary />} />
         <Route path="/admin/video-library" element={<VideoLibrary />} />
+        <Route path="/admin/quote-banners" element={<QuoteBanners />} />
       </Route>
 
       {/* 404 */}

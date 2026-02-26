@@ -28,4 +28,7 @@ router.post('/assign-to-account', authorize('DISTRIBUTOR', 'RSM', 'ADMIN'), user
 // Update user role (Admin only)
 router.patch('/:userId/role', authorize('ADMIN'), userMgmtController.updateUserRole);
 
+// Update accent color (Admin for any user; self for own)
+router.patch('/:userId/accent-color', userMgmtController.updateAccentColor);
+
 export default router;

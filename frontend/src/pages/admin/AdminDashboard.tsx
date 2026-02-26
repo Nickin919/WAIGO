@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Package, Video, FolderKanban, Upload, BookOpen, Film } from 'lucide-react';
+import { Users, Package, Video, FolderKanban, Upload, BookOpen, Film, Image } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 
 const AdminDashboard = () => {
@@ -135,6 +135,13 @@ const AdminDashboard = () => {
           >
             <Film className="w-5 h-5" />
             <span>Video Library</span>
+          </button>
+          <button
+            onClick={() => navigate('/admin/quote-banners')}
+            className="btn btn-primary flex items-center justify-center space-x-2"
+          >
+            <Image className="w-5 h-5" />
+            <span>Quote PDF Assets</span>
           </button>
         </div>
       </div>

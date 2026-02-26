@@ -47,6 +47,8 @@ import priceContractRoutes from './routes/priceContract.routes';
 import myRoutes from './routes/my.routes';
 import salesRoutes from './routes/sales.routes';
 import webhooksRoutes from './routes/webhooks.routes';
+import bannerRoutes from './routes/banner.routes';
+import appSettingsRoutes from './routes/appSettings.routes';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler';
@@ -145,6 +147,8 @@ app.use('/api/price-contracts', priceContractRoutes);
 app.use('/api/my', myRoutes);
 app.use('/api/sales', salesRoutes);
 app.use('/api/webhooks', webhooksRoutes);
+app.use('/api/banners', bannerRoutes);
+app.use('/api/app-settings', appSettingsRoutes);
 
 // ============================================================================
 // Error Handling

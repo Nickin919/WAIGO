@@ -5,6 +5,8 @@ import { getSubordinateUserIds } from '../lib/hierarchy';
 import { effectiveRole, isInternal } from '../lib/roles';
 import { sendQuoteEmail } from '../lib/emailService';
 import { buildQuotePdfBuffer } from '../lib/quotePdf';
+import { getRandomBannerUrl } from './banner.controller';
+import { getGenericThumbnailUrl } from './appSettings.controller';
 import {
   getSuggestedLiteratureForQuote,
   attachToQuote,
@@ -745,21 +747,26 @@ export const generateQuotePDF = async (req: AuthRequest, res: Response): Promise
             role: true,
             logoUrl: true,
             avatarUrl: true,
+            accentColor: true,
             firstName: true,
             lastName: true,
             email: true,
             phone: true,
             assignedToRsm: {
-              select: { firstName: true, lastName: true, email: true, phone: true, logoUrl: true, avatarUrl: true },
+              select: { firstName: true, lastName: true, email: true, phone: true, logoUrl: true, avatarUrl: true, accentColor: true },
             },
             assignedToDistributor: {
-              select: { firstName: true, lastName: true, email: true, phone: true, logoUrl: true, avatarUrl: true },
+              select: { firstName: true, lastName: true, email: true, phone: true, logoUrl: true, avatarUrl: true, accentColor: true },
             },
           },
         },
         customer: { select: { name: true, address: true, city: true, state: true, zipCode: true, email: true } },
         priceContract: { select: { name: true } },
-        items: true,
+        items: {
+          include: {
+            part: { select: { thumbnailUrl: true } },
+          },
+        },
       },
     });
     if (!quote) {
@@ -771,6 +778,21 @@ export const generateQuotePDF = async (req: AuthRequest, res: Response): Promise
       res.status(403).json({ error: 'Access denied' });
       return;
     }
+    // Fetch banner URL and generic thumbnail in parallel
+    const [bannerUrl, genericThumbnailUrl] = await Promise.all([
+      getRandomBannerUrl(),
+      getGenericThumbnailUrl(),
+    ]);
+
+    // Resolve accent color: prefer distributor's color, then RSM's, then default
+    const userRole = (quote.user.role || '').toUpperCase();
+    const accentColor =
+      (userRole === 'DISTRIBUTOR_REP' || userRole === 'DISTRIBUTOR'
+        ? quote.user.accentColor
+        : quote.user.assignedToDistributor?.accentColor ?? quote.user.accentColor) ??
+      quote.user.assignedToRsm?.accentColor ??
+      null;
+
     const pdfPayload = {
       quoteNumber: quote.quoteNumber,
       customerName: quote.customerName,
@@ -783,6 +805,9 @@ export const generateQuotePDF = async (req: AuthRequest, res: Response): Promise
       createdAt: quote.createdAt,
       priceContract: quote.priceContract,
       customer: quote.customer,
+      accentColor,
+      bannerUrl,
+      genericThumbnailUrl,
       items: quote.items.map((it) => ({
         partNumber: it.partNumber,
         snapshotPartNumber: it.snapshotPartNumber,
@@ -794,6 +819,7 @@ export const generateQuotePDF = async (req: AuthRequest, res: Response): Promise
         lineTotal: it.lineTotal,
         isCostAffected: it.isCostAffected,
         isSellAffected: it.isSellAffected,
+        thumbnailUrl: (it as any).part?.thumbnailUrl ?? null,
       })),
       user: quote.user,
     };

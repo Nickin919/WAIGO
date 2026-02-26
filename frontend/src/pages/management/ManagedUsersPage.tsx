@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Search, UserPlus, Building2, UserCog, X, Building } from 'lucide-react';
+import { Users, Search, UserPlus, Building2, UserCog, X, Building, Palette } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { userManagementApi, assignmentsApi, accountsApi } from '@/lib/api';
+import { userManagementApi, assignmentsApi, accountsApi, userAccentApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 
@@ -15,6 +15,7 @@ interface User {
   role: string;
   isActive: boolean;
   accountId?: string | null;
+  accentColor?: string | null;
   account?: { id: string; name: string; type: string } | null;
   assignedToDistributor?: { id: string; email: string | null; companyName: string | null } | null;
   assignedToRsm?: { id: string; email: string | null; firstName?: string | null; lastName?: string | null } | null;
@@ -46,6 +47,8 @@ const ManagedUsersPage = () => {
   const [assignDistributorFor, setAssignDistributorFor] = useState<User | null>(null);
   const [assignRsmFor, setAssignRsmFor] = useState<User | null>(null);
   const [assignCompanyFor, setAssignCompanyFor] = useState<User | null>(null);
+  const [colorPickerFor, setColorPickerFor] = useState<User | null>(null);
+  const [colorDraft, setColorDraft] = useState('#059669');
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [selectedDistributorId, setSelectedDistributorId] = useState('');
   const [selectedRsmId, setSelectedRsmId] = useState('');
@@ -186,6 +189,20 @@ const ManagedUsersPage = () => {
     }
   };
 
+  const handleSaveAccentColor = () => {
+    if (!colorPickerFor) return;
+    setSubmitting(true);
+    userAccentApi
+      .setColor(colorPickerFor.id, colorDraft || null)
+      .then(() => {
+        toast.success('Brand color saved');
+        setColorPickerFor(null);
+        userManagementApi.getUsers({ search: search || undefined }).then((r) => setUsers(Array.isArray(r.data) ? r.data : []));
+      })
+      .catch((err: any) => toast.error(err.response?.data?.error || 'Failed to save color'))
+      .finally(() => setSubmitting(false));
+  };
+
   if (!canManage) {
     return (
       <div className="p-6">
@@ -316,6 +333,20 @@ const ManagedUsersPage = () => {
                             {u.account ? 'Change company' : 'Assign to company'}
                           </button>
                         )}
+                        {canAssignDistributorToRsm && (isDistributor(u) || effectiveRole(u.role) === 'RSM') && (
+                          <button
+                            type="button"
+                            onClick={() => { setColorPickerFor(u); setColorDraft(u.accentColor || '#059669'); }}
+                            className="btn bg-purple-50 text-purple-700 border border-purple-200 text-sm py-1 px-2 flex items-center gap-2 hover:bg-purple-100"
+                          >
+                            <span
+                              className="w-3 h-3 rounded-full border border-white/50 shadow-sm inline-block"
+                              style={{ backgroundColor: u.accentColor || '#059669' }}
+                            />
+                            <Palette className="w-4 h-4" />
+                            Brand color
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -391,6 +422,69 @@ const ManagedUsersPage = () => {
               <button type="button" onClick={handleAssignDistributorToRsm} disabled={!selectedRsmId || submitting} className="btn btn-primary">
                 {submitting ? 'Assigning...' : 'Assign'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Brand color picker modal */}
+      {colorPickerFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">PDF Brand Color</h3>
+              <button type="button" onClick={() => setColorPickerFor(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Set the accent color for <strong>{displayName(colorPickerFor)}</strong>'s PDF quotes.
+              This replaces the default WAGO green on their proposals.
+            </p>
+            <div className="flex items-center gap-4 mb-6">
+              <input
+                type="color"
+                value={colorDraft}
+                onChange={(e) => setColorDraft(e.target.value)}
+                className="w-14 h-14 rounded-lg border border-gray-200 cursor-pointer p-0.5"
+              />
+              <div>
+                <input
+                  type="text"
+                  value={colorDraft}
+                  onChange={(e) => setColorDraft(e.target.value)}
+                  placeholder="#059669"
+                  className="input w-36 font-mono"
+                  maxLength={7}
+                />
+                <p className="text-xs text-gray-400 mt-1">Hex format, e.g. #059669</p>
+              </div>
+              <div className="flex-1 h-10 rounded-lg border" style={{ backgroundColor: colorDraft }} />
+            </div>
+            <div className="mb-4">
+              <p className="text-xs font-medium text-gray-500 mb-2">Presets</p>
+              <div className="flex gap-2 flex-wrap">
+                {['#059669', '#2563eb', '#dc2626', '#7c3aed', '#d97706', '#0891b2', '#111827'].map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setColorDraft(c)}
+                    className="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110"
+                    style={{ backgroundColor: c, borderColor: colorDraft === c ? '#111827' : 'transparent' }}
+                    title={c}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2 justify-between">
+              <button type="button" onClick={() => { setColorDraft('#059669'); }} className="btn btn-outline text-sm">
+                Reset to default
+              </button>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setColorPickerFor(null)} className="btn btn-outline">Cancel</button>
+                <button type="button" onClick={handleSaveAccentColor} disabled={submitting} className="btn btn-primary">
+                  {submitting ? 'Saving…' : 'Save'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
