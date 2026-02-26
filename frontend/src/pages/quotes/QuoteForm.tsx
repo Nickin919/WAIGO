@@ -130,7 +130,9 @@ const QuoteForm = () => {
   const allDiscountSelected = items.length > 0 && items.every((i) => i.discountSelected);
   const someMarginSelected = items.some((i) => i.marginSelected);
   const someDiscountSelected = items.some((i) => i.discountSelected);
-  const isDistributorOrHigher = ['ADMIN', 'RSM', 'DISTRIBUTOR', 'DISTRIBUTOR_REP'].includes(effectiveRole(user?.role || ''));
+  const effective = effectiveRole(user?.role || '');
+  const showMargin = ['ADMIN', 'RSM', 'DISTRIBUTOR', 'DISTRIBUTOR_REP'].includes(effective); // Basic and Direct users never see margin
+  const showDiscount = !['BASIC', 'BASIC_USER'].includes(effective); // Basic users never see discount
 
   // Load assigned catalogs and price contracts (for proposal wizard); fallback to all catalogs if no assignments
   useEffect(() => {
@@ -1004,7 +1006,7 @@ const QuoteForm = () => {
                   <th className="px-4 py-3 text-left min-w-[200px]">Product</th>
                   <th className="px-4 py-3 text-right whitespace-nowrap">List Price</th>
                   <th className="px-4 py-3 text-center whitespace-nowrap">Min Qty</th>
-                  {isDistributorOrHigher && (
+                  {showDiscount && (
                     <th className="px-5 py-3 min-w-[140px]">
                       <div className="flex items-center gap-3 justify-end">
                         <input type="checkbox" checked={allDiscountSelected} ref={discountSelectAllRef} onChange={toggleDiscountSelectAll} className="rounded border-gray-300 shrink-0" title="Select all" />
@@ -1013,7 +1015,7 @@ const QuoteForm = () => {
                       <div className="text-xs font-normal text-gray-500 mt-1">Disc %</div>
                     </th>
                   )}
-                  {isDistributorOrHigher && (
+                  {showMargin && (
                     <th className="px-5 py-3 min-w-[140px]">
                       <div className="flex items-center gap-3 justify-end">
                         <input type="checkbox" checked={allMarginSelected} ref={marginSelectAllRef} onChange={toggleMarginSelectAll} className="rounded border-gray-300 shrink-0" title="Select all" />
@@ -1041,7 +1043,7 @@ const QuoteForm = () => {
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">{formatCurrency(item.productPrice)}</td>
                     <td className="px-4 py-3 text-center">{item.minQty ?? '—'}</td>
-                    {isDistributorOrHigher && (
+                    {showDiscount && (
                       <td className="px-5 py-3 min-w-[140px]">
                         <div className="flex items-center gap-3 justify-end">
                           <input type="checkbox" checked={!!item.discountSelected} onChange={() => toggleDiscountSelected(idx)} disabled={!!item.discountLocked} className="rounded border-gray-300 shrink-0" title={item.discountLocked ? 'Locked by price contract' : undefined} />
@@ -1049,7 +1051,7 @@ const QuoteForm = () => {
                         </div>
                       </td>
                     )}
-                    {isDistributorOrHigher && (
+                    {showMargin && (
                       <td className="px-5 py-3 min-w-[140px]">
                         <div className="flex items-center gap-3 justify-end">
                           <input type="checkbox" checked={!!item.marginSelected} onChange={() => toggleMarginSelected(idx)} className="rounded border-gray-300 shrink-0" />

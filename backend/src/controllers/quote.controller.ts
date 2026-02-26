@@ -518,18 +518,29 @@ export const downloadQuoteCSV = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    const rows = quote.items.map((item) => ({
-      'Part Number': item.snapshotPartNumber || item.partNumber,
-      Description: item.snapshotDescription || item.description,
-      Qty: item.quantity,
-      'List Price': item.snapshotPrice ?? item.costPrice,
-      'Discount %': item.discountPct,
-      'Margin %': item.marginPct,
-      'Sell Price': item.sellPrice,
-      'Line Total': item.lineTotal,
-    }));
+    const role = (req.user.role || '').toUpperCase();
+    const showDiscount = role !== 'BASIC' && role !== 'BASIC_USER';
+    const showMargin = ['ADMIN', 'RSM', 'DISTRIBUTOR', 'DISTRIBUTOR_REP'].includes(role);
 
-    const header = rows.length > 0 ? Object.keys(rows[0]).join(',') : 'Part Number,Description,Qty,List Price,Discount %,Margin %,Sell Price,Line Total';
+    const formatMoney = (n: number | null | undefined): string =>
+      n != null && typeof n === 'number' ? Number(n).toFixed(2) : '';
+
+    const rows = quote.items.map((item) => {
+      const listPrice = item.snapshotPrice ?? item.costPrice;
+      const base: Record<string, string | number> = {
+        'Part Number': item.snapshotPartNumber || item.partNumber,
+        Description: item.snapshotDescription || item.description,
+        Qty: item.quantity,
+        'List Price': formatMoney(listPrice),
+        'Sell Price': formatMoney(item.sellPrice),
+        'Line Total': formatMoney(item.lineTotal),
+      };
+      if (showDiscount) base['Discount %'] = item.discountPct;
+      if (showMargin) base['Margin %'] = item.marginPct;
+      return base;
+    });
+
+    const header = rows.length > 0 ? Object.keys(rows[0]).join(',') : 'Part Number,Description,Qty,List Price,Sell Price,Line Total';
     const lines = rows.map((r) => Object.values(r).map((v) => `"${String(v)}"`).join(','));
     const csv = [header, ...lines].join('\n');
 
@@ -778,6 +789,7 @@ export const generateQuotePDF = async (req: AuthRequest, res: Response): Promise
         description: it.description,
         snapshotDescription: it.snapshotDescription,
         quantity: it.quantity,
+        minQty: it.snapshotMinQty ?? it.minQty,
         sellPrice: it.sellPrice,
         lineTotal: it.lineTotal,
         isCostAffected: it.isCostAffected,

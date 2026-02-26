@@ -31,13 +31,14 @@ const CONTINUED_FOOTER_HEIGHT = 28;
 
 const COL = {
   part: MARGIN,
-  desc: MARGIN + 100,
-  qty: MARGIN + 318,
-  price: MARGIN + 378,
-  total: MARGIN + 438,
+  desc: MARGIN + 92,
+  moq: MARGIN + 278,
+  qty: MARGIN + 314,
+  price: MARGIN + 374,
+  total: MARGIN + 434,
   end: MARGIN + CONTENT_WIDTH,
 };
-const COL_WIDTHS = { part: 98, desc: 218, qty: 58, price: 58, total: 58 };
+const COL_WIDTHS = { part: 90, desc: 182, moq: 32, qty: 56, price: 56, total: 61 };
 
 export interface QuoteItemForPdf {
   partNumber: string;
@@ -45,6 +46,7 @@ export interface QuoteItemForPdf {
   description: string;
   snapshotDescription?: string | null;
   quantity: number;
+  minQty?: number | null;
   sellPrice: number | null;
   lineTotal: number;
   isCostAffected: boolean;
@@ -241,6 +243,7 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
           doc.fontSize(10).fillColor('#4b5563');
           doc.text('Part Number', COL.part + 6, y + 7);
           doc.text('Description', COL.desc + 4, y + 7);
+          doc.text('MOQ', COL.moq, y + 7, { width: COL_WIDTHS.moq, align: 'right' });
           doc.text('Qty', COL.qty, y + 7, { width: COL_WIDTHS.qty, align: 'right' });
           doc.text('Price', COL.price, y + 7, { width: COL_WIDTHS.price, align: 'right' });
           doc.text('Total', COL.total, y + 7, { width: COL_WIDTHS.total, align: 'right' });
@@ -282,6 +285,7 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     doc.fontSize(10).fillColor('#4b5563');
     doc.text('Part Number', COL.part + 6, y + 7);
     doc.text('Description', COL.desc + 4, y + 7);
+    doc.text('MOQ', COL.moq, y + 7, { width: COL_WIDTHS.moq, align: 'right' });
     doc.text('Qty', COL.qty, y + 7, { width: COL_WIDTHS.qty, align: 'right' });
     doc.text('Price', COL.price, y + 7, { width: COL_WIDTHS.price, align: 'right' });
     doc.text('Total', COL.total, y + 7, { width: COL_WIDTHS.total, align: 'right' });
@@ -292,6 +296,7 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
       const it = items[i];
       const pn = (it.snapshotPartNumber ?? it.partNumber) || '—';
       const desc = (it.snapshotDescription ?? it.description) || '—';
+      const moq = it.minQty ?? '—';
       const price = it.sellPrice ?? 0;
       const total = it.lineTotal;
       const sym = it.isCostAffected ? '*' : it.isSellAffected ? '†' : '';
@@ -306,7 +311,8 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
         const symX = COL.part + 4 + doc.widthOfString(partNumWithGap);
         doc.fillColor(symColor).text(sym, symX, rowY + 4);
       }
-      doc.fillColor('#1f2937').text(desc.slice(0, 34), COL.desc + 4, rowY + 4);
+      doc.fillColor('#1f2937').text(desc.slice(0, 28), COL.desc + 4, rowY + 4);
+      doc.text(String(moq), COL.moq, rowY + 4, { width: COL_WIDTHS.moq, align: 'right' });
       doc.text(String(it.quantity), COL.qty, rowY + 4, { width: COL_WIDTHS.qty, align: 'right' });
       doc.text('$' + price.toFixed(2), COL.price, rowY + 4, { width: COL_WIDTHS.price, align: 'right' });
       doc.text('$' + total.toFixed(2), COL.total, rowY + 4, { width: COL_WIDTHS.total, align: 'right' });
