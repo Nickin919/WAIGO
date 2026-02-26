@@ -565,12 +565,17 @@ function AssignmentCatalogModal({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
         <h3 className="text-lg font-bold mb-4">Assign Project Books</h3>
-        <p className="text-sm text-gray-600 mb-4">Select project books to assign. One will be set as primary. The Master Catalog is assigned to all users by default.</p>
+        <p className="text-sm text-gray-600 mb-4">Select project books to assign. Mark one as primary. The Master Catalog is assigned to all users by default.</p>
+        <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 px-1">
+          <span className="w-4 text-center" title="Assign this project book">Assign</span>
+          <span className="w-4 text-center" title="Set as primary project book">Primary</span>
+          <span>Project Book</span>
+        </div>
         <div className="max-h-64 overflow-y-auto space-y-2 mb-4">
           {catalogs.map((c) => (
             <label key={c.id} className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} className="rounded" />
-              <input type="radio" name="primary" checked={primaryId === c.id} onChange={() => setPrimaryId(c.id)} disabled={!selected.has(c.id)} className="rounded" title="Primary" />
+              <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} className="rounded" title="Assign this project book" />
+              <input type="radio" name="primary" checked={primaryId === c.id} onChange={() => setPrimaryId(c.id)} disabled={!selected.has(c.id)} className="rounded" title="Set as primary" />
               <span>{c.name}</span>
             </label>
           ))}
