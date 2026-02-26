@@ -22,12 +22,17 @@ export const getCompaniesForRsm = async (req: AuthRequest, res: Response): Promi
       where: {
         role: { in: ['DISTRIBUTOR', 'DISTRIBUTOR_REP'] },
         assignedToRsmId: req.user.id,
-        companyName: { not: null },
+        OR: [
+          { account: { isNot: null } },
+          { companyName: { not: null } },
+        ],
       },
-      select: { companyName: true },
+      select: { companyName: true, account: { select: { name: true } } },
     });
 
-    const companies = [...new Set(distributors.map((d) => d.companyName!).filter(Boolean))].sort();
+    // Prefer Account.name (set via admin "Assign to company"); fall back to User.companyName for legacy records
+    const names = distributors.map((d) => d.account?.name || d.companyName).filter(Boolean) as string[];
+    const companies = [...new Set(names)].sort();
     res.json({ companies });
   } catch (error) {
     console.error('Get companies error:', error);
@@ -57,7 +62,12 @@ export const getCustomers = async (req: AuthRequest, res: Response): Promise<voi
         where: {
           role: { in: ['DISTRIBUTOR', 'DISTRIBUTOR_REP'] },
           assignedToRsmId: req.user.id,
-          companyName: { equals: cn, mode: 'insensitive' },
+          OR: [
+            // Match by Account name (admin "Assign to company" flow)
+            { account: { name: { equals: cn, mode: 'insensitive' } } },
+            // Legacy: match by raw companyName string on the user
+            { companyName: { equals: cn, mode: 'insensitive' } },
+          ],
         },
         select: { id: true },
       });
