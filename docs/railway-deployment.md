@@ -117,9 +117,21 @@ No extra environment variables are required. When `RAILWAY_VOLUME_MOUNT_PATH` is
 
 ### Running Migrations
 
+Migrations run automatically on start (`npm run start:with-migrate`). To run manually:
+
 ```bash
 railway run npx prisma migrate deploy
 ```
+
+### P3005 (database schema is not empty)
+
+If the deploy fails with **P3005** (existing production DB with no migration history), the start script will try to **baseline** once: it runs the migration SQL files and marks them as applied. If that fails, run the baseline manually from the **backend** directory:
+
+```bash
+railway run --service WAIGO npm run baseline
+```
+
+Then redeploy.
 
 ### Seeding Database
 
