@@ -91,6 +91,7 @@ const QuoteForm = () => {
   const [showCustomerPicker, setShowCustomerPicker] = useState(false);
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [creatingCustomer, setCreatingCustomer] = useState(false);
+  const customerPickerRef = useRef<HTMLDivElement>(null);
 
   const [productSearch, setProductSearch] = useState('');
   const [products, setProducts] = useState<Part[]>([]);
@@ -254,6 +255,17 @@ const QuoteForm = () => {
     const el = discountSelectAllRef.current;
     if (el) el.indeterminate = someDiscountSelected && !allDiscountSelected;
   }, [someDiscountSelected, allDiscountSelected]);
+
+  // Close customer picker when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (customerPickerRef.current && !customerPickerRef.current.contains(e.target as Node)) {
+        setShowCustomerPicker(false);
+      }
+    };
+    if (showCustomerPicker) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showCustomerPicker]);
 
   useEffect(() => {
     if (showProductPicker && catalogId && productSearch.trim().length >= 2) {
@@ -793,64 +805,66 @@ const QuoteForm = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Quote setup bar - compact horizontal layout */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-          {catalogs.length > 0 && (
-            <div className="min-w-0">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Catalog</label>
-              <select value={catalogId} onChange={(e) => setCatalogId(e.target.value)} className="input w-full max-w-[220px]">
-                {catalogs.map((c) => (
+        {/* Quote setup bar — all fields on one horizontal plane */}
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+          <div className="flex flex-wrap gap-4 items-end">
+            {/* Catalog */}
+            {catalogs.length > 0 && (
+              <div className="flex flex-col min-w-[160px] max-w-[220px] flex-1">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Catalog</label>
+                <select value={catalogId} onChange={(e) => setCatalogId(e.target.value)} className="input w-full">
+                  {catalogs.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Price contract */}
+            <div className="flex flex-col min-w-[160px] max-w-[240px] flex-1">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Price contract</label>
+              <select
+                value={priceContractId}
+                onChange={(e) => setPriceContractId(e.target.value)}
+                className="input w-full"
+              >
+                <option value="">Standard pricing</option>
+                {priceContracts.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             </div>
-          )}
-          <div className="min-w-0">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Price contract</label>
-            <select
-              value={priceContractId}
-              onChange={(e) => setPriceContractId(e.target.value)}
-              className="input w-full max-w-[220px]"
-            >
-              <option value="">Standard pricing</option>
-              {priceContracts.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-          {isRsm && (
-            <div className="min-w-0">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
-              <select
-                value={selectedCompanyName}
-                onChange={(e) => {
-                  setSelectedCompanyName(e.target.value);
-                  setCustomerId(null);
-                  setCustomerName('');
-                  setShowCustomerPicker(false);
-                }}
-                className="input w-full max-w-[220px]"
-                title={companies.length === 0 ? 'No distributor companies assigned yet. Select a company to see customers created by distributors.' : undefined}
-              >
-                <option value="">My customers</option>
-                {companies.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-              {companies.length === 0 && (
-                <p className="text-xs text-gray-500 mt-0.5">No distributor companies assigned</p>
-              )}
-            </div>
-          )}
-          <div className="min-w-0 flex-1 lg:min-w-[200px]">
-            <div className="flex items-center justify-between gap-2 mb-1">
-              <label className="block text-sm font-medium text-gray-700">Customer</label>
-              <Link to="/customers" className="text-xs text-green-600 hover:underline">Manage</Link>
-            </div>
-            {isRsm && selectedCompanyName && (
-              <p className="text-xs text-gray-500 mb-1">Showing customers from {selectedCompanyName}</p>
+
+            {/* Company (RSM only) */}
+            {isRsm && (
+              <div className="flex flex-col min-w-[160px] max-w-[220px] flex-1">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Company</label>
+                <select
+                  value={selectedCompanyName}
+                  disabled={companies.length === 0}
+                  onChange={(e) => {
+                    setSelectedCompanyName(e.target.value);
+                    setCustomerId(null);
+                    setCustomerName('');
+                    setShowCustomerPicker(false);
+                  }}
+                  className={`input w-full ${companies.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  title={companies.length === 0 ? 'No distributor companies assigned yet' : 'Select a company to see its customers'}
+                >
+                  <option value="">{companies.length === 0 ? 'No companies assigned' : 'My customers'}</option>
+                  {companies.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
             )}
-            <div className="relative">
+
+            {/* Customer */}
+            <div ref={customerPickerRef} className="flex flex-col min-w-[200px] flex-1 relative">
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Customer</label>
+                <Link to="/customers" className="text-xs text-green-600 hover:underline leading-none">Manage</Link>
+              </div>
               <input
                 type="text"
                 value={customerName || customerSearch}
@@ -863,28 +877,46 @@ const QuoteForm = () => {
                 className="input w-full"
               />
               {customerName && (
-                <button type="button" onClick={() => { setCustomerId(null); setCustomerName(''); }} className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600">
-                  <X className="w-5 h-5" />
+                <button type="button" onClick={() => { setCustomerId(null); setCustomerName(''); }} className="absolute right-2 bottom-2.5 text-gray-400 hover:text-gray-600">
+                  <X className="w-4 h-4" />
                 </button>
               )}
               {showCustomerPicker && (
-                <div className="absolute z-10 mt-1 left-0 right-0 min-w-[280px] bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  <button type="button" onClick={() => { setShowCustomerPicker(false); setShowNewCustomer(true); }} className="w-full px-4 py-2 text-left text-green-600 hover:bg-gray-50 flex items-center gap-2">
-                    <UserPlus className="w-4 h-4" /> New Customer
+                <div className="absolute z-20 top-full mt-1 left-0 right-0 min-w-[260px] bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  <button type="button" onClick={() => { setShowCustomerPicker(false); setShowNewCustomer(true); }} className="w-full px-4 py-2.5 text-left text-green-600 hover:bg-gray-50 flex items-center gap-2 border-b border-gray-100">
+                    <UserPlus className="w-4 h-4 shrink-0" /> New Customer
                   </button>
+                  {customers.length === 0 && (
+                    <p className="px-4 py-3 text-sm text-gray-500">
+                      {isRsm && selectedCompanyName ? `No customers found for ${selectedCompanyName}` : 'No customers yet'}
+                    </p>
+                  )}
                   {customers.map((c) => (
-                    <button key={c.id} type="button" onClick={() => selectCustomer(c)} className="w-full px-4 py-2 text-left hover:bg-gray-50">
-                      {c.company ? `${c.name} (${c.company})` : c.name}
+                    <button key={c.id} type="button" onClick={() => selectCustomer(c)} className="w-full px-4 py-2.5 text-left hover:bg-gray-50 text-sm">
+                      <span className="font-medium text-gray-900">{c.name}</span>
+                      {c.company && <span className="text-gray-500 ml-1">({c.company})</span>}
                     </button>
                   ))}
                 </div>
               )}
+              {isRsm && selectedCompanyName && (
+                <p className="text-xs text-green-700 mt-1">Showing: {selectedCompanyName}</p>
+              )}
+            </div>
+
+            {/* Notes */}
+            <div className="flex flex-col min-w-[160px] max-w-[300px] flex-1">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Notes</label>
+              <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} className="input w-full" placeholder="Optional notes" />
             </div>
           </div>
+
+          {priceContractId && (
+            <p className="text-xs text-amber-600 mt-3 flex items-center gap-1">
+              <span className="font-medium">Price contract active:</span> Products will use contract cost and suggested sell when eligible.
+            </p>
+          )}
         </div>
-        {priceContractId && (
-          <p className="text-xs text-gray-500 -mt-2">Products added will use contract cost and suggested sell when eligible.</p>
-        )}
 
         {/* New Customer Modal */}
         {showNewCustomer && (
@@ -907,12 +939,6 @@ const QuoteForm = () => {
             </div>
           </div>
         )}
-
-        {/* Notes */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-          <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} className="input w-full" placeholder="Optional notes" />
-        </div>
 
         {/* Line Items */}
         <div>
