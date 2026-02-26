@@ -5,8 +5,8 @@ import {
   Package, Folder, FolderOpen, X, Trash2, Upload, AlertCircle, Check,
   Loader2, Plus, Minus
 } from 'lucide-react';
-import axios from 'axios';
 import toast from 'react-hot-toast';
+import api from '@/lib/api';
 
 interface Product {
   id: string;
@@ -30,7 +30,7 @@ interface TreeNode {
   categoryName?: string;
 }
 
-const CatalogCreator = () => {
+const ProjectBookCreator = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const isEditing = !!id;
@@ -46,6 +46,7 @@ const CatalogCreator = () => {
   const [sourceCatalogId, setSourceCatalogId] = useState<string>('');
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   
   // Search & bulk import
@@ -61,16 +62,26 @@ const CatalogCreator = () => {
 
   // Load source catalogs once, then set default source to MASTER (first in list)
   useEffect(() => {
+    let cancelled = false;
+    setLoadError(null);
     (async () => {
       try {
-        const res = await axios.get<{ sourceCatalogs: Array<{ id: string; name: string; label: string; isMaster?: boolean }> }>('/api/catalog-creator/source-catalogs');
+        const res = await api.get<{ sourceCatalogs: Array<{ id: string; name: string; label: string; isMaster?: boolean }> }>('/catalog-creator/source-catalogs', { timeout: 15000 });
+        if (cancelled) return;
         const list = res.data.sourceCatalogs || [];
         setSourceCatalogs(list);
         setSourceCatalogId((prev) => (list.length > 0 && !prev ? list[0].id : prev));
-      } catch (e) {
-        console.error('Failed to load source catalogs', e);
+        if (list.length === 0) setLoading(false);
+      } catch (e: any) {
+        if (cancelled) return;
+        const status = e?.response?.status;
+        const msg = e?.code === 'ECONNABORTED' ? 'Request timed out. Check that the backend is running and reachable.' : (e?.response?.data?.error || e?.message || 'Failed to load source options');
+        setLoadError(msg);
+        setLoading(false);
+        toast.error(msg);
       }
     })();
+    return () => { cancelled = true; };
   }, []);
 
   // Load products when source catalog or edit id changes
@@ -82,10 +93,11 @@ const CatalogCreator = () => {
   const loadData = async () => {
     if (!sourceCatalogId && !(isEditing && id)) return;
     setLoading(true);
+    setLoadError(null);
     try {
       let effectiveSourceId = sourceCatalogId;
       if (isEditing && id) {
-        const catalogRes = await axios.get(`/api/catalog-creator/detail/${id}`);
+        const catalogRes = await api.get(`/catalog-creator/detail/${id}`);
         const catalog = catalogRes.data.catalog;
         setName(catalog.name);
         setDescription(catalog.description || '');
@@ -97,7 +109,7 @@ const CatalogCreator = () => {
         setSelectedProductIds(new Set(productIds));
       }
       if (!effectiveSourceId) {
-        const srcRes = await axios.get<{ sourceCatalogs: Array<{ id: string }> }>('/api/catalog-creator/source-catalogs');
+        const srcRes = await api.get<{ sourceCatalogs: Array<{ id: string }> }>('/catalog-creator/source-catalogs');
         const list = srcRes.data.sourceCatalogs || [];
         if (list.length > 0) {
           effectiveSourceId = list[0].id;
@@ -105,14 +117,16 @@ const CatalogCreator = () => {
         }
       }
       if (effectiveSourceId) {
-        const productsRes = await axios.get('/api/catalog-creator/products-for-catalog', {
-          params: { sourceCatalogId: effectiveSourceId }
+        const productsRes = await api.get('/catalog-creator/products-for-catalog', {
+          params: { sourceCatalogId: effectiveSourceId },
+          timeout: 15000
         });
         setProducts(productsRes.data.products || []);
       }
-    } catch (error) {
-      console.error('Failed to load data:', error);
-      toast.error('Failed to load products');
+    } catch (error: any) {
+      const msg = error?.code === 'ECONNABORTED' ? 'Request timed out.' : (error?.response?.data?.error || error?.message || 'Failed to load products');
+      setLoadError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -239,7 +253,7 @@ const CatalogCreator = () => {
     setQuickAddLoading(true);
     setBulkImportResult(null);
     try {
-      const response = await axios.post('/api/catalog-creator/lookup-parts', {
+      const response = await api.post('/catalog-creator/lookup-parts', {
         partNumbers: [pn]
       });
       const { products: foundProducts, notFound } = response.data;
@@ -278,7 +292,7 @@ const CatalogCreator = () => {
     setBulkImportResult(null);
 
     try {
-      const response = await axios.post('/api/catalog-creator/lookup-parts', {
+      const response = await api.post('/catalog-creator/lookup-parts', {
         partNumbers
       });
 
@@ -328,10 +342,10 @@ const CatalogCreator = () => {
       };
 
       if (isEditing) {
-        await axios.patch(`/api/catalog-creator/update/${id}`, data);
+        await api.patch(`/catalog-creator/update/${id}`, data);
         toast.success('Project book updated successfully!');
       } else {
-        await axios.post('/api/catalog-creator/create', data);
+        await api.post('/catalog-creator/create', data);
         toast.success('Project book created successfully!');
       }
 
@@ -344,10 +358,33 @@ const CatalogCreator = () => {
     }
   };
 
-  if (loading) {
+  if (loading && !loadError) {
     return (
       <div className="flex items-center justify-center h-screen">
         <Loader2 className="w-12 h-12 text-green-600 animate-spin" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto">
+        <button onClick={() => navigate('/catalog-list')} className="text-green-600 hover:underline flex items-center gap-1 mb-6">
+          <ArrowLeft className="w-5 h-5" /> Back to Project Books
+        </button>
+        <div className="card p-8 border-red-200 bg-red-50">
+          <h2 className="text-xl font-semibold text-red-800 mb-2">Unable to load Project Book Creator</h2>
+          <p className="text-red-700 mb-4">{loadError}</p>
+          <p className="text-sm text-gray-600 mb-4">
+            Make sure the backend server is running. If testing locally, run both frontend and backend.
+          </p>
+          <button
+            onClick={() => { setLoadError(null); setLoading(true); window.location.reload(); }}
+            className="btn btn-primary"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
@@ -749,4 +786,4 @@ const CatalogCreator = () => {
   );
 };
 
-export default CatalogCreator;
+export default ProjectBookCreator;

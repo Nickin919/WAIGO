@@ -30,7 +30,7 @@ import FailureReport from './pages/admin/FailureReport';
 import DataManagement from './pages/admin/DataManagement';
 import LiteratureLibrary from './pages/admin/LiteratureLibrary';
 import CatalogList from './pages/catalog/CatalogList';
-import CatalogCreator from './pages/catalog/CatalogCreator';
+import ProjectBookCreator from './pages/catalog/ProjectBookCreator';
 import AccountsPage from './pages/accounts/AccountsPage';
 import AccountDetailPage from './pages/accounts/AccountDetailPage';
 import MyPriceContractsPage from './pages/assignments/MyPriceContractsPage';
@@ -130,8 +130,8 @@ function App() {
         <Route path="/quotes/:quoteId" element={<QuoteDetail />} />
         <Route path="/customers" element={<ManageCustomers />} />
         <Route path="/catalog-list" element={<CatalogList />} />
-        <Route path="/catalog-creator/new" element={<CatalogCreator />} />
-        <Route path="/catalog-creator/:id" element={<CatalogCreator />} />
+        <Route path="/catalog-creator/new" element={<ProjectBookCreator />} />
+        <Route path="/catalog-creator/:id" element={<ProjectBookCreator />} />
         <Route path="/accounts" element={<AccountsPage />} />
         <Route path="/accounts/:userId" element={<AccountDetailPage />} />
         <Route path="/assignments" element={<AssignmentsRedirect />} />
