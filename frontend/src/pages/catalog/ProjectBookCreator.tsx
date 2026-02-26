@@ -119,27 +119,14 @@ const ProjectBookCreator = () => {
         }
       }
       if (effectiveSourceId) {
-        // #region agent log
-        const _fetchStart = Date.now();
-        fetch('http://127.0.0.1:7242/ingest/3b168631-beca-4109-b9fb-808d8bac595c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1aa897'},body:JSON.stringify({sessionId:'1aa897',location:'ProjectBookCreator.tsx:loadData',message:'H1/H3: Starting products fetch',data:{sourceCatalogId:effectiveSourceId},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         const productsRes = await api.get('/catalog-creator/products-for-catalog', {
           params: { sourceCatalogId: effectiveSourceId },
           timeout: 30000
         });
-        // #region agent log
-        const _fetchMs = Date.now() - _fetchStart;
-        const _productCount = (productsRes.data.products || []).length;
-        const _totalCount = productsRes.data.totalCount ?? null;
-        fetch('http://127.0.0.1:7242/ingest/3b168631-beca-4109-b9fb-808d8bac595c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1aa897'},body:JSON.stringify({sessionId:'1aa897',location:'ProjectBookCreator.tsx:loadData',message:'H1/H3: Products fetch completed',data:{fetchMs:_fetchMs,productCount:_productCount,totalCount:_totalCount,responseSize:JSON.stringify(productsRes.data).length},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         setProducts(productsRes.data.products || []);
         setTotalProductCount(productsRes.data.totalCount ?? null);
       }
     } catch (error: any) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/3b168631-beca-4109-b9fb-808d8bac595c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1aa897'},body:JSON.stringify({sessionId:'1aa897',location:'ProjectBookCreator.tsx:loadData:catch',message:'H1: loadData error caught',data:{code:error?.code,status:error?.response?.status,message:error?.message,isTimeout:error?.code==='ECONNABORTED'},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       const msg = error?.code === 'ECONNABORTED' ? 'Request timed out.' : (error?.response?.data?.error || error?.message || 'Failed to load products');
       setLoadError(msg);
       toast.error(msg);
@@ -150,9 +137,6 @@ const ProjectBookCreator = () => {
 
   // Build tree from products
   const treeData = useMemo(() => {
-    // #region agent log
-    const _treeBuildStart = Date.now();
-    // #endregion
     const productsByCategory = new Map<string, Product[]>();
     
     products.forEach(product => {
@@ -180,10 +164,6 @@ const ProjectBookCreator = () => {
     });
 
     tree.sort((a, b) => a.name.localeCompare(b.name));
-    // #region agent log
-    const _treeBuildMs = Date.now() - _treeBuildStart;
-    fetch('http://127.0.0.1:7242/ingest/3b168631-beca-4109-b9fb-808d8bac595c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1aa897'},body:JSON.stringify({sessionId:'1aa897',location:'ProjectBookCreator.tsx:treeData',message:'H4: Tree build complete',data:{treeBuildMs:_treeBuildMs,categoryCount:tree.length,totalProducts:products.length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     return tree;
   }, [products]);
 
