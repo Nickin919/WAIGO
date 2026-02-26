@@ -213,20 +213,29 @@ function drawHeader(
 }
 
 function drawFooter(doc: PDFDoc, accentColor: string) {
+  // CRITICAL: Keep doc.y at a safe low value throughout to prevent PDFKit auto-pagination
+  doc.y = 100;
+  
   // Accent bar at very bottom
   doc.rect(0, 837, PAGE_WIDTH, ACCENT_BAR_HEIGHT).fill(accentColor);
   // Light footer band
   doc.rect(MARGIN, FOOTER_Y, CONTENT_WIDTH, FOOTER_HEIGHT).fill('#f9fafb');
   doc.moveTo(MARGIN, FOOTER_Y).lineTo(COL.end, FOOTER_Y).strokeColor('#e5e7eb').lineWidth(1).stroke();
+  
+  // Draw footer text - reset doc.y before EACH text call to prevent auto-pagination
   doc.fontSize(9).fillColor('#9ca3af');
+  doc.y = 100;
   doc.text(
     'This is a pricing proposal only, not a binding purchase order or official quote.',
     MARGIN, FOOTER_Y + 8, { align: 'center', width: CONTENT_WIDTH, lineBreak: false }
   );
+  doc.y = 100; // Reset immediately after
+  
   doc.text(
     'Prices are subject to change without notice. Thank you for your business.',
     MARGIN, FOOTER_Y + 21, { align: 'center', width: CONTENT_WIDTH, lineBreak: false }
   );
+  doc.y = 100; // Reset immediately after
 }
 
 function drawContinuationFooter(doc: PDFDoc) {
@@ -313,14 +322,15 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     };
 
     // Used ONLY during line-items table: advances cursor and breaks page with "Continued" footer
+    // CRITICAL: Always cap doc.y to prevent PDFKit auto-pagination
     const itemRow = (dy: number, redrawTableHead = false) => {
       y += dy;
-      doc.y = y;
+      doc.y = Math.min(y, 750);
       if (y > 718) {
         drawContinuationFooter(doc);
         doc.addPage({ margin: 0 });
         pageNum++;
-        drawHeader(doc, pageNum, pageNum, headerOpts); // totalPages = pageNum (best estimate)
+        drawHeader(doc, pageNum, pageNum, headerOpts);
         y = CONTENT_TOP;
         doc.y = y;
         if (redrawTableHead) {
@@ -343,9 +353,10 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     };
 
     // Advance y without triggering a page break (used for known-safe small offsets)
+    // CRITICAL: Cap doc.y at 750 to prevent PDFKit auto-pagination
     const advance = (dy: number) => {
       y += dy;
-      doc.y = y;
+      doc.y = Math.min(y, 750);
     };
 
     // ── Page 1 header ──────────────────────────────────────────────────────────
@@ -479,9 +490,11 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     advance(13);
     // Use height to clip text and prevent PDFKit auto-pagination
     const termsMaxH = Math.min(termsLines * 13 + 10, USABLE_BOTTOM - y);
-    doc.fontSize(10).fillColor('#1f2937').text(termsText, MARGIN, y, { width: CONTENT_WIDTH, height: termsMaxH });
+    doc.fontSize(10).fillColor('#1f2937').text(termsText, MARGIN, y, { width: CONTENT_WIDTH, height: termsMaxH, lineBreak: true });
     y += termsLines * 13;
     doc.y = y;
+    // Ensure doc.y doesn't exceed a safe threshold
+    if (doc.y > 750) doc.y = 750;
     advance(16);
 
     // Notes - check if we need a page break
@@ -499,9 +512,11 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
       advance(13);
       // Use height to clip text and prevent PDFKit auto-pagination
       const notesMaxH = Math.min(notesLines * 13 + 10, USABLE_BOTTOM - y);
-      doc.fontSize(10).fillColor('#1f2937').text(quote.notes.slice(0, 200), MARGIN, y, { width: CONTENT_WIDTH, height: notesMaxH });
+      doc.fontSize(10).fillColor('#1f2937').text(quote.notes.slice(0, 200), MARGIN, y, { width: CONTENT_WIDTH, height: notesMaxH, lineBreak: true });
       y += notesLines * 13;
       doc.y = y;
+      // Ensure doc.y doesn't exceed a safe threshold
+      if (doc.y > 750) doc.y = 750;
       advance(16);
     }
 
@@ -573,23 +588,27 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
       // Enough vertical room — draw the banner inline, scaled to fit (capped at max height)
       const bannerH = Math.min(bannerAvailH, BANNER_MAX_HEIGHT);
       try {
+        // Reset doc.y to safe position before image to prevent auto-pagination
+        doc.y = 100;
         doc.image(bannerBuf, MARGIN, cardBottom + bannerGap, {
           fit: [CONTENT_WIDTH, bannerH],
           align: 'center',
           valign: 'center',
         });
+        // Reset doc.y after image
+        doc.y = 100;
       } catch { /* skip if corrupt */ }
     }
     // If bannerAvailH < 60pt, we simply skip the banner — no extra page is ever added.
 
     // ── Footer (drawn at absolute position on last content page) ──────────────
-    // CRITICAL: Reset doc.y to a safe position BEFORE drawing footer to prevent
-    // PDFKit from auto-creating pages when footer text is rendered
-    doc.y = FOOTER_Y;
+    // CRITICAL: Set doc.y to a very safe position (low on page) before drawing footer.
+    // PDFKit auto-paginates when doc.y exceeds page height, so we keep it low.
+    doc.y = 100;
     drawFooter(doc, accentColor);
 
-    // Reset doc.y again before end() to prevent any final auto-pagination
-    doc.y = CONTENT_TOP;
+    // Reset doc.y to a safe position before end() to prevent any final auto-pagination
+    doc.y = 100;
 
     doc.end();
   });
