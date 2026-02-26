@@ -409,22 +409,46 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
       doc.text('$' + price.toFixed(2), COL.price, rowY + 5, { width: COL_WIDTHS.price, align: 'right', lineBreak: false });
       doc.text('$' + total.toFixed(2), COL.total, rowY + 5, { width: COL_WIDTHS.total, align: 'right', lineBreak: false });
       doc.moveTo(MARGIN, rowY + ROW_HEIGHT).lineTo(COL.end, rowY + ROW_HEIGHT).strokeColor('#e5e7eb').lineWidth(0.5).stroke();
-      itemRow(ROW_HEIGHT, true);
+      
+      // Advance to next row position, but only trigger page break for non-last items
+      const isLastItem = i === items.length - 1;
+      if (isLastItem) {
+        // For last item, just advance y without page break check - let ensureSpace handle it
+        y += ROW_HEIGHT;
+        doc.y = y;
+      } else {
+        itemRow(ROW_HEIGHT, true);
+      }
     }
 
     // ── Summary section (Totals + Terms + Notes + Contact) ───────────────────
-    // Compute total height needed so we do ONE page-break check. This prevents
-    // multiple ensureSpace calls from creating spurious blank pages.
+    // Calculate heights for each section to enable smarter page breaks
     const termsText = quote.terms || 'Net 30. Valid for 30 days from proposal date.';
-    const termsLines = Math.ceil(termsText.length / 90) + 1;     // rough line estimate at CONTENT_WIDTH
+    const termsLines = Math.ceil(termsText.length / 90) + 1;
     const notesLines = quote.notes ? Math.ceil(quote.notes.slice(0, 200).length / 90) + 1 : 0;
-    const summaryH =
-      8 + 2 + 10 + 48 + 8 +          // gap + divider + gap + totals block + gap
-      1 + 10 + 13 + termsLines * 13 + 24 +  // divider + gap + TERMS + text + gap
-      (quote.notes ? 13 + notesLines * 13 + 24 : 0) + // NOTES section if present
-      1 + 12 + 14 + 66 + 10;          // contact divider + gap + label + cards + bottom pad
-
-    ensureSpace(summaryH);
+    
+    // Height of just the totals bar (should stay with items if possible)
+    const totalsH = 8 + 2 + 10 + 48;  // gap + divider + gap + totals block = 68pt
+    
+    // Height of terms section
+    const termsH = 8 + 1 + 10 + 13 + termsLines * 13 + 16;  // ~74pt for typical terms
+    
+    // Height of notes section (if present)
+    const notesH = quote.notes ? 13 + notesLines * 13 + 16 : 0;
+    
+    // Height of contact section
+    const contactH = 1 + 12 + 14 + 66;  // ~93pt
+    
+    // Try to keep totals with the last item row - only break if we can't fit totals
+    // This prevents excessive whitespace after the last item
+    if (y + totalsH > USABLE_BOTTOM) {
+      // Can't fit totals, need to break page
+      doc.addPage({ margin: 0 });
+      pageNum++;
+      drawHeader(doc, pageNum, pageNum, headerOpts);
+      y = CONTENT_TOP;
+      doc.y = y;
+    }
 
     // Totals
     advance(8);
@@ -439,7 +463,14 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     doc.font('Helvetica');
     advance(56);
 
-    // Terms
+    // Terms - check if we need a page break
+    if (y + termsH > USABLE_BOTTOM) {
+      doc.addPage({ margin: 0 });
+      pageNum++;
+      drawHeader(doc, pageNum, pageNum, headerOpts);
+      y = CONTENT_TOP;
+      doc.y = y;
+    }
     doc.moveTo(MARGIN, y).lineTo(COL.end, y).strokeColor('#e5e7eb').lineWidth(1).stroke();
     advance(10);
     doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold')
@@ -447,13 +478,19 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     doc.font('Helvetica');
     advance(13);
     doc.fontSize(10).fillColor('#1f2937').text(termsText, MARGIN, y, { width: CONTENT_WIDTH });
-    // Sync y with actual text end (terms text can wrap)
     y = Math.max(y + termsLines * 13, doc.y);
     doc.y = y;
     advance(16);
 
-    // Notes
+    // Notes - check if we need a page break
     if (quote.notes) {
+      if (y + notesH > USABLE_BOTTOM) {
+        doc.addPage({ margin: 0 });
+        pageNum++;
+        drawHeader(doc, pageNum, pageNum, headerOpts);
+        y = CONTENT_TOP;
+        doc.y = y;
+      }
       doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold')
         .text('NOTES', MARGIN, y, { lineBreak: false });
       doc.font('Helvetica');
@@ -464,7 +501,14 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
       advance(16);
     }
 
-    // Contact
+    // Contact - check if we need a page break
+    if (y + contactH > USABLE_BOTTOM) {
+      doc.addPage({ margin: 0 });
+      pageNum++;
+      drawHeader(doc, pageNum, pageNum, headerOpts);
+      y = CONTENT_TOP;
+      doc.y = y;
+    }
     doc.moveTo(MARGIN, y).lineTo(COL.end, y).strokeColor('#e5e7eb').lineWidth(1).stroke();
     advance(12);
     doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold')
