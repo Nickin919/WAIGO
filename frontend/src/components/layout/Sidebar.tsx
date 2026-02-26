@@ -1,10 +1,11 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Home, Grid3x3, PlayCircle, FolderKanban, DollarSign, Users, Calculator, Settings, BarChart3, Search, Link2, TrendingUp, UserCircle, ClipboardList, BookOpen, Film } from 'lucide-react';
+import { Home, Grid3x3, PlayCircle, FolderKanban, DollarSign, Users, Calculator, Settings, BarChart3, Search, Link2, TrendingUp, UserCircle, ClipboardList, BookOpen, Film, LogOut } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 import { publicApi } from '@/lib/api';
 import clsx from 'clsx';
+import toast from 'react-hot-toast';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -12,7 +13,8 @@ interface SidebarProps {
 }
 
 const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
   const { data: featureFlags } = useQuery({
     queryKey: ['feature-flags'],
     queryFn: async () => {
@@ -76,7 +78,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
       {/* Sidebar */}
       <aside
         className={clsx(
-          'fixed top-16 left-0 h-[calc(100vh-4rem)] w-60 bg-white border-r border-gray-200 z-40 transition-transform duration-300 overflow-y-auto',
+          'fixed top-16 left-0 h-[calc(100vh-4rem)] w-60 bg-white border-r border-gray-200 z-40 transition-transform duration-300 overflow-y-auto flex flex-col',
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
@@ -134,7 +136,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
 
         {/* Admin Section */}
         {filteredAdminItems.length > 0 && (
-          <nav className="p-4">
+          <nav className="p-4 border-b border-gray-200">
             <div className="text-xs font-semibold text-gray-500 uppercase mb-3">System</div>
             <div className="space-y-1">
               {filteredAdminItems.map((item) => (
@@ -158,6 +160,23 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             </div>
           </nav>
         )}
+
+        {/* Sign Out */}
+        <div className="p-4 mt-auto">
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              logout();
+              toast.success('Logged out successfully');
+              navigate('/login');
+            }}
+            className="flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-red-600 hover:bg-red-50 w-full"
+          >
+            <LogOut className="w-5 h-5" />
+            <span className="font-medium">Sign Out</span>
+          </button>
+        </div>
       </aside>
     </>
   );

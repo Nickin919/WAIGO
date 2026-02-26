@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bell, User, Search, Menu, LogIn } from 'lucide-react';
+import { Bell, User, Search, Menu, LogIn, LogOut } from 'lucide-react';
 import { useAuthStore, isGuestUser } from '@/stores/authStore';
 import { notificationApi } from '@/lib/api';
+import toast from 'react-hot-toast';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -30,7 +31,7 @@ interface HeaderProps {
 }
 
 const Header = ({ onMenuClick }: HeaderProps) => {
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const isGuest = useAuthStore(isGuestUser);
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
@@ -39,7 +40,9 @@ const Header = ({ onMenuClick }: HeaderProps) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   const fetchNotifications = (unreadOnly?: boolean) => {
     setLoading(true);
@@ -88,10 +91,20 @@ const Header = ({ onMenuClick }: HeaderProps) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setNotificationsOpen(false);
       }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const handleLogout = () => {
+    setUserMenuOpen(false);
+    logout();
+    toast.success('Logged out successfully');
+    navigate('/login');
+  };
 
   const handleMarkAsRead = (id: string) => {
     notificationApi.markAsRead(id).then(() => {
@@ -250,26 +263,50 @@ const Header = ({ onMenuClick }: HeaderProps) => {
               <span>Sign in</span>
             </Link>
           ) : (
-            <Link
-              to="/profile"
-              className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              <div className="w-10 h-10 bg-wago-blue rounded-full flex items-center justify-center overflow-hidden flex-shrink-0">
-                {user?.avatarUrl && !avatarError ? (
-                  <img
-                    src={avatarImageUrl(user.avatarUrl) ?? ''}
-                    alt=""
-                    className="w-full h-full object-cover"
-                    onError={() => setAvatarError(true)}
-                  />
-                ) : (
-                  <User className="w-5 h-5 text-white" />
-                )}
-              </div>
-              <span className="text-sm font-medium text-gray-900 hidden md:inline">
-                {user?.firstName || user?.email}
-              </span>
-            </Link>
+            <div className="relative" ref={userMenuRef}>
+              <button
+                type="button"
+                onClick={() => setUserMenuOpen((o) => !o)}
+                className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <div className="w-10 h-10 bg-wago-blue rounded-full flex items-center justify-center overflow-hidden flex-shrink-0">
+                  {user?.avatarUrl && !avatarError ? (
+                    <img
+                      src={avatarImageUrl(user.avatarUrl) ?? ''}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      onError={() => setAvatarError(true)}
+                    />
+                  ) : (
+                    <User className="w-5 h-5 text-white" />
+                  )}
+                </div>
+                <span className="text-sm font-medium text-gray-900 hidden md:inline">
+                  {user?.firstName || user?.email}
+                </span>
+              </button>
+
+              {userMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
+                  <Link
+                    to="/profile"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                  >
+                    <User className="w-4 h-4" />
+                    Profile
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors w-full text-left"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sign Out
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
