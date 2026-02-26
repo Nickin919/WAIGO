@@ -446,6 +446,8 @@ export const uploadBOM = async (req: AuthRequest, res: Response): Promise<void> 
       });
     }
 
+    const importBatchId = `bom_upload_${id}_${Date.now()}`;
+    const userId = req.user?.id ?? null;
     let created = 0;
     for (const row of rows) {
       const wagoPart = await prisma.part.findFirst({
@@ -467,6 +469,27 @@ export const uploadBOM = async (req: AuthRequest, res: Response): Promise<void> 
         }
       });
       created++;
+
+      if (!wagoPart) {
+        const manufacturer = (row.manufacturer ?? '').trim() || 'Unknown';
+        const nonWago = await prisma.nonWagoProduct.findUnique({
+          where: {
+            manufacturer_partNumber: { manufacturer, partNumber: row.partNumber }
+          }
+        });
+        if (!nonWago) {
+          await prisma.failureReport.create({
+            data: {
+              source: 'BOM_UPLOAD',
+              failureType: 'NO_MATCH',
+              importBatchId,
+              context: { projectId: id, partNumber: row.partNumber, manufacturer },
+              message: `BOM upload: no WAGO Part and no Non-WAGO Product for ${row.partNumber} (${manufacturer})`,
+              userId
+            }
+          });
+        }
+      }
     }
 
     res.json({ created, totalRows: rows.length, skipped: rawRows.length - rows.length });
@@ -644,6 +667,99 @@ export const submitProject = async (req: AuthRequest, res: Response): Promise<vo
   } catch (error) {
     console.error('Submit project error:', error);
     res.status(500).json({ error: 'Failed to submit project' });
+  }
+};
+
+/**
+ * Convert Project BOM to Project Book (Catalog). ADMIN and RSM only.
+ * Creates a new Catalog with sourceType CONVERTED_FROM_BOM; only WAGO parts with both gridLevelNumber and gridSublevelNumber are added.
+ * Parts missing grid metadata are logged to FailureReport.
+ * POST /api/projects/:id/convert-to-project-book
+ */
+export const convertToProjectBook = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const role = req.user?.role;
+    if (role !== 'ADMIN' && role !== 'RSM') {
+      res.status(403).json({ error: 'Only ADMIN and RSM can convert a project BOM to a Project Book' });
+      return;
+    }
+    const { id: projectId } = req.params;
+
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, name: true, userId: true, currentRevision: true }
+    });
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+    const allowed = await canAccessProject(req.user!.id, req.user!.role, project.userId);
+    if (!allowed) {
+      res.status(403).json({ error: 'Access denied to this project' });
+      return;
+    }
+
+    const revision = project.currentRevision;
+    const itemsWithRevision = await prisma.projectItem.findMany({
+      where: { projectId, revisionNumber: revision },
+      include: { part: { select: { id: true, partNumber: true, gridLevelNumber: true, gridSublevelNumber: true } } }
+    });
+
+    const importBatchId = `project_book_conv_${projectId}_${Date.now()}`;
+    const userId = req.user!.id;
+
+    const catalog = await prisma.catalog.create({
+      data: {
+        name: `${project.name} (from BOM)`,
+        description: `Converted from project "${project.name}" revision ${revision}`,
+        isActive: true,
+        isMaster: false,
+        sourceType: 'CONVERTED_FROM_BOM',
+        sourceProjectId: projectId,
+        sourceRevision: String(revision),
+        createdById: userId
+      }
+    });
+
+    let added = 0;
+    for (const item of itemsWithRevision) {
+      if (!item.partId || !item.part) continue;
+      const part = item.part;
+      const level = part.gridLevelNumber;
+      const sublevel = part.gridSublevelNumber;
+      const hasGrid = level != null && sublevel != null && level >= 1 && sublevel >= 1;
+      if (!hasGrid) {
+        await prisma.failureReport.create({
+          data: {
+            source: 'PROJECT_BOOK_CONVERSION',
+            failureType: 'MISSING_LEVEL_SUBLEVEL',
+            importBatchId,
+            context: { projectId, partId: part.id, partNumber: part.partNumber },
+            message: `Project Book conversion: part ${part.partNumber} has no grid level/sublevel`,
+            userId
+          }
+        });
+        continue;
+      }
+      await prisma.catalogItem.create({
+        data: { catalogId: catalog.id, productId: part.id }
+      });
+      added++;
+    }
+
+    await prisma.catalogAssignment.create({
+      data: { catalogId: catalog.id, userId, isPrimary: false, assignedById: userId }
+    });
+
+    res.status(201).json({
+      catalog: { id: catalog.id, name: catalog.name },
+      added,
+      totalItems: itemsWithRevision.length,
+      importBatchId
+    });
+  } catch (error) {
+    console.error('Convert to project book error:', error);
+    res.status(500).json({ error: 'Failed to convert project to project book' });
   }
 };
 

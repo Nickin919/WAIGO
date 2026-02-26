@@ -293,6 +293,8 @@ export const projectApi = {
   
   getRevisions: (id: string) =>
     api.get(`/projects/${id}/revisions`),
+  convertToProjectBook: (id: string) =>
+    api.post(`/projects/${id}/convert-to-project-book`),
 };
 
 // ============================================================================
@@ -572,6 +574,11 @@ export const adminApi = {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
+
+  getFailureReports: (params?: { source?: string; resolved?: string; fromDate?: string; toDate?: string; limit?: number; offset?: number }) =>
+    api.get('/admin/failure-reports', { params }),
+  resolveFailureReport: (id: string, resolutionNote: string) =>
+    api.patch(`/admin/failure-reports/${id}/resolve`, { resolutionNote }),
 };
 
 // ============================================================================

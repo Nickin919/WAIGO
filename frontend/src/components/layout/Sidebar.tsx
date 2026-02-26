@@ -25,8 +25,8 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const navItems = [
     { path: '/dashboard', icon: Home, label: 'Dashboard', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
     { path: '/sales', icon: TrendingUp, label: 'Sales Dashboard', roles: ['RSM', 'ADMIN'] },
-    { path: '/catalog', icon: Grid3x3, label: 'Catalog', roles: ['FREE', 'BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
-    { path: '/catalog-list', icon: FolderKanban, label: 'My Catalogs', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
+    { path: '/catalog', icon: Grid3x3, label: 'Quick Grid', roles: ['FREE', 'BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
+    { path: '/catalog-list', icon: FolderKanban, label: 'My Project Books', roles: ['BASIC_USER', 'DIRECT_USER', 'DISTRIBUTOR_REP', 'RSM', 'ADMIN'] },
     { path: '/product-finder', icon: Search, label: 'Product Finder', roles: ['FREE'] },
     { path: '/bom-cross-reference', icon: Link2, label: 'BOM Cross-Reference', roles: ['FREE'] },
     { path: '/bom-analyzer', icon: ClipboardList, label: 'BOM Analyzer', roles: ['FREE'] },

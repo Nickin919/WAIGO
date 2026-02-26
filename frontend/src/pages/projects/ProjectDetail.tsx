@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useProjectStore, type ProjectItem } from '@/stores/projectStore';
+import { useAuthStore } from '@/stores/authStore';
 import { projectApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 import {
@@ -27,6 +28,7 @@ import {
   Send,
   CheckCircle,
   FileText,
+  BookOpen,
 } from 'lucide-react';
 import {
   useReactTable,
@@ -49,6 +51,7 @@ export default function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
   const projectQuery = useProjectQuery(projectId);
   const submitMutation = useSubmitProjectMutation(projectId);
   const finalizeMutation = useFinalizeProjectMutation(projectId);
@@ -373,6 +376,23 @@ export default function ProjectDetail() {
   const isDraft = project?.status === 'DRAFT';
   const isSubmitted = project?.status === 'SUBMITTED';
   const isCompleted = project?.status === 'COMPLETED';
+  const canConvertToProjectBook = (user?.role === 'ADMIN' || user?.role === 'RSM') && items.length > 0;
+  const [convertPending, setConvertPending] = useState(false);
+
+  const handleConvertToProjectBook = async () => {
+    if (!projectId) return;
+    setConvertPending(true);
+    try {
+      const { data } = await projectApi.convertToProjectBook(projectId);
+      toast.success(`Project Book created: ${data.catalog?.name ?? 'OK'} (${data.added ?? 0} parts added)`);
+      navigate('/catalog-list');
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Convert failed';
+      toast.error(msg);
+    } finally {
+      setConvertPending(false);
+    }
+  };
 
   const getSuggestionForItem = (itemId: string) => suggestions.find((s) => s.itemId === itemId);
 
@@ -619,6 +639,21 @@ export default function ProjectDetail() {
               <FileText className="w-4 h-4" />
               View Report
             </Link>
+          )}
+          {canConvertToProjectBook && (
+            <button
+              type="button"
+              onClick={handleConvertToProjectBook}
+              disabled={convertPending}
+              className="btn btn-secondary flex items-center gap-2"
+            >
+              {convertPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <BookOpen className="w-4 h-4" />
+              )}
+              Convert to Project Book
+            </button>
           )}
           <button
             type="button"

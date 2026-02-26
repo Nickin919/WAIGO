@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { FreeMode } from 'swiper/modules';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Grid3x3, LayoutList } from 'lucide-react';
 import { useAuthStore, isGuestUser } from '@/stores/authStore';
 import { categoryApi, publicApi, catalogApi } from '@/lib/api';
+import CatalogGrid from './CatalogGrid';
 
 import 'swiper/css';
 import 'swiper/css/free-mode';
+
+type ViewMode = 'grid' | 'categories';
 
 const Catalog = () => {
   const [searchParams] = useSearchParams();
@@ -16,6 +19,7 @@ const Catalog = () => {
   const guest = useAuthStore(isGuestUser);
   const navigate = useNavigate();
   const [effectiveCatalogId, setEffectiveCatalogId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [topCategories, setTopCategories] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<any>(null);
   const [subCategories, setSubCategories] = useState<any[]>([]);
@@ -114,12 +118,33 @@ const Catalog = () => {
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
-      {/* Top horizontal carousel for main categories */}
+      {/* View toggle + Top horizontal carousel for main categories */}
       <div className="bg-white border-b border-gray-200 py-4">
         <div className="container-custom">
-          <h2 className="text-sm font-semibold text-gray-600 uppercase mb-3">
-            Categories
-          </h2>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex rounded-lg border border-gray-200 p-0.5">
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium ${viewMode === 'grid' ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+              >
+                <Grid3x3 className="w-4 h-4" />
+                Grid
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('categories')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium ${viewMode === 'categories' ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+              >
+                <LayoutList className="w-4 h-4" />
+                Categories
+              </button>
+            </div>
+            <h2 className="text-sm font-semibold text-gray-600 uppercase">
+              {viewMode === 'grid' ? 'Quick Grid' : 'Categories'}
+            </h2>
+          </div>
+          {viewMode === 'categories' && (
           <Swiper
             modules={[FreeMode]}
             spaceBetween={16}
@@ -161,13 +186,17 @@ const Catalog = () => {
               </SwiperSlide>
             ))}
           </Swiper>
+          )}
         </div>
       </div>
 
-      {/* Vertical scroll area for subcategories and parts */}
+      {/* Vertical scroll area: Grid or Categories */}
       <div className="flex-1 overflow-y-auto">
         <div className="container-custom py-6">
-          {selectedCategory && (
+          {viewMode === 'grid' && effectiveCatalogId ? (
+            <CatalogGrid catalogId={effectiveCatalogId} />
+          ) : (
+          selectedCategory && (
             <>
               <div className="mb-6">
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">
@@ -216,7 +245,7 @@ const Catalog = () => {
                 </div>
               )}
             </>
-          )}
+          ) )}
         </div>
       </div>
     </div>

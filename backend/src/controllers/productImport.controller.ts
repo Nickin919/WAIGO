@@ -14,6 +14,11 @@ interface ImportProduct {
   distributorDiscount?: number | null;
   minQty?: number | null;
   active?: boolean;
+  gridLevelNumber?: number | null;
+  gridLevelName?: string | null;
+  gridSublevelNumber?: number | null;
+  gridSublevelName?: string | null;
+  priceDate?: string | null;
 }
 
 interface ImportResult {
@@ -23,6 +28,24 @@ interface ImportResult {
   notFound: string[];
   errors: string[];
   importBatch: string;
+}
+
+/** Parse grid level/sublevel: integer >= 1 is valid; 0 or invalid returns null (do not overwrite). */
+function parseGridInt(v: unknown): number | null {
+  if (v === undefined || v === null || v === '') return null;
+  const n = typeof v === 'number' ? v : parseInt(String(v).trim(), 10);
+  if (Number.isNaN(n) || n < 1) return null;
+  return n;
+}
+
+/** Parse date from CSV: M/D/YYYY, MM/DD/YYYY, YYYY-MM-DD. Returns date-only Date or null. */
+function parsePriceDate(v: unknown): Date | null {
+  if (v === undefined || v === null || v === '') return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
 }
 
 /**
@@ -215,6 +238,17 @@ async function processProductImport(
         }
         if (row.active !== undefined) updateData.active = Boolean(row.active);
 
+        // Grid fields: only set when mapped and valid (>= 1)
+        const gridLevel = parseGridInt(row.gridLevelNumber);
+        if (gridLevel !== null) updateData.gridLevelNumber = gridLevel;
+        if (row.gridLevelName !== undefined) updateData.gridLevelName = row.gridLevelName?.toString().trim() || null;
+        const gridSublevel = parseGridInt(row.gridSublevelNumber);
+        if (gridSublevel !== null) updateData.gridSublevelNumber = gridSublevel;
+        if (row.gridSublevelName !== undefined) updateData.gridSublevelName = row.gridSublevelName?.toString().trim() || null;
+        const priceDateParsed = parsePriceDate(row.priceDate);
+        if (priceDateParsed !== null) updateData.priceDate = priceDateParsed;
+        // If priceDate was mapped but blank/invalid, leave existing value unchanged (no key set)
+
         // Find category if provided
         if (row.category) {
           const categoryName = row.category.toString().trim();
@@ -303,6 +337,9 @@ async function processProductImport(
           });
         }
 
+        const gridLevelNum = parseGridInt(row.gridLevelNumber);
+        const gridSublevelNum = parseGridInt(row.gridSublevelNumber);
+        const priceDateVal = parsePriceDate(row.priceDate);
         await prisma.part.create({
           data: {
             catalogId,
@@ -317,7 +354,12 @@ async function processProductImport(
             distributorDiscount: row.distributorDiscount ? parseFloat(String(row.distributorDiscount)) : 0,
             minQty: row.minQty ? parseInt(String(row.minQty)) : 1,
             packageQty: row.minQty ? parseInt(String(row.minQty)) : 1,
-            active: row.active !== undefined ? Boolean(row.active) : true
+            active: row.active !== undefined ? Boolean(row.active) : true,
+            gridLevelNumber: gridLevelNum ?? undefined,
+            gridLevelName: row.gridLevelName?.toString().trim() || undefined,
+            gridSublevelNumber: gridSublevelNum ?? undefined,
+            gridSublevelName: row.gridSublevelName?.toString().trim() || undefined,
+            priceDate: priceDateVal ?? undefined
           }
         });
 

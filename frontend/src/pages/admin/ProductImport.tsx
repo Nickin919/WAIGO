@@ -21,6 +21,11 @@ type ProductField =
   | 'wagoIdent'
   | 'distributorDiscount'
   | 'minQty'
+  | 'gridLevelNumber'
+  | 'gridLevelName'
+  | 'gridSublevelNumber'
+  | 'gridSublevelName'
+  | 'priceDate'
   | 'skip';
 
 interface FieldDefinition {
@@ -49,6 +54,11 @@ const PRODUCT_FIELDS: FieldDefinition[] = [
   { value: 'wagoIdent', label: 'WAGO Ident #', required: false },
   { value: 'distributorDiscount', label: 'Discount (%)', required: false },
   { value: 'minQty', label: 'Min Qty (Order in Multiples of)', required: false },
+  { value: 'gridLevelNumber', label: 'Grid Level Number', required: false },
+  { value: 'gridLevelName', label: 'Grid Level Name', required: false },
+  { value: 'gridSublevelNumber', label: 'Grid Sublevel Number', required: false },
+  { value: 'gridSublevelName', label: 'Grid Sublevel Name', required: false },
+  { value: 'priceDate', label: 'Price Date', required: false },
   { value: 'skip', label: '-- Skip this column --', required: false },
 ];
 
@@ -119,6 +129,11 @@ function guessFieldMapping(header: string): ProductField {
   if (h.includes('desc') || h.includes('description')) return 'description';
   if ((h.includes('discount') || (h.includes('acp') && !h.includes('net') && !h.includes('price')))) return 'distributorDiscount';
   if (h.includes('orderinmultiples') || h.includes('multiples') || h.includes('minqty') || h.includes('box') || h.includes('pack')) return 'minQty';
+  if (h.includes('gridlevel') && h.includes('number')) return 'gridLevelNumber';
+  if (h.includes('gridlevel') && h.includes('name')) return 'gridLevelName';
+  if (h.includes('gridsublevel') && h.includes('number')) return 'gridSublevelNumber';
+  if (h.includes('gridsublevel') && h.includes('name')) return 'gridSublevelName';
+  if (h.includes('pricedate') || h.includes('price_date')) return 'priceDate';
   return 'skip';
 }
 
@@ -305,9 +320,11 @@ const ProductImport = () => {
         if (value === undefined) return;
         if (targetField === 'price' || targetField === 'distributorDiscount' || targetField === 'listPricePer100') {
           product[targetField] = parseFloat(String(value).replace(/[^0-9.-]/g, '')) || 0;
-        } else if (targetField === 'minQty') {
+        } else if (targetField === 'minQty' || targetField === 'gridLevelNumber' || targetField === 'gridSublevelNumber') {
           const parsed = parseInt(String(value).replace(/[^0-9]/g, ''), 10);
           product[targetField] = isNaN(parsed) ? null : parsed;
+        } else if (targetField === 'priceDate') {
+          product[targetField] = value?.trim() || null;
         } else {
           product[targetField] = value?.trim() || null;
         }

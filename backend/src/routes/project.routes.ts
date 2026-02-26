@@ -43,6 +43,9 @@ router.delete('/:id/items/:itemId', projectController.deleteProjectItem);
 router.post('/:id/submit', submitRateLimit, projectController.submitProject);
 router.post('/:id/finalize', projectController.finalizeProject);
 
+// BOM → Project Book conversion (ADMIN/RSM)
+router.post('/:id/convert-to-project-book', projectController.convertToProjectBook);
+
 // Cross-reference suggestions
 router.get('/:id/suggest-upgrades', projectController.suggestWagoUpgrades);
 router.post('/:id/apply-upgrade', projectController.applyWagoUpgrade);

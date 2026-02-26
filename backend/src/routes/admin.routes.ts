@@ -23,4 +23,8 @@ router.post('/cross-references/import-master', adminController.importCrossRefere
 router.get('/non-wago-products/sample', adminController.getNonWagoProductsSample);
 router.post('/non-wago-products/import', uploadCSV, adminController.importNonWagoProducts);
 
+// Failure Report
+router.get('/failure-reports', adminController.getFailureReports);
+router.patch('/failure-reports/:id/resolve', adminController.resolveFailureReport);
+
 export default router;

@@ -172,15 +172,28 @@ export const importCrossReferences = async (req: AuthRequest, res: Response): Pr
       await prisma.crossReference.deleteMany({});
     }
 
+    const importBatchId = `cross_ref_simple_${Date.now()}`;
+    const userId = req.user?.id ?? null;
     let created = 0;
     const errors: string[] = [];
     for (const row of rows) {
+      const wagoPartNumber = row.wagoPartNumber.trim();
       const wagoPart = await prisma.part.findFirst({
-        where: { partNumber: row.wagoPartNumber.trim() },
+        where: { partNumber: wagoPartNumber },
         select: { id: true }
       });
       if (!wagoPart) {
-        errors.push(`WAGO part not found: ${row.wagoPartNumber}`);
+        errors.push(`WAGO part not found: ${wagoPartNumber}`);
+        await prisma.failureReport.create({
+          data: {
+            source: 'CROSS_REF_IMPORT',
+            failureType: 'WAGO_PART_NOT_FOUND',
+            importBatchId,
+            context: { originalManufacturer: row.originalManufacturer.trim(), originalPartNumber: row.originalPartNumber.trim(), wagoPartNumber },
+            message: `Cross-ref import: WAGO part not found: ${wagoPartNumber}`,
+            userId
+          }
+        });
         continue;
       }
       const manu = row.originalManufacturer.trim();
@@ -214,7 +227,8 @@ export const importCrossReferences = async (req: AuthRequest, res: Response): Pr
     res.json({
       created,
       totalRows: rows.length,
-      errors: errors.length ? errors : undefined
+      errors: errors.length ? errors : undefined,
+      importBatchId
     });
   } catch (error) {
     console.error('Import cross-references error:', error);
@@ -369,6 +383,16 @@ export const importCrossReferencesMaster = async (req: AuthRequest, res: Respons
       }
       if (!wagoCrossA && !wagoCrossB) {
         errors.push(`Row ${i + 1}: At least one of WAGOCrossA or WAGOCrossB is required`);
+        await prisma.failureReport.create({
+          data: {
+            source: 'CROSS_REF_IMPORT',
+            failureType: 'NO_WAGO_CROSS',
+            importBatchId,
+            context: { rowIndex: i + 1, partNumberA, partNumberB, manufactureName },
+            message: `Row ${i + 1}: At least one of WAGOCrossA or WAGOCrossB is required`,
+            userId
+          }
+        });
         continue;
       }
 
@@ -380,6 +404,16 @@ export const importCrossReferencesMaster = async (req: AuthRequest, res: Respons
         });
         if (!wagoPart) {
           errors.push(`Row ${i + 1}: WAGO part not found: ${wagoPn}`);
+          await prisma.failureReport.create({
+            data: {
+              source: 'CROSS_REF_IMPORT',
+              failureType: 'WAGO_PART_NOT_FOUND',
+              importBatchId,
+              context: { rowIndex: i + 1, manufactureName, originalPartNumber, wagoPartNumber: wagoPn },
+              message: `Row ${i + 1}: WAGO part not found: ${wagoPn}`,
+              userId
+            }
+          });
           continue;
         }
 
@@ -469,5 +503,84 @@ export const importCrossReferencesMaster = async (req: AuthRequest, res: Respons
   } catch (error) {
     console.error('Import cross-references (master) error:', error);
     res.status(500).json({ error: 'Failed to import cross-references' });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Failure Report (ADMIN)
+// ---------------------------------------------------------------------------
+
+export const getFailureReports = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { source, resolved, fromDate, toDate, limit = '100', offset = '0' } = req.query;
+    const where: any = {};
+    if (source && typeof source === 'string') where.source = source;
+    if (resolved === 'true') where.resolvedAt = { not: null };
+    else if (resolved === 'false') where.resolvedAt = null;
+    if (fromDate && typeof fromDate === 'string') {
+      where.createdAt = { ...where.createdAt, gte: new Date(fromDate) };
+    }
+    if (toDate && typeof toDate === 'string') {
+      where.createdAt = { ...where.createdAt, lte: new Date(toDate) };
+    }
+    const take = Math.min(500, Math.max(1, parseInt(String(limit), 10) || 100));
+    const skip = Math.max(0, parseInt(String(offset), 10) || 0);
+
+    const [reports, total] = await Promise.all([
+      prisma.failureReport.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip,
+        include: {
+          user: { select: { id: true, email: true, firstName: true, lastName: true } },
+          resolvedBy: { select: { id: true, email: true, firstName: true, lastName: true } }
+        }
+      }),
+      prisma.failureReport.count({ where })
+    ]);
+
+    res.json({ reports, total, limit: take, offset: skip });
+  } catch (error) {
+    console.error('Get failure reports error:', error);
+    res.status(500).json({ error: 'Failed to fetch failure reports' });
+  }
+};
+
+export const resolveFailureReport = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { resolutionNote } = req.body;
+    if (!resolutionNote || typeof resolutionNote !== 'string' || !resolutionNote.trim()) {
+      res.status(400).json({ error: 'resolutionNote is required' });
+      return;
+    }
+
+    const report = await prisma.failureReport.findUnique({ where: { id } });
+    if (!report) {
+      res.status(404).json({ error: 'Failure report not found' });
+      return;
+    }
+    if (report.resolvedAt) {
+      res.status(400).json({ error: 'Already resolved' });
+      return;
+    }
+
+    const updated = await prisma.failureReport.update({
+      where: { id },
+      data: {
+        resolvedAt: new Date(),
+        resolvedById: req.user!.id,
+        resolutionNote: resolutionNote.trim()
+      },
+      include: {
+        resolvedBy: { select: { id: true, email: true, firstName: true, lastName: true } }
+      }
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Resolve failure report error:', error);
+    res.status(500).json({ error: 'Failed to resolve failure report' });
   }
 };

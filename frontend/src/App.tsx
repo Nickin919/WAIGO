@@ -26,6 +26,7 @@ import Profile from './pages/Profile';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ProductImport from './pages/admin/ProductImport';
 import CrossReferenceImport from './pages/admin/CrossReferenceImport';
+import FailureReport from './pages/admin/FailureReport';
 import DataManagement from './pages/admin/DataManagement';
 import LiteratureLibrary from './pages/admin/LiteratureLibrary';
 import CatalogList from './pages/catalog/CatalogList';
@@ -160,6 +161,7 @@ function App() {
         <Route path="/admin/import-products" element={<ProductImport />} />
         <Route path="/admin/import-cross-references" element={<CrossReferenceImport />} />
         <Route path="/admin/data-management" element={<DataManagement />} />
+        <Route path="/admin/failure-report" element={<FailureReport />} />
         <Route path="/admin/literature" element={<LiteratureLibrary />} />
         <Route path="/admin/video-library" element={<VideoLibrary />} />
         <Route path="/admin/quote-banners" element={<QuoteBanners />} />

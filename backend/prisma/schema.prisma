@@ -77,7 +77,7 @@ model User {
   lastName        String?   @map("last_name")
   companyName     String?   @map("company_name")
   role            UserRole  @default(FREE)
-  catalogId       String?   @map("catalog_id")
+  catalogId       String?   @map("project_book_id")
   isActive        Boolean   @default(true) @map("is_active")
   
   // Account (company) – required for DISTRIBUTOR_REP, DIRECT_USER, BASIC_USER
@@ -142,6 +142,8 @@ model User {
   literatureUploaded Literature[] @relation("LiteratureUploader")
   literatureKits     LiteratureKit[]
   crossReferencesCreated CrossReference[] @relation("CrossReferenceCreator")
+  failureReports         FailureReport[]  @relation("FailureReportUser")
+  failureReportsResolved FailureReport[]  @relation("FailureReportResolvedBy")
   videoFavorites     VideoFavorite[]
   videoPlaylists     VideoPlaylist[]
 
@@ -212,7 +214,7 @@ model CostTableItem {
 
 model CatalogAssignment {
   id           String    @id @default(uuid())
-  catalogId    String    @map("catalog_id")
+  catalogId    String    @map("project_book_id")
   userId       String    @map("user_id")
   isPrimary    Boolean   @default(false) @map("is_primary") // Exactly one primary per user
   assignedById String   @map("assigned_by_id")
@@ -224,22 +226,30 @@ model CatalogAssignment {
 
   @@unique([catalogId, userId])
   @@index([userId])
-  @@map("catalog_assignments")
+  @@map("project_book_assignments")
 }
 
 // ============================================================================
 // CATALOGS & CATEGORIES
 // ============================================================================
 
+enum CatalogSourceType {
+  MANUAL
+  CONVERTED_FROM_BOM
+}
+
 model Catalog {
-  id               String    @id @default(uuid())
+  id               String            @id @default(uuid())
   name             String
   description      String?
-  isActive         Boolean   @default(true) @map("is_active")
-  isPublic         Boolean   @default(false) @map("is_public")
-  isMaster         Boolean   @default(false) @map("is_master") // Label: single source of truth (ADMIN)
-  sourceCatalogId  String?   @map("source_catalog_id") // Catalog this was built from (MASTER or secondary)
-  createdById     String?   @map("created_by_id")
+  isActive         Boolean           @default(true) @map("is_active")
+  isPublic         Boolean           @default(false) @map("is_public")
+  isMaster         Boolean           @default(false) @map("is_master") // Label: single source of truth (ADMIN)
+  sourceCatalogId  String?           @map("source_project_book_id") // Catalog/Project Book this was built from (MASTER or secondary)
+  sourceType       CatalogSourceType @default(MANUAL) @map("source_type") // MANUAL | CONVERTED_FROM_BOM
+  sourceProjectId  String?           @map("source_project_id") // Set when converted from Project BOM
+  sourceRevision   String?           @map("source_revision") @db.VarChar(100) // BOM revision at conversion
+  createdById     String?           @map("created_by_id")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
@@ -248,13 +258,14 @@ model Catalog {
   createdBy        User?     @relation("CatalogCreator", fields: [createdById], references: [id])
   sourceCatalog   Catalog?  @relation("CatalogSource", fields: [sourceCatalogId], references: [id], onDelete: SetNull)
   derivedCatalogs Catalog[]  @relation("CatalogSource")
+  sourceProject   Project?  @relation("CatalogSourceProject", fields: [sourceProjectId], references: [id], onDelete: SetNull)
   categories      Category[]
   parts           Part[]
   assignments     CatalogAssignment[]
   catalogItems    CatalogItem[] // User-selected products for this catalog
   projects        Project[]
 
-  @@map("catalogs")
+  @@map("project_books")
 }
 
 // ============================================================================
@@ -263,7 +274,7 @@ model Catalog {
 
 model CatalogItem {
   id          String    @id @default(uuid())
-  catalogId   String    @map("catalog_id")
+  catalogId   String    @map("project_book_id")
   productId   String?   @map("product_id") // Selected product
   categoryId  String?   @map("category_id") // Or entire category selected
   addedAt     DateTime  @default(now()) @map("added_at")
@@ -276,12 +287,12 @@ model CatalogItem {
   @@index([catalogId])
   @@index([productId])
   @@index([categoryId])
-  @@map("catalog_items")
+  @@map("project_book_items")
 }
 
 model Category {
   id            String    @id @default(uuid())
-  catalogId     String    @map("catalog_id")
+  catalogId     String    @map("project_book_id")
   parentId      String?   @map("parent_id")
   name          String
   shortText     String?   @map("short_text") @db.VarChar(100)
@@ -311,7 +322,7 @@ model Category {
 
 model Part {
   id                  String    @id @default(uuid())
-  catalogId           String    @map("catalog_id")
+  catalogId           String    @map("project_book_id")
   categoryId          String    @map("category_id")
   partNumber          String    @map("part_number")
   series              String?   // Product series/family
@@ -326,6 +337,12 @@ model Part {
   wagoIdent           String?   @map("wago_ident") // WAGO internal identifier
   distributorDiscount Float     @default(0) @map("distributor_discount") // Discount percentage
   active              Boolean   @default(true) // Active/inactive flag
+  // MASTER grid metadata (level/sublevel for Quick Grid; null = not set; min value 1)
+  gridLevelNumber     Int?      @map("grid_level_number")
+  gridLevelName       String?   @map("grid_level_name")
+  gridSublevelNumber  Int?      @map("grid_sublevel_number")
+  gridSublevelName    String?   @map("grid_sublevel_name")
+  priceDate           DateTime? @map("price_date") @db.Date // Date-only price as-of
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
@@ -349,6 +366,7 @@ model Part {
   @@index([partNumber])
   @@index([series])
   @@index([active])
+  @@index([catalogId, gridLevelNumber, gridSublevelNumber, partNumber])
   @@map("parts")
 }
 
@@ -711,7 +729,7 @@ model Customer {
 model Quote {
   id              String    @id @default(uuid())
   quoteNumber     String    @unique @map("quote_number")
-  catalogId       String    @map("catalog_id")
+  catalogId       String    @map("project_book_id")
   priceContractId String?   @map("price_contract_id") // Optional: special pricing overlay used for this quote
   userId          String    @map("user_id")
   customerId      String?   @map("customer_id")
@@ -896,7 +914,7 @@ enum ProjectStatus {
 model Project {
   id              String    @id @default(uuid())
   userId          String    @map("user_id")
-  catalogId       String?   @map("catalog_id") // Catalog to search for parts in this project
+  catalogId       String?   @map("project_book_id") // Catalog to search for parts in this project
   name            String
   description     String?   @db.Text
   status          ProjectStatus @default(DRAFT)
@@ -907,6 +925,7 @@ model Project {
   // Relations
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   catalog         Catalog?  @relation(fields: [catalogId], references: [id], onDelete: SetNull)
+  catalogsConvertedFromThis Catalog[] @relation("CatalogSourceProject")
   items           ProjectItem[]
   revisions       ProjectRevision[]
 
@@ -1019,6 +1038,39 @@ model CrossReference {
   @@index([wagoPartId])
   @@index([importBatchId])
   @@map("cross_references")
+}
+
+// ============================================================================
+// FAILURE REPORT (BOM upload, Project Book conversion, Cross-Ref import)
+// ============================================================================
+
+enum FailureReportSource {
+  BOM_UPLOAD
+  PROJECT_BOOK_CONVERSION
+  CROSS_REF_IMPORT
+}
+
+model FailureReport {
+  id              String               @id @default(uuid())
+  source          FailureReportSource
+  failureType     String                @map("failure_type")
+  importBatchId   String?               @map("import_batch_id")
+  context         Json?                 // projectId, partNumber, manufacturer, rowIndex, etc.
+  message         String                @db.Text
+  createdAt       DateTime              @default(now()) @map("created_at")
+  userId          String?               @map("user_id")
+  resolvedAt      DateTime?             @map("resolved_at")
+  resolvedById    String?               @map("resolved_by_id")
+  resolutionNote  String?                @map("resolution_note") @db.Text
+
+  resolvedBy      User?                 @relation("FailureReportResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  user            User?                 @relation("FailureReportUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([source])
+  @@index([importBatchId])
+  @@index([createdAt])
+  @@index([resolvedAt])
+  @@map("failure_reports")
 }
 
 // ============================================================================
