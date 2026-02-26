@@ -477,8 +477,10 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
       .text('TERMS', MARGIN, y, { lineBreak: false });
     doc.font('Helvetica');
     advance(13);
-    doc.fontSize(10).fillColor('#1f2937').text(termsText, MARGIN, y, { width: CONTENT_WIDTH });
-    y = Math.max(y + termsLines * 13, doc.y);
+    // Use height to clip text and prevent PDFKit auto-pagination
+    const termsMaxH = Math.min(termsLines * 13 + 10, USABLE_BOTTOM - y);
+    doc.fontSize(10).fillColor('#1f2937').text(termsText, MARGIN, y, { width: CONTENT_WIDTH, height: termsMaxH });
+    y += termsLines * 13;
     doc.y = y;
     advance(16);
 
@@ -495,8 +497,10 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
         .text('NOTES', MARGIN, y, { lineBreak: false });
       doc.font('Helvetica');
       advance(13);
-      doc.fontSize(10).fillColor('#1f2937').text(quote.notes.slice(0, 200), MARGIN, y, { width: CONTENT_WIDTH });
-      y = Math.max(y + notesLines * 13, doc.y);
+      // Use height to clip text and prevent PDFKit auto-pagination
+      const notesMaxH = Math.min(notesLines * 13 + 10, USABLE_BOTTOM - y);
+      doc.fontSize(10).fillColor('#1f2937').text(quote.notes.slice(0, 200), MARGIN, y, { width: CONTENT_WIDTH, height: notesMaxH });
+      y += notesLines * 13;
       doc.y = y;
       advance(16);
     }
@@ -543,17 +547,19 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     };
 
     const rsmName = rsmContact ? [rsmContact.firstName, rsmContact.lastName].filter(Boolean).join(' ') || '—' : '—';
+    const distName = distContact ? [distContact.firstName, distContact.lastName].filter(Boolean).join(' ') || '—' : '—';
 
     if (rsmContact && distContact) {
       drawContactCard(MARGIN, rsmAvatarBuf, 'Your WAGO Contact', rsmName, rsmContact.email ?? '—', rsmContact.phone ?? '—', 232);
-      const distName = [distContact.firstName, distContact.lastName].filter(Boolean).join(' ') || '—';
       drawContactCard(MARGIN + 252, distAvatarBuf, 'Your Distributor', distName, distContact.email ?? '—', distContact.phone ?? '—', 232);
     } else if (rsmContact) {
       drawContactCard(MARGIN, rsmAvatarBuf, 'Your WAGO Contact', rsmName, rsmContact.email ?? '—', rsmContact.phone ?? '—', CONTENT_WIDTH);
     } else if (distContact) {
-      const distName = [distContact.firstName, distContact.lastName].filter(Boolean).join(' ') || '—';
       drawContactCard(MARGIN, distAvatarBuf, 'Your Distributor', distName, distContact.email ?? '—', distContact.phone ?? '—', CONTENT_WIDTH);
     }
+
+    // Reset doc.y to a safe position after contact cards (their text may have moved it)
+    doc.y = contactStartY + 66 + 10;
 
     // ── Inline banner (only if it fits on the current page without adding a page) ──
     // Banner sits between the bottom of contact cards and the footer.
@@ -577,9 +583,12 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     // If bannerAvailH < 60pt, we simply skip the banner — no extra page is ever added.
 
     // ── Footer (drawn at absolute position on last content page) ──────────────
+    // CRITICAL: Reset doc.y to a safe position BEFORE drawing footer to prevent
+    // PDFKit from auto-creating pages when footer text is rendered
+    doc.y = FOOTER_Y;
     drawFooter(doc, accentColor);
 
-    // Reset doc.y to prevent PDFKit from auto-creating extra pages on end()
+    // Reset doc.y again before end() to prevent any final auto-pagination
     doc.y = CONTENT_TOP;
 
     doc.end();
