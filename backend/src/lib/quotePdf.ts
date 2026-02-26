@@ -561,12 +561,14 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     const cardBottom = contactStartY + 66;
     const bannerGap = 14;                         // gap above banner
     const bannerAvailH = FOOTER_Y - cardBottom - bannerGap - 8; // space before footer, minus gap
+    const BANNER_MAX_HEIGHT = 100;                // cap banner height to prevent oversized images
 
     if (bannerBuf && bannerAvailH >= 60) {
-      // Enough vertical room — draw the banner inline, scaled to fit the available area.
+      // Enough vertical room — draw the banner inline, scaled to fit (capped at max height)
+      const bannerH = Math.min(bannerAvailH, BANNER_MAX_HEIGHT);
       try {
         doc.image(bannerBuf, MARGIN, cardBottom + bannerGap, {
-          fit: [CONTENT_WIDTH, bannerAvailH],
+          fit: [CONTENT_WIDTH, bannerH],
           align: 'center',
           valign: 'center',
         });
