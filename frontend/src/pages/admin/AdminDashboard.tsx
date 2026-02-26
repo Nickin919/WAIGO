@@ -99,7 +99,7 @@ const AdminDashboard = () => {
             className="btn btn-primary flex items-center justify-center space-x-2"
           >
             <FolderKanban className="w-5 h-5" />
-            <span>Manage Catalogs</span>
+            <span>Manage Project Books</span>
           </button>
           <button
             onClick={() => navigate('/admin/import-products')}

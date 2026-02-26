@@ -87,7 +87,7 @@ const AccountsPage = () => {
     assignmentsApi
       .assignCatalogs({ userIds, catalogIds, primaryCatalogId: primaryCatalogId || catalogIds[0] })
       .then(() => {
-        toast.success('Catalogs assigned');
+        toast.success('Project books assigned');
         setModal(null);
         setSelectedIds(new Set());
         assignmentsApi.getUsers({ page, limit: 20, search: search || undefined }).then((r) => {
@@ -155,7 +155,7 @@ const AccountsPage = () => {
           Accounts
         </h1>
         <p className="text-sm text-gray-600 mt-1">
-          Users in your hierarchy. Open a user to set role, hierarchy, company, catalogs, and price contracts in one place.
+          Users in your hierarchy. Open a user to set role, hierarchy, company, project books, and price contracts in one place.
         </p>
       </div>
 
@@ -170,7 +170,7 @@ const AccountsPage = () => {
         {selectedIds.size > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-gray-600">{selectedIds.size} selected</span>
-            <button type="button" onClick={() => setModal('catalogs')} className="btn bg-gray-200">Assign Catalogs</button>
+            <button type="button" onClick={() => setModal('catalogs')} className="btn bg-gray-200">Assign Project Books</button>
             <button type="button" onClick={() => setModal('contracts')} className="btn bg-gray-200">Assign Price Contracts</button>
             <button type="button" onClick={() => setSelectedIds(new Set())} className="btn bg-gray-100 text-gray-600">Clear</button>
           </div>
@@ -189,8 +189,8 @@ const AccountsPage = () => {
               <th className="px-4 py-2 text-left">Company</th>
               <th className="px-4 py-2 text-left">Distributor</th>
               <th className="px-4 py-2 text-left">RSM</th>
-              <th className="px-4 py-2 text-left">Primary catalog</th>
-              <th className="px-4 py-2 text-left">Catalogs / Contracts</th>
+              <th className="px-4 py-2 text-left">Primary Project Book</th>
+              <th className="px-4 py-2 text-left">Project Books / Contracts</th>
               <th className="px-4 py-2 text-left w-24" />
             </tr>
           </thead>
@@ -214,7 +214,7 @@ const AccountsPage = () => {
                   <td className="px-4 py-2 text-gray-600">{u.assignedToRsm ? displayName(u.assignedToRsm) : '—'}</td>
                   <td className="px-4 py-2 text-gray-600">{u.primaryCatalog?.name ?? '—'}</td>
                   <td className="px-4 py-2 text-gray-600">
-                    {(u.assignedCatalogs?.length ?? 0)} catalogs, {(u.assignedContracts?.length ?? 0)} contracts
+                    {(u.assignedCatalogs?.length ?? 0)} project books, {(u.assignedContracts?.length ?? 0)} contracts
                   </td>
                   <td className="px-4 py-2">
                     <Link
@@ -287,8 +287,8 @@ function CatalogModal({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-        <h3 className="text-lg font-bold mb-4">Assign Catalogs</h3>
-        <p className="text-sm text-gray-600 mb-4">Select catalogs. One will be set as primary.</p>
+        <h3 className="text-lg font-bold mb-4">Assign Project Books</h3>
+        <p className="text-sm text-gray-600 mb-4">Select project books to assign. One will be set as primary. The Master Catalog is assigned to all users by default.</p>
         <div className="max-h-64 overflow-y-auto space-y-2 mb-4">
           {catalogs.map((c) => (
             <label key={c.id} className="flex items-center gap-2 cursor-pointer">

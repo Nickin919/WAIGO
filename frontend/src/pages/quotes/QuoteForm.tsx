@@ -537,7 +537,7 @@ const QuoteForm = () => {
     }
     const pn = quickAddPartNumber.trim();
     if (!pn || !catalogId) {
-      if (!catalogId) toast.error('Select a catalog first');
+      if (!catalogId) toast.error('Select a product source first');
       else toast.error('Enter a part number');
       return;
     }
@@ -564,7 +564,7 @@ const QuoteForm = () => {
   const handleBulkImport = async () => {
     const parts = parseBulkInput(bulkInput);
     if (parts.length === 0 || !catalogId) {
-      toast.error('Enter part numbers and select a catalog');
+      toast.error('Enter part numbers and select a product source');
       return;
     }
     if (bulkImporting) return;
@@ -635,7 +635,7 @@ const QuoteForm = () => {
         rows.push({ partNumber, quantity: qty && !isNaN(qty) && qty >= 1 ? qty : undefined });
       }
       if (rows.length === 0 || !catalogId) {
-        if (!catalogId) toast.error('Select a catalog first');
+        if (!catalogId) toast.error('Select a product source first');
         return;
       }
       setBulkImporting(true);
@@ -739,7 +739,7 @@ const QuoteForm = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!catalogId) {
-      toast.error('Select a catalog');
+      toast.error('Select a product source');
       return;
     }
     if (items.length === 0) {
@@ -808,10 +808,10 @@ const QuoteForm = () => {
         {/* Quote setup bar — all fields on one horizontal plane */}
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
           <div className="flex flex-wrap gap-4 items-end">
-            {/* Catalog */}
+            {/* Product source: Master Catalog or Project Book */}
             {catalogs.length > 0 && (
               <div className="flex flex-col min-w-[160px] max-w-[220px] flex-1">
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Catalog</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Product source</label>
                 <select value={catalogId} onChange={(e) => setCatalogId(e.target.value)} className="input w-full">
                   {catalogs.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>

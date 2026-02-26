@@ -308,7 +308,7 @@ const CatalogCreator = () => {
   // Save catalog
   const handleSave = async () => {
     if (!name.trim()) {
-      toast.error('Please enter a catalog name');
+      toast.error('Please enter a project book name');
       return;
     }
 
@@ -329,16 +329,16 @@ const CatalogCreator = () => {
 
       if (isEditing) {
         await axios.patch(`/api/catalog-creator/update/${id}`, data);
-        toast.success('Catalog updated successfully!');
+        toast.success('Project book updated successfully!');
       } else {
         await axios.post('/api/catalog-creator/create', data);
-        toast.success('Catalog created successfully!');
+        toast.success('Project book created successfully!');
       }
 
       navigate('/catalog-list');
     } catch (error: any) {
       console.error('Save error:', error);
-      toast.error(error.response?.data?.error || 'Failed to save catalog');
+      toast.error(error.response?.data?.error || 'Failed to save project book');
     } finally {
       setSaving(false);
     }
@@ -454,10 +454,10 @@ const CatalogCreator = () => {
           </button>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              {isEditing ? 'Edit Catalog' : 'Create Catalog'}
+              {isEditing ? 'Edit Project Book' : 'Create Project Book'}
             </h1>
             <p className="text-gray-600">
-              Select products to include in your custom catalog
+              Select products to include in your custom project book
             </p>
           </div>
         </div>
@@ -475,28 +475,28 @@ const CatalogCreator = () => {
           ) : (
             <>
               <Save className="w-5 h-5" />
-              <span>Save Catalog</span>
+              <span>Save Project Book</span>
             </>
           )}
         </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Left: Catalog Details + Bulk Import */}
+        {/* Left: Project Book Details + Bulk Import */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Catalog Details */}
+          {/* Project Book Details */}
           <div className="card p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Catalog Details</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Project Book Details</h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Catalog Name <span className="text-red-500">*</span>
+                  Project Book Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g., Industrial Controls Catalog"
+                  placeholder="e.g., Industrial Controls Project Book"
                   className="input"
                   data-testid="input-catalog-name"
                 />
@@ -517,7 +517,7 @@ const CatalogCreator = () => {
               {sourceCatalogs.length > 0 && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Build from (source catalog)
+                    Build from (Master Catalog)
                   </label>
                   <select
                     value={sourceCatalogId}
@@ -532,7 +532,7 @@ const CatalogCreator = () => {
                     ))}
                   </select>
                   <p className="text-xs text-gray-500 mt-1">
-                    Products and descriptions come from the source. Use MASTER for the full catalog.
+                    Products and descriptions come from the Master Catalog.
                   </p>
                 </div>
               )}

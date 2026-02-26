@@ -206,7 +206,7 @@ const AccountDetailPage = () => {
     assignmentsApi
       .assignCatalogs({ userId, catalogIds, primaryCatalogId: primaryCatalogId || catalogIds[0] })
       .then(() => {
-        toast.success('Catalogs assigned');
+        toast.success('Project books assigned');
         setModal(null);
         loadUser();
       })
@@ -326,14 +326,14 @@ const AccountDetailPage = () => {
           </div>
         </section>
 
-        {/* Catalogs */}
+        {/* Project Books */}
         <section className="card p-4">
           <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-3">
-            <FolderKanban className="w-5 h-5" /> Catalogs
+            <FolderKanban className="w-5 h-5" /> Project Books
           </h2>
           <p className="text-sm text-gray-600 mb-2">Primary: {account.primaryCatalog?.name ?? '—'}</p>
           <p className="text-sm text-gray-600 mb-2">Assigned: {(account.assignedCatalogs || []).map((c) => c.name).join(', ') || '—'}</p>
-          <button type="button" onClick={() => setModal('catalogs')} className="btn btn-outline text-sm">Edit catalogs</button>
+          <button type="button" onClick={() => setModal('catalogs')} className="btn btn-outline text-sm">Edit project books</button>
         </section>
 
         {/* Price contracts */}
@@ -463,8 +463,8 @@ function CatalogModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-        <h3 className="text-lg font-bold mb-4">Assign Catalogs</h3>
-        <p className="text-sm text-gray-600 mb-4">Select catalogs. One will be set as primary.</p>
+        <h3 className="text-lg font-bold mb-4">Assign Project Books</h3>
+        <p className="text-sm text-gray-600 mb-4">Select project books to assign. One will be set as primary. The Master Catalog is assigned to all users by default.</p>
         <div className="max-h-64 overflow-y-auto space-y-2 mb-4">
           {catalogs.map((c) => (
             <label key={c.id} className="flex items-center gap-2 cursor-pointer">

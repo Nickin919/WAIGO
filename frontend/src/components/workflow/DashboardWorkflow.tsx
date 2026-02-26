@@ -24,7 +24,7 @@ const WORKFLOW_GREEN = '#4CAF50';
 
 type ReviewItem = {
   id: string;
-  itemType: 'Project' | 'Quote' | 'Catalog';
+  itemType: 'Project' | 'Quote' | 'ProjectBook';
   name: string;
   linkedFrom?: string;
   lastModified: string;
@@ -146,9 +146,9 @@ export function DashboardWorkflow() {
     setStep2Loading('catalog');
     try {
       navigate('/catalog-creator/new');
-      toast.success('Build your catalog');
+      toast.success('Build your project book');
     } catch {
-      toast.error('Failed to open catalog creator');
+      toast.error('Failed to open project book creator');
     } finally {
       setStep2Loading(null);
     }
@@ -189,9 +189,9 @@ export function DashboardWorkflow() {
       });
       if (catalogsSummary?.catalogCount) {
         items.push({
-          id: 'catalogs',
-          itemType: 'Catalog',
-          name: `${catalogsSummary.catalogCount} catalog(s)`,
+          id: 'project-books',
+          itemType: 'ProjectBook',
+          name: `${catalogsSummary.catalogCount} project book(s)`,
           lastModified: new Date().toISOString(),
         });
       }
@@ -334,7 +334,7 @@ export function DashboardWorkflow() {
             </motion.button>
           </div>
           <div className="hidden md:flex items-center justify-center py-4">
-            <FlowConnectorRight active={!!activeProjectId} label="Or build catalog" />
+            <FlowConnectorRight active={!!activeProjectId} label="Or build project book" />
           </div>
           <div className="flex flex-col">
             <motion.button
@@ -342,7 +342,7 @@ export function DashboardWorkflow() {
               disabled={step2Disabled}
               className="w-full flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-gray-200 bg-white p-6 font-medium text-gray-900 transition-all hover:border-green-500 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 min-h-[120px]"
               onClick={handleUseBomForCatalog}
-              aria-label={`Build catalog${fromProject}`}
+              aria-label={`Build project book${fromProject}`}
               title={step2Disabled ? 'Create a BOM first' : undefined}
               whileHover={!step2Disabled ? { y: -2 } : {}}
               whileTap={!step2Disabled ? { scale: 0.99 } : {}}
@@ -352,7 +352,7 @@ export function DashboardWorkflow() {
               ) : (
                 <BookOpen className="w-8 h-8" style={{ color: WORKFLOW_GREEN }} aria-hidden />
               )}
-              <span className="text-center text-sm">Build catalog{fromProject}</span>
+              <span className="text-center text-sm">Build project book{fromProject}</span>
             </motion.button>
           </div>
         </div>
@@ -395,13 +395,13 @@ export function DashboardWorkflow() {
             <div className="card p-4">
               <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
                 <BookOpen className="w-5 h-5" style={{ color: WORKFLOW_GREEN }} />
-                View your catalogs
+                View your project books
               </h4>
               <button
                 type="button"
                 onClick={() => navigate('/catalog-list')}
                 className="text-sm text-green-600 font-medium hover:underline flex items-center gap-1"
-                aria-label="View all catalogs"
+                aria-label="View all project books"
               >
                 View all <ChevronRight className="w-4 h-4" />
               </button>
@@ -451,12 +451,12 @@ export function DashboardWorkflow() {
                             View
                           </button>
                         )}
-                        {item.itemType === 'Catalog' && (
+                        {item.itemType === 'ProjectBook' && (
                           <button
                             type="button"
                             onClick={() => navigate('/catalog-list')}
                             className="text-green-600 font-medium hover:underline"
-                            aria-label="View catalogs"
+                            aria-label="View project books"
                           >
                             View
                           </button>

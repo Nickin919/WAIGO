@@ -42,23 +42,23 @@ const CatalogList = () => {
       const assigned = (assignedRes.data as { catalogs?: AssignedCatalog[] })?.catalogs ?? [];
       setAssignedCatalogs(Array.isArray(assigned) ? assigned : []);
     } catch (error) {
-      console.error('Failed to load catalogs:', error);
-      toast.error('Failed to load catalogs');
+      console.error('Failed to load project books:', error);
+      toast.error('Failed to load project books');
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async (catalogId: string) => {
-    if (!confirm('Are you sure you want to delete this catalog?')) return;
+    if (!confirm('Are you sure you want to delete this project book?')) return;
     setDeletingCatalogId(catalogId);
     try {
       await api.delete(`/catalog-creator/delete/${catalogId}`);
-      toast.success('Catalog deleted successfully');
+      toast.success('Project book deleted successfully');
       loadCatalogs();
     } catch (error: any) {
       console.error('Delete error:', error);
-      toast.error(error.response?.data?.error || 'Failed to delete catalog');
+      toast.error(error.response?.data?.error || 'Failed to delete project book');
     } finally {
       setDeletingCatalogId(null);
     }
@@ -76,9 +76,9 @@ const CatalogList = () => {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">My Catalogs</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">My Project Books</h1>
           <p className="text-gray-600">
-            Browse catalogs assigned to you or create and manage custom catalogs
+            Browse project books assigned to you or create and manage custom project books
           </p>
         </div>
         <Link
@@ -86,7 +86,7 @@ const CatalogList = () => {
           className="btn btn-primary flex items-center space-x-2"
         >
           <Plus className="w-5 h-5" />
-          <span>New Catalog</span>
+          <span>New Project Book</span>
         </Link>
       </div>
 
@@ -117,22 +117,22 @@ const CatalogList = () => {
         </section>
       )}
 
-      {/* Catalogs you created */}
+      {/* Project Books you created */}
       <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Catalogs you created</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">Project Books you created</h2>
         {createdCatalogs.length === 0 ? (
           <div className="card p-12 text-center">
             <FolderOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No custom catalogs yet</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No custom project books yet</h3>
             <p className="text-gray-600 mb-6">
-              Create a custom catalog to organize products from a source catalog
+              Create a custom project book to organize products from the Master Catalog
             </p>
             <Link
               to="/catalog-creator/new"
               className="btn btn-primary inline-flex items-center space-x-2"
             >
               <Plus className="w-5 h-5" />
-              <span>Create Catalog</span>
+              <span>Create Project Book</span>
             </Link>
           </div>
         ) : (

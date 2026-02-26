@@ -213,7 +213,7 @@ const AssignmentsPage = () => {
 
   const handleAssignCatalogs = (catalogIds: string[], primaryCatalogId?: string) => {
     if (catalogIds.length === 0) {
-      toast.error('Select at least one catalog');
+      toast.error('Select at least one project book');
       return;
     }
     setSubmitting(true);
@@ -222,7 +222,7 @@ const AssignmentsPage = () => {
       catalogIds,
       primaryCatalogId: primaryCatalogId || catalogIds[0],
     }).then(() => {
-      toast.success('Catalogs assigned');
+      toast.success('Project books assigned');
       setModal(null);
       setSelectedIds(new Set());
       assignmentsApi.getUsers({ page, limit: 20 }).then((r) => {
@@ -265,10 +265,10 @@ const AssignmentsPage = () => {
           <button onClick={() => navigate(-1)} className="text-green-600 hover:underline flex items-center gap-1">
             <ArrowLeft className="w-5 h-5" /> Back
           </button>
-          <h1 className="text-2xl font-bold">User & Catalog Assignments</h1>
+          <h1 className="text-2xl font-bold">User & Project Book Assignments</h1>
         </div>
         <p className="text-sm text-gray-600">
-          Select users with the checkboxes, then use Assign Catalogs, Assign Price Contracts, Assign to company, Assign to distributor, or Assign to RSM (Admin only).
+          Select users with the checkboxes, then use Assign Project Books, Assign Price Contracts, Assign to company, Assign to distributor, or Assign to RSM (Admin only).
         </p>
       </div>
 
@@ -283,7 +283,7 @@ const AssignmentsPage = () => {
         {selectedIds.size > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-gray-600">{selectedIds.size} selected</span>
-            <button onClick={() => setModal('catalogs')} className="btn bg-gray-200">Assign Catalogs</button>
+            <button onClick={() => setModal('catalogs')} className="btn bg-gray-200">Assign Project Books</button>
             <button onClick={() => setModal('contracts')} className="btn bg-gray-200">Assign Price Contracts</button>
             <button
               onClick={() => { setModal('company'); setSelectedAccountId(''); }}
@@ -351,8 +351,8 @@ const AssignmentsPage = () => {
               <th className="px-4 py-2 text-left" title={isAdmin ? 'Admins can change role via dropdown' : ''}>
                 Role{isAdmin ? ' (editable)' : ''}
               </th>
-              <th className="px-4 py-2 text-left">Primary Catalog</th>
-              <th className="px-4 py-2 text-left">Assigned Catalogs</th>
+              <th className="px-4 py-2 text-left">Primary Project Book</th>
+              <th className="px-4 py-2 text-left">Assigned Project Books</th>
               <th className="px-4 py-2 text-left">Price Contracts</th>
             </tr>
           </thead>
@@ -564,8 +564,8 @@ function AssignmentCatalogModal({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-        <h3 className="text-lg font-bold mb-4">Assign Catalogs</h3>
-        <p className="text-sm text-gray-600 mb-4">Select catalogs to assign. One will be set as primary.</p>
+        <h3 className="text-lg font-bold mb-4">Assign Project Books</h3>
+        <p className="text-sm text-gray-600 mb-4">Select project books to assign. One will be set as primary. The Master Catalog is assigned to all users by default.</p>
         <div className="max-h-64 overflow-y-auto space-y-2 mb-4">
           {catalogs.map((c) => (
             <label key={c.id} className="flex items-center gap-2 cursor-pointer">

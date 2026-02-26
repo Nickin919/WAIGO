@@ -25,7 +25,7 @@ export function FlowConnectorDown({ animate = true }: { animate?: boolean }) {
   );
 }
 
-/** Horizontal arrow from Project to Quote or Catalog (rightward) */
+/** Horizontal arrow from Project to Quote or Project Book (rightward) */
 export function FlowConnectorRight({
   active = false,
   label,

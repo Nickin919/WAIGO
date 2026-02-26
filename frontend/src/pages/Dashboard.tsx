@@ -149,7 +149,7 @@ const Dashboard = () => {
           Welcome back, {user?.firstName || 'User'}!
         </h1>
         <p className="text-gray-600">
-          {catalog?.name || 'Your catalog'}
+          {catalog?.name || 'Your primary project book'}
           {stats?.partsCount != null && ` • ${stats.partsCount} parts available`}
         </p>
       </div>
@@ -164,7 +164,7 @@ const Dashboard = () => {
             <Library className="w-5 h-5 text-wago-blue" />
           </div>
           <div className="text-2xl font-bold text-gray-900">{catalogCountLabel}</div>
-          <div className="text-sm text-gray-500 mt-0.5">Catalogs</div>
+          <div className="text-sm text-gray-500 mt-0.5">Project Books</div>
           {averagePartsPerCatalog != null && (
             <div className="text-xs text-gray-400 mt-1">Avg {averagePartsPerCatalog.toLocaleString()} parts</div>
           )}
@@ -221,7 +221,7 @@ const Dashboard = () => {
         </Link>
       </div>
 
-      {/* Row-based workflow: BOM → Project/Quote/Catalog → Review */}
+      {/* Row-based workflow: BOM → Project/Quote/Project Book → Review */}
       <div className="mb-8">
         <DashboardWorkflow />
       </div>

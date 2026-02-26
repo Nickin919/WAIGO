@@ -9,7 +9,7 @@ const BottomNav = () => {
 
   const navItems = [
     { path: '/dashboard', icon: Home, label: 'Home' },
-    { path: '/catalog', icon: Grid3x3, label: 'Catalog' },
+    { path: '/catalog', icon: Grid3x3, label: 'Quick Grid' },
     { path: '/videos', icon: PlayCircle, label: 'Videos' },
     { path: '/projects', icon: FolderKanban, label: 'Projects' },
   ];

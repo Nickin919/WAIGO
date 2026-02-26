@@ -62,7 +62,7 @@ export default function NewProject() {
         <ArrowLeft className="w-5 h-5" /> Back to Projects
       </Link>
       <h1 className="text-3xl font-bold text-gray-900 mb-2">New Project</h1>
-      <p className="text-gray-600 mb-6">Give your project a name and choose a catalog for finding parts. You can upload a BOM or add parts next.</p>
+      <p className="text-gray-600 mb-6">Give your project a name and choose a project book for finding parts. You can upload a BOM or add parts next.</p>
 
       <form onSubmit={handleSubmit} className="card p-6 max-w-md">
         <div className="mb-4">
@@ -77,18 +77,18 @@ export default function NewProject() {
           />
         </div>
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Catalog</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Project Book</label>
           <select
             value={catalogId}
             onChange={(e) => setCatalogId(e.target.value)}
             className="input w-full"
           >
-            <option value="">Select a catalog (recommended)</option>
+            <option value="">Select a project book (recommended)</option>
             {catalogs.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-          <p className="text-xs text-gray-500 mt-1">Parts you add will be searched in this catalog. If none is selected, your assigned or default catalog is used.</p>
+          <p className="text-xs text-gray-500 mt-1">Parts you add will be searched in this project book. If none is selected, your assigned or default project book is used.</p>
         </div>
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Description (optional)</label>
