@@ -221,11 +221,11 @@ function drawFooter(doc: PDFDoc, accentColor: string) {
   doc.fontSize(9).fillColor('#9ca3af');
   doc.text(
     'This is a pricing proposal only, not a binding purchase order or official quote.',
-    MARGIN, FOOTER_Y + 8, { align: 'center', width: CONTENT_WIDTH }
+    MARGIN, FOOTER_Y + 8, { align: 'center', width: CONTENT_WIDTH, lineBreak: false }
   );
   doc.text(
     'Prices are subject to change without notice. Thank you for your business.',
-    MARGIN, FOOTER_Y + 21, { align: 'center', width: CONTENT_WIDTH }
+    MARGIN, FOOTER_Y + 21, { align: 'center', width: CONTENT_WIDTH, lineBreak: false }
   );
 }
 
@@ -235,7 +235,7 @@ function drawContinuationFooter(doc: PDFDoc) {
   doc.rect(MARGIN, y, CONTENT_WIDTH, CONTINUED_FOOTER_HEIGHT).fill('#fafafa');
   doc.moveTo(MARGIN, y + CONTINUED_FOOTER_HEIGHT).lineTo(COL.end, y + CONTINUED_FOOTER_HEIGHT).strokeColor('#e5e7eb').stroke();
   doc.fontSize(9).fillColor('#9ca3af');
-  doc.text('Continued on the next page  →', MARGIN, y + 10, { align: 'center', width: CONTENT_WIDTH });
+  doc.text('Continued on the next page  →', MARGIN, y + 10, { align: 'center', width: CONTENT_WIDTH, lineBreak: false });
 }
 
 /**
@@ -359,16 +359,16 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
     advance(13);
     const billToY = y;
     const customerName = quote.customerName || quote.customer?.name || '—';
-    doc.fillColor('#111827').fontSize(11).font('Helvetica-Bold').text(customerName, MARGIN, billToY);
+    doc.fillColor('#111827').fontSize(11).font('Helvetica-Bold').text(customerName, MARGIN, billToY, { lineBreak: false });
     doc.font('Helvetica').fontSize(10).fillColor('#4b5563');
     let billOffset = 15;
-    if (quote.customer?.address) { doc.text(quote.customer.address, MARGIN, billToY + billOffset); billOffset += 13; }
+    if (quote.customer?.address) { doc.text(quote.customer.address, MARGIN, billToY + billOffset, { lineBreak: false }); billOffset += 13; }
     if (quote.customer?.city || quote.customer?.state || quote.customer?.zipCode) {
-      doc.text([quote.customer?.city, quote.customer?.state, quote.customer?.zipCode].filter(Boolean).join(', '), MARGIN, billToY + billOffset);
+      doc.text([quote.customer?.city, quote.customer?.state, quote.customer?.zipCode].filter(Boolean).join(', '), MARGIN, billToY + billOffset, { lineBreak: false });
       billOffset += 13;
     }
     const emailLine = quote.customerEmail || quote.customer?.email;
-    if (emailLine) { doc.text(emailLine, MARGIN, billToY + billOffset); billOffset += 13; }
+    if (emailLine) { doc.text(emailLine, MARGIN, billToY + billOffset, { lineBreak: false }); billOffset += 13; }
     advance(Math.max(48, billOffset + 8));
 
     // ── Line items table ───────────────────────────────────────────────────────
@@ -536,10 +536,10 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
         doc.circle(cx, cy, r).fill('#d1d5db');
       }
       const textX = cardX + 14 + AVATAR_SIZE + 10;
-      doc.fontSize(8).fillColor('#6b7280').text(label, textX, contactStartY + 6);
-      doc.fontSize(11).fillColor('#111827').font('Helvetica-Bold').text(name, textX, contactStartY + 18);
-      doc.font('Helvetica').fontSize(9).fillColor('#4b5563').text(email, textX, contactStartY + 33);
-      doc.text(phone, textX, contactStartY + 46);
+      doc.fontSize(8).fillColor('#6b7280').text(label, textX, contactStartY + 6, { lineBreak: false });
+      doc.fontSize(11).fillColor('#111827').font('Helvetica-Bold').text(name, textX, contactStartY + 18, { lineBreak: false });
+      doc.font('Helvetica').fontSize(9).fillColor('#4b5563').text(email, textX, contactStartY + 33, { lineBreak: false });
+      doc.text(phone, textX, contactStartY + 46, { lineBreak: false });
     };
 
     const rsmName = rsmContact ? [rsmContact.firstName, rsmContact.lastName].filter(Boolean).join(' ') || '—' : '—';
@@ -578,6 +578,9 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
 
     // ── Footer (drawn at absolute position on last content page) ──────────────
     drawFooter(doc, accentColor);
+
+    // Reset doc.y to prevent PDFKit from auto-creating extra pages on end()
+    doc.y = CONTENT_TOP;
 
     doc.end();
   });
