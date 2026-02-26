@@ -82,11 +82,6 @@ const QuoteForm = () => {
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState('');
   const [notes, setNotes] = useState('');
-  const [validUntil, setValidUntil] = useState<string>(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 30);
-    return d.toISOString().slice(0, 10); // default 30 days
-  });
   const [items, setItems] = useState<LineItem[]>([]);
 
   const [selectedCompanyName, setSelectedCompanyName] = useState('');
@@ -209,7 +204,6 @@ const QuoteForm = () => {
         setCustomerId(q.customerId || null);
         setCustomerName(q.customerName || '');
         setNotes(q.notes || q.note || '');
-        if (q.validUntil) setValidUntil(new Date(q.validUntil).toISOString().slice(0, 10));
         setItems((q.items || []).map((i: any) => ({
           partId: i.partId,
           productSeries: i.snapshotSeries || i.part?.series || '',
@@ -760,7 +754,6 @@ const QuoteForm = () => {
       customerId: customerId || undefined,
       customerName: customerName || '',
       notes,
-      validUntil: validUntil || undefined,
       items: items.map((i) => ({
         partId: i.partId,
         quantity: i.quantity,
@@ -909,12 +902,6 @@ const QuoteForm = () => {
               {isRsm && selectedCompanyName && (
                 <p className="text-xs text-green-700 mt-1">Showing: {selectedCompanyName}</p>
               )}
-            </div>
-
-            {/* Valid Until */}
-            <div className="flex flex-col min-w-[140px] max-w-[180px]">
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Valid Until</label>
-              <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} className="input w-full" />
             </div>
 
             {/* Notes */}

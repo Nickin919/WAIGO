@@ -233,8 +233,13 @@ function drawContinuationFooter(doc: PDFDoc) {
  */
 export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
   const proposalNumber = quote.quoteNumber;
-  const dateStr = formatDate(quote.createdAt);
-  const validUntilStr = quote.validUntil ? formatDate(quote.validUntil) : undefined;
+
+  // Date and expiry always reflect PDF generation time, not stored quote date.
+  // This way every download/email shows the current date and a fresh 30-day window.
+  const now = new Date();
+  const validUntilDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const dateStr = formatDate(now);
+  const validUntilStr = formatDate(validUntilDate);
 
   // Resolve accent color: caller-provided > default WAGO green
   const accentColor = quote.accentColor || '#059669';
@@ -408,45 +413,63 @@ export async function buildQuotePdfBuffer(quote: QuoteForPdf): Promise<Buffer> {
       itemRow(ROW_HEIGHT, true);
     }
 
-    // ── Totals ────────────────────────────────────────────────────────────────
-    ensureSpace(70);
+    // ── Summary section (Totals + Terms + Notes + Contact) ───────────────────
+    // Compute total height needed so we do ONE page-break check. This prevents
+    // multiple ensureSpace calls from creating spurious blank pages.
+    const termsText = quote.terms || 'Net 30. Valid for 30 days from proposal date.';
+    const termsLines = Math.ceil(termsText.length / 90) + 1;     // rough line estimate at CONTENT_WIDTH
+    const notesLines = quote.notes ? Math.ceil(quote.notes.slice(0, 200).length / 90) + 1 : 0;
+    const summaryH =
+      8 + 2 + 10 + 48 + 8 +          // gap + divider + gap + totals block + gap
+      1 + 10 + 13 + termsLines * 13 + 24 +  // divider + gap + TERMS + text + gap
+      (quote.notes ? 13 + notesLines * 13 + 24 : 0) + // NOTES section if present
+      1 + 12 + 14 + 66 + 10;          // contact divider + gap + label + cards + bottom pad
+
+    ensureSpace(summaryH);
+
+    // Totals
     advance(8);
     doc.moveTo(MARGIN, y).lineTo(COL.end, y).strokeColor(accentColor).lineWidth(2).stroke();
     advance(10);
     const totalsY = y;
     doc.rect(MARGIN, totalsY, CONTENT_WIDTH, 48).fill('#f9fafb');
-    doc.fontSize(10).fillColor('#6b7280').text(`Subtotal: $${quote.total.toFixed(2)}`, MARGIN, totalsY + 6, { width: CONTENT_WIDTH - 8, align: 'right' });
-    doc.fontSize(16).fillColor('#111827').font('Helvetica-Bold').text(`TOTAL:  $${quote.total.toFixed(2)}`, MARGIN, totalsY + 22, { width: CONTENT_WIDTH - 8, align: 'right' });
+    doc.fontSize(10).fillColor('#6b7280')
+      .text(`Subtotal: $${quote.total.toFixed(2)}`, MARGIN, totalsY + 6, { width: CONTENT_WIDTH - 8, align: 'right', lineBreak: false });
+    doc.fontSize(16).fillColor('#111827').font('Helvetica-Bold')
+      .text(`TOTAL:  $${quote.total.toFixed(2)}`, MARGIN, totalsY + 22, { width: CONTENT_WIDTH - 8, align: 'right', lineBreak: false });
     doc.font('Helvetica');
     advance(56);
 
-    // ── Terms ─────────────────────────────────────────────────────────────────
-    const termsText = quote.terms || 'Net 30. Valid for 30 days from proposal date.';
-    ensureSpace(50);
+    // Terms
     doc.moveTo(MARGIN, y).lineTo(COL.end, y).strokeColor('#e5e7eb').lineWidth(1).stroke();
     advance(10);
-    doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold').text('TERMS', MARGIN, y);
+    doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold')
+      .text('TERMS', MARGIN, y, { lineBreak: false });
     doc.font('Helvetica');
     advance(13);
     doc.fontSize(10).fillColor('#1f2937').text(termsText, MARGIN, y, { width: CONTENT_WIDTH });
-    advance(24);
+    // Sync y with actual text end (terms text can wrap)
+    y = Math.max(y + termsLines * 13, doc.y);
+    doc.y = y;
+    advance(16);
 
-    // ── Notes ─────────────────────────────────────────────────────────────────
+    // Notes
     if (quote.notes) {
-      ensureSpace(44);
-      doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold').text('NOTES', MARGIN, y);
+      doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold')
+        .text('NOTES', MARGIN, y, { lineBreak: false });
       doc.font('Helvetica');
       advance(13);
       doc.fontSize(10).fillColor('#1f2937').text(quote.notes.slice(0, 200), MARGIN, y, { width: CONTENT_WIDTH });
-      advance(24);
+      y = Math.max(y + notesLines * 13, doc.y);
+      doc.y = y;
+      advance(16);
     }
 
-    // ── Contact cards ─────────────────────────────────────────────────────────
-    const contactBlockH = 110; // label + cards
-    ensureSpace(contactBlockH);
+    // Contact
     doc.moveTo(MARGIN, y).lineTo(COL.end, y).strokeColor('#e5e7eb').lineWidth(1).stroke();
     advance(12);
-    doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold').text('CONTACT', MARGIN, y);
+    doc.fontSize(9).fillColor('#6b7280').font('Helvetica-Bold')
+      .text('CONTACT', MARGIN, y, { lineBreak: false });
     doc.font('Helvetica');
     advance(14);
     const contactStartY = y;

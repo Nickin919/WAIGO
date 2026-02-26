@@ -762,7 +762,14 @@ export const generateQuotePDF = async (req: AuthRequest, res: Response): Promise
             },
           },
         },
-        customer: { select: { name: true, address: true, city: true, state: true, zipCode: true, email: true } },
+        customer: {
+          select: {
+            name: true, address: true, city: true, state: true, zipCode: true, email: true,
+            createdBy: {
+              select: { id: true, role: true, firstName: true, lastName: true, email: true, phone: true, logoUrl: true, avatarUrl: true, accentColor: true },
+            },
+          },
+        },
         priceContract: { select: { name: true } },
         items: {
           include: {
@@ -786,14 +793,29 @@ export const generateQuotePDF = async (req: AuthRequest, res: Response): Promise
       getGenericThumbnailUrl(),
     ]);
 
-    // Resolve accent color: prefer distributor's color, then RSM's, then default
-    const userRole = (quote.user.role || '').toUpperCase();
-    const accentColor =
-      (userRole === 'DISTRIBUTOR_REP' || userRole === 'DISTRIBUTOR'
-        ? quote.user.accentColor
-        : quote.user.assignedToDistributor?.accentColor ?? quote.user.accentColor) ??
-      quote.user.assignedToRsm?.accentColor ??
-      null;
+    // Resolve which role created this quote
+    const quoterRole = effectiveRole(quote.user.role);
+
+    // For RSM-created quotes, the distributor contact comes from the customer's creator
+    // (DISTRIBUTOR_REP who manages that customer). For DISTRIBUTOR_REP-created quotes,
+    // the distributor IS the quote creator (quote.user). Fallback: assignedToDistributor.
+    let resolvedDistributor: typeof quote.user.assignedToDistributor = quote.user.assignedToDistributor;
+
+    if (quoterRole === 'RSM' || quoterRole === 'ADMIN') {
+      const customerCreator = (quote.customer as any)?.createdBy as
+        | { id: string; role: string; firstName: string | null; lastName: string | null; email: string | null; phone: string | null; logoUrl: string | null; avatarUrl: string | null; accentColor: string | null }
+        | null
+        | undefined;
+      if (customerCreator && effectiveRole(customerCreator.role) === 'DISTRIBUTOR_REP') {
+        resolvedDistributor = customerCreator;
+      }
+    }
+
+    // Resolve accent color: prefer distributor color → RSM → user's own
+    const distColor = quoterRole === 'DISTRIBUTOR_REP'
+      ? quote.user.accentColor
+      : resolvedDistributor?.accentColor ?? null;
+    const accentColor = distColor ?? quote.user.accentColor ?? quote.user.assignedToRsm?.accentColor ?? null;
 
     const pdfPayload = {
       quoteNumber: quote.quoteNumber,
@@ -823,7 +845,10 @@ export const generateQuotePDF = async (req: AuthRequest, res: Response): Promise
         isSellAffected: it.isSellAffected,
         thumbnailUrl: (it as any).part?.thumbnailUrl ?? null,
       })),
-      user: quote.user,
+      user: {
+        ...quote.user,
+        assignedToDistributor: resolvedDistributor,
+      },
     };
     const buffer = await buildQuotePdfBuffer(pdfPayload);
     const filename = `PricingProposal_${quote.quoteNumber}.pdf`;
