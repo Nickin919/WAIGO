@@ -108,28 +108,15 @@ const AdminDashboard = () => {
 
         {/* Imports & reference data */}
         <section>
-          <h2 className="text-lg font-semibold text-gray-900 mb-3">Imports & reference data</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-3">Data imports</h2>
+          <p className="text-sm text-gray-600 mb-3">Master Catalog, Cross Reference, and Non-WAGO Database. All import tools are on one page.</p>
           <div className="flex flex-wrap gap-3">
             <button
-              onClick={() => navigate('/admin/import-products')}
+              onClick={() => navigate('/admin/data-imports')}
               className="btn btn-primary flex items-center gap-2"
             >
               <Upload className="w-5 h-5" />
-              Product Import
-            </button>
-            <button
-              onClick={() => navigate('/admin/import-cross-references')}
-              className="btn btn-secondary flex items-center gap-2"
-            >
-              <Upload className="w-5 h-5" />
-              Cross Reference Import
-            </button>
-            <button
-              onClick={() => navigate('/admin/data-management')}
-              className="btn btn-secondary flex items-center gap-2"
-            >
-              <FolderKanban className="w-5 h-5" />
-              Reference Data
+              Data Imports
             </button>
           </div>
         </section>

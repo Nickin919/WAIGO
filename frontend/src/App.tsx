@@ -24,11 +24,9 @@ import QuoteForm from './pages/quotes/QuoteForm';
 import ManageCustomers from './pages/customers/ManageCustomers';
 import Profile from './pages/Profile';
 import AdminDashboard from './pages/admin/AdminDashboard';
-import ProductImport from './pages/admin/ProductImport';
-import CrossReferenceImport from './pages/admin/CrossReferenceImport';
+import DataImports from './pages/admin/DataImports';
 import FailureReport from './pages/admin/FailureReport';
 import UnmatchedSubmissionsReport from './pages/admin/UnmatchedSubmissionsReport';
-import DataManagement from './pages/admin/DataManagement';
 import LiteratureLibrary from './pages/admin/LiteratureLibrary';
 import CatalogList from './pages/catalog/CatalogList';
 import ProjectBookCreator from './pages/catalog/ProjectBookCreator';
@@ -160,9 +158,10 @@ function App() {
       {/* Admin routes */}
       <Route element={<AdminRoute><MainLayout /></AdminRoute>}>
         <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/admin/import-products" element={<ProductImport />} />
-        <Route path="/admin/import-cross-references" element={<CrossReferenceImport />} />
-        <Route path="/admin/data-management" element={<DataManagement />} />
+        <Route path="/admin/data-imports" element={<DataImports />} />
+        <Route path="/admin/import-products" element={<Navigate to="/admin/data-imports" replace />} />
+        <Route path="/admin/import-cross-references" element={<Navigate to="/admin/data-imports" replace />} />
+        <Route path="/admin/data-management" element={<Navigate to="/admin/data-imports" replace />} />
         <Route path="/admin/failure-report" element={<FailureReport />} />
         <Route path="/admin/unmatched-submissions" element={<UnmatchedSubmissionsReport />} />
         <Route path="/admin/product-inspection" element={<ProductInspection />} />
