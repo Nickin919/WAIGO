@@ -25,6 +25,7 @@ import {
   getAllVideosForExport,
 } from '../lib/videoLibraryService';
 import type { VideoType } from '@prisma/client';
+import { logUnmatchedEvents } from '../lib/unmatchedLogger';
 
 type MulterFiles = { [fieldname: string]: Express.Multer.File[] };
 
@@ -73,6 +74,20 @@ export const uploadVideoHandler = async (req: AuthRequest, res: Response): Promi
       },
       req.user.id
     );
+
+    if (unresolvedParts.length > 0) {
+      logUnmatchedEvents(
+        unresolvedParts.map((pn) => ({
+          source: 'VIDEO_LIBRARY_UPLOAD',
+          process: 'uploadVideoWithAssociations',
+          eventType: 'PART_NOT_FOUND',
+          submittedValue: pn,
+          submittedField: 'partNumber',
+          matchedAgainst: 'Part'
+        })),
+        { userId: req.user.id, entityType: 'video', entityId: video?.id }
+      ).catch(() => {});
+    }
 
     res.status(201).json({ video, unresolvedParts });
   } catch (error) {

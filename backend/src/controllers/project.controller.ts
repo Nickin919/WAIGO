@@ -8,6 +8,7 @@ import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { getSubordinateUserIds } from '../lib/hierarchy';
 import { addProjectItemSchema, parseBomCsvRow } from '../lib/validation/bomSchemas';
+import { logUnmatchedEvent, contextFromRequest } from '../lib/unmatchedLogger';
 
 /** Check if current user can access a project (owner or in hierarchy, like quotes). */
 async function canAccessProject(currentUserId: string, currentUserRole: string, projectUserId: string): Promise<boolean> {
@@ -488,6 +489,19 @@ export const uploadBOM = async (req: AuthRequest, res: Response): Promise<void> 
               userId
             }
           });
+          logUnmatchedEvent(
+            {
+              source: 'BOM_UPLOAD',
+              process: 'uploadBOM',
+              eventType: 'PART_NOT_FOUND',
+              submittedValue: row.partNumber,
+              submittedField: 'partNumber',
+              submittedManufacturer: manufacturer,
+              matchedAgainst: 'Part,NonWagoProduct',
+              payload: { projectId: id, quantity: row.quantity }
+            },
+            { userId: userId ?? undefined, importBatchId, entityType: 'project', entityId: id }
+          ).catch(() => {});
         }
       }
     }
@@ -739,6 +753,18 @@ export const convertToProjectBook = async (req: AuthRequest, res: Response): Pro
             userId
           }
         });
+        logUnmatchedEvent(
+          {
+            source: 'PROJECT_BOOK_CONVERSION',
+            process: 'convertToProjectBook',
+            eventType: 'INVALID_SUBMISSION',
+            submittedValue: part.partNumber,
+            submittedField: 'partNumber',
+            matchedAgainst: 'Part',
+            payload: { projectId, partId: part.id, reason: 'missing grid level/sublevel' }
+          },
+          { userId, importBatchId, entityType: 'project', entityId: projectId }
+        ).catch(() => {});
         continue;
       }
       await prisma.catalogItem.create({

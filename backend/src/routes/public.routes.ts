@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { randomUUID } from 'crypto';
+import { logUnmatchedEvent, logUnmatchedEvents } from '../lib/unmatchedLogger';
 
 const router = Router();
 
@@ -111,6 +112,18 @@ router.post('/cross-reference', async (req: Request, res: Response): Promise<voi
     });
 
     if (crossRefs.length === 0) {
+      logUnmatchedEvent(
+        {
+          source: 'PUBLIC_CROSS_REF',
+          process: 'cross-reference',
+          eventType: 'CROSS_REF_NOT_FOUND',
+          submittedValue: partNumber,
+          submittedField: 'partNumber',
+          submittedManufacturer: manufacturer,
+          matchedAgainst: 'CrossReference'
+        },
+        {}
+      ).catch(() => {});
       res.json({
         found: false,
         message: 'No WAGO equivalent found for this part'
@@ -194,6 +207,22 @@ router.post('/cross-reference/bulk', async (req: Request, res: Response): Promis
     );
 
     const foundCount = results.filter(r => r.wagoEquivalent !== null).length;
+
+    const noMatchItems = results.filter(r => r.wagoEquivalent === null);
+    if (noMatchItems.length > 0) {
+      logUnmatchedEvents(
+        noMatchItems.map((r) => ({
+          source: 'PUBLIC_CROSS_REF_BULK',
+          process: 'cross-reference/bulk',
+          eventType: 'CROSS_REF_NOT_FOUND',
+          submittedValue: r.original.partNumber,
+          submittedField: 'partNumber',
+          submittedManufacturer: r.original.manufacturer,
+          matchedAgainst: 'CrossReference'
+        })),
+        {}
+      ).catch(() => {});
+    }
 
     res.json({
       totalItems: items.length,

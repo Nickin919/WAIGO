@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { logUnmatchedEvents } from '../lib/unmatchedLogger';
 
 /**
  * Get parts by catalog
@@ -124,6 +125,20 @@ export const lookupBulkParts = async (req: AuthRequest, res: Response): Promise<
 
     const foundPartNumbers = new Set(parts.map((p) => p.partNumber.toLowerCase()));
     const notFound = unique.filter((pn) => !foundPartNumbers.has(pn.toLowerCase()));
+
+    if (notFound.length > 0) {
+      logUnmatchedEvents(
+        notFound.map((pn) => ({
+          source: 'PART_LOOKUP_BULK',
+          process: 'lookupBulkParts',
+          eventType: 'PART_NOT_FOUND',
+          submittedValue: pn,
+          submittedField: 'partNumber',
+          matchedAgainst: 'Part'
+        })),
+        { userId: req.user?.id ?? undefined }
+      ).catch(() => {});
+    }
 
     res.json({ found: parts, notFound });
   } catch (error) {

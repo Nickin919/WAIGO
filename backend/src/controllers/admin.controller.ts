@@ -4,6 +4,7 @@ import path from 'path';
 import Papa from 'papaparse';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { logUnmatchedEvent } from '../lib/unmatchedLogger';
 
 export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -194,6 +195,19 @@ export const importCrossReferences = async (req: AuthRequest, res: Response): Pr
             userId
           }
         });
+        logUnmatchedEvent(
+          {
+            source: 'CROSS_REF_IMPORT',
+            process: 'importCrossReferences',
+            eventType: 'PART_NOT_FOUND',
+            submittedValue: wagoPartNumber,
+            submittedField: 'partNumber',
+            submittedManufacturer: row.originalManufacturer.trim(),
+            matchedAgainst: 'Part',
+            payload: { originalPartNumber: row.originalPartNumber.trim() }
+          },
+          { userId: userId ?? undefined, importBatchId }
+        ).catch(() => {});
         continue;
       }
       const manu = row.originalManufacturer.trim();
@@ -393,6 +407,19 @@ export const importCrossReferencesMaster = async (req: AuthRequest, res: Respons
             userId
           }
         });
+        logUnmatchedEvent(
+          {
+            source: 'CROSS_REF_IMPORT',
+            process: 'importCrossReferencesMaster',
+            eventType: 'CROSS_REF_NOT_FOUND',
+            submittedValue: originalPartNumber,
+            submittedField: 'partNumber',
+            submittedManufacturer: manufactureName,
+            matchedAgainst: 'Part',
+            payload: { rowIndex: i + 1, partNumberA, partNumberB }
+          },
+          { userId: userId ?? undefined, importBatchId }
+        ).catch(() => {});
         continue;
       }
 
@@ -414,6 +441,19 @@ export const importCrossReferencesMaster = async (req: AuthRequest, res: Respons
               userId
             }
           });
+          logUnmatchedEvent(
+            {
+              source: 'CROSS_REF_IMPORT',
+              process: 'importCrossReferencesMaster',
+              eventType: 'PART_NOT_FOUND',
+              submittedValue: wagoPn,
+              submittedField: 'partNumber',
+              submittedManufacturer: manufactureName,
+              matchedAgainst: 'Part',
+              payload: { rowIndex: i + 1, originalPartNumber }
+            },
+            { userId: userId ?? undefined, importBatchId }
+          ).catch(() => {});
           continue;
         }
 
@@ -582,5 +622,94 @@ export const resolveFailureReport = async (req: AuthRequest, res: Response): Pro
   } catch (error) {
     console.error('Resolve failure report error:', error);
     res.status(500).json({ error: 'Failed to resolve failure report' });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Unmatched Submission Report (ADMIN) – 90-day default window
+// ---------------------------------------------------------------------------
+
+export const getUnmatchedSubmissions = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { source, eventType, userId, status, q, limit = '100', offset = '0', fromDate, toDate } = req.query;
+    const where: any = {};
+
+    const hasFrom = fromDate && typeof fromDate === 'string';
+    const hasTo = toDate && typeof toDate === 'string';
+    if (hasFrom || hasTo) {
+      where.createdAt = {};
+      if (hasFrom) where.createdAt.gte = new Date(fromDate as string);
+      if (hasTo) where.createdAt.lte = new Date(toDate as string);
+    } else {
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+      where.createdAt = { gte: ninetyDaysAgo };
+    }
+
+    if (source && typeof source === 'string') where.source = source;
+    if (eventType && typeof eventType === 'string') where.eventType = eventType;
+    if (userId && typeof userId === 'string') where.userId = userId;
+    if (status === 'OPEN' || status === 'ACKNOWLEDGED') where.status = status;
+    if (q && typeof q === 'string' && q.trim()) {
+      where.OR = [
+        { submittedValue: { contains: q.trim(), mode: 'insensitive' } },
+        { submittedManufacturer: { contains: q.trim(), mode: 'insensitive' } },
+        { process: { contains: q.trim(), mode: 'insensitive' } }
+      ];
+    }
+
+    const take = Math.min(500, Math.max(1, parseInt(String(limit), 10) || 100));
+    const skip = Math.max(0, parseInt(String(offset), 10) || 0);
+
+    const [events, total] = await Promise.all([
+      prisma.unmatchedSubmissionEvent.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip,
+        include: {
+          user: { select: { id: true, email: true, firstName: true, lastName: true } },
+          acknowledgedBy: { select: { id: true, email: true, firstName: true, lastName: true } }
+        }
+      }),
+      prisma.unmatchedSubmissionEvent.count({ where })
+    ]);
+
+    res.json({ events, total, limit: take, offset: skip });
+  } catch (error) {
+    console.error('Get unmatched submissions error:', error);
+    res.status(500).json({ error: 'Failed to fetch unmatched submissions' });
+  }
+};
+
+export const ackUnmatchedSubmission = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const event = await prisma.unmatchedSubmissionEvent.findUnique({ where: { id } });
+    if (!event) {
+      res.status(404).json({ error: 'Unmatched submission event not found' });
+      return;
+    }
+    if (event.status === 'ACKNOWLEDGED') {
+      res.status(400).json({ error: 'Already acknowledged' });
+      return;
+    }
+
+    const updated = await prisma.unmatchedSubmissionEvent.update({
+      where: { id },
+      data: {
+        status: 'ACKNOWLEDGED',
+        acknowledgedAt: new Date(),
+        acknowledgedById: req.user!.id
+      },
+      include: {
+        acknowledgedBy: { select: { id: true, email: true, firstName: true, lastName: true } }
+      }
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Ack unmatched submission error:', error);
+    res.status(500).json({ error: 'Failed to acknowledge' });
   }
 };

@@ -579,6 +579,11 @@ export const adminApi = {
     api.get('/admin/failure-reports', { params }),
   resolveFailureReport: (id: string, resolutionNote: string) =>
     api.patch(`/admin/failure-reports/${id}/resolve`, { resolutionNote }),
+
+  getUnmatchedSubmissions: (params?: { fromDate?: string; toDate?: string; source?: string; eventType?: string; userId?: string; status?: string; q?: string; limit?: number; offset?: number }) =>
+    api.get('/admin/unmatched-submissions', { params }),
+  ackUnmatchedSubmission: (id: string) =>
+    api.patch(`/admin/unmatched-submissions/${id}/ack`),
 };
 
 // ============================================================================

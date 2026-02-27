@@ -6,6 +6,7 @@ import { parseWagoPDF } from '../lib/pdfParser';
 import { quoteFieldsFromNumber, parseMoqToMinQuantity, parseMetadataDate } from '../lib/quoteNumber';
 import * as fs from 'fs/promises';
 import archiver from 'archiver';
+import { logUnmatchedEvent } from '../lib/unmatchedLogger';
 
 /**
  * GET /api/price-contracts – list contracts (ADMIN/RSM only, or assignees see assigned)
@@ -400,6 +401,20 @@ export const uploadPDF = async (req: AuthRequest, res: Response): Promise<void> 
             select: { id: true },
           });
           partId = part?.id || null;
+          if (!partId) {
+            logUnmatchedEvent(
+              {
+                source: 'PRICE_CONTRACT_UPLOAD_PDF',
+                process: 'uploadPDF',
+                eventType: 'PART_NOT_FOUND',
+                submittedValue: row.partNumber,
+                submittedField: 'partNumber',
+                matchedAgainst: 'Part',
+                payload: { contractId }
+              },
+              { userId: req.user?.id ?? undefined, entityType: 'priceContract', entityId: contractId }
+            ).catch(() => {});
+          }
         }
 
         // For series discounts: try to match series to a category (by category name = series number)

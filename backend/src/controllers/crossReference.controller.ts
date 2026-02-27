@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { logUnmatchedEvent } from '../lib/unmatchedLogger';
 
 export const lookupCrossReference = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -25,6 +26,21 @@ export const lookupCrossReference = async (req: AuthRequest, res: Response): Pro
       },
       orderBy: { compatibilityScore: 'desc' }
     });
+
+    if (crossRefs.length === 0) {
+      logUnmatchedEvent(
+        {
+          source: 'CROSS_REF_LOOKUP',
+          process: 'lookupCrossReference',
+          eventType: 'CROSS_REF_NOT_FOUND',
+          submittedValue: partNumber as string,
+          submittedField: 'partNumber',
+          submittedManufacturer: manufacturer as string,
+          matchedAgainst: 'CrossReference'
+        },
+        { userId: req.user?.id ?? undefined }
+      ).catch(() => {});
+    }
 
     res.json(crossRefs);
   } catch (error) {

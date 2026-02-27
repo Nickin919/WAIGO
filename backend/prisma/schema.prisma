@@ -144,6 +144,8 @@ model User {
   crossReferencesCreated CrossReference[] @relation("CrossReferenceCreator")
   failureReports         FailureReport[]  @relation("FailureReportUser")
   failureReportsResolved FailureReport[]  @relation("FailureReportResolvedBy")
+  unmatchedSubmissionEvents UnmatchedSubmissionEvent[]
+  unmatchedSubmissionsAcknowledged UnmatchedSubmissionEvent[] @relation("UnmatchedSubmissionAcknowledgedBy")
   videoFavorites     VideoFavorite[]
   videoPlaylists     VideoPlaylist[]
 
@@ -1071,6 +1073,53 @@ model FailureReport {
   @@index([createdAt])
   @@index([resolvedAt])
   @@map("failure_reports")
+}
+
+// ============================================================================
+// UNMATCHED SUBMISSION AUDIT (uploads, imports, lookups – part/series not found)
+// ============================================================================
+
+enum UnmatchedEventType {
+  PART_NOT_FOUND
+  SERIES_NOT_FOUND
+  CROSS_REF_NOT_FOUND
+  INVALID_SUBMISSION
+}
+
+enum UnmatchedSubmissionStatus {
+  OPEN
+  ACKNOWLEDGED
+}
+
+model UnmatchedSubmissionEvent {
+  id                    String                      @id @default(uuid())
+  createdAt             DateTime                    @default(now()) @map("created_at")
+  eventType             UnmatchedEventType          @map("event_type")
+  source                String                      // BOM_UPLOAD, LITERATURE_UPLOAD, PART_LOOKUP_BULK, etc.
+  process               String                      // route/function identifier
+  submittedValue        String                      @map("submitted_value")  // part number or series value
+  submittedField        String                      @map("submitted_field")  // partNumber | series
+  submittedManufacturer String?                      @map("submitted_manufacturer")
+  matchedAgainst        String?                    @map("matched_against")  // Part, NonWagoProduct, CrossReference, Category
+  userId                String?                     @map("user_id")
+  importBatchId         String?                     @map("import_batch_id")
+  entityType            String?                     @map("entity_type")     // project, contract, literature, etc.
+  entityId              String?                     @map("entity_id")
+  payload               Json?                       // row/request context snapshot
+  status                UnmatchedSubmissionStatus  @default(OPEN)
+  acknowledgedAt        DateTime?                   @map("acknowledged_at")
+  acknowledgedById      String?                    @map("acknowledged_by_id")
+
+  user           User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  acknowledgedBy User? @relation("UnmatchedSubmissionAcknowledgedBy", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([source])
+  @@index([eventType])
+  @@index([userId])
+  @@index([status])
+  @@index([source, createdAt])
+  @@map("unmatched_submission_events")
 }
 
 // ============================================================================

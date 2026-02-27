@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { logUnmatchedEvents } from '../lib/unmatchedLogger';
 
 interface ImportProduct {
   partNumber: string;
@@ -103,6 +104,20 @@ export const bulkImportProducts = async (req: AuthRequest, res: Response): Promi
       catalogId,
       updateOnly || false
     );
+
+    if (result.notFound.length > 0) {
+      logUnmatchedEvents(
+        result.notFound.map((partNumber) => ({
+          source: 'PRODUCT_IMPORT',
+          process: 'bulkImportProducts',
+          eventType: 'PART_NOT_FOUND',
+          submittedValue: partNumber,
+          submittedField: 'partNumber',
+          matchedAgainst: 'Part'
+        })),
+        { userId: req.user.id, importBatchId: result.importBatch, entityType: 'catalog', entityId: catalogId }
+      ).catch(() => {});
+    }
 
     res.json(result);
   } catch (error) {

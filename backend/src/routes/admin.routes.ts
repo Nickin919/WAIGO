@@ -27,4 +27,8 @@ router.post('/non-wago-products/import', uploadCSV, adminController.importNonWag
 router.get('/failure-reports', adminController.getFailureReports);
 router.patch('/failure-reports/:id/resolve', adminController.resolveFailureReport);
 
+// Unmatched Submission Report (audit log of part/series not found)
+router.get('/unmatched-submissions', adminController.getUnmatchedSubmissions);
+router.patch('/unmatched-submissions/:id/ack', adminController.ackUnmatchedSubmission);
+
 export default router;

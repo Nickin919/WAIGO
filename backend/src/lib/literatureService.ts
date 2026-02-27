@@ -7,6 +7,7 @@ import { prisma } from './prisma';
 import { getUploadDir } from './uploadPath';
 import { uploadToR2, bufferFromR2, deleteFromR2, R2_PUBLIC_BUCKET, getPublicUrl, isR2Key } from './r2';
 import type { LiteratureType as PrismaLiteratureType } from '@prisma/client';
+import { logUnmatchedEvents } from './unmatchedLogger';
 
 const MAX_PARTS = 100;
 const MAX_SERIES = 50;
@@ -568,8 +569,21 @@ export async function bulkUpdateAssociationsFromCsv(
     }
 
     try {
-      await updateAssociations(literatureId, partNumbersRaw, seriesNames);
+      const { unresolvedParts } = await updateAssociations(literatureId, partNumbersRaw, seriesNames);
       updated++;
+      if (unresolvedParts.length > 0) {
+        logUnmatchedEvents(
+          unresolvedParts.map((pn) => ({
+            source: 'LITERATURE_BULK_UPDATE_ASSOCIATIONS',
+            process: 'bulkUpdateAssociationsFromCsv',
+            eventType: 'PART_NOT_FOUND',
+            submittedValue: pn,
+            submittedField: 'partNumber',
+            matchedAgainst: 'Part'
+          })),
+          { userId: _userId, entityType: 'literature', entityId: literatureId }
+        ).catch(() => {});
+      }
     } catch (e) {
       errors.push(`Row ${i + 2}: ${e instanceof Error ? e.message : String(e)}`);
     }

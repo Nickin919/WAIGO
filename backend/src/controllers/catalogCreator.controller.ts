@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { getSubordinateUserIds } from '../lib/hierarchy';
+import { logUnmatchedEvents } from '../lib/unmatchedLogger';
 
 interface CreateCatalogData {
   name: string;
@@ -392,6 +393,20 @@ export const lookupPartNumbers = async (req: AuthRequest, res: Response): Promis
 
     const foundPartNumbers = new Set(foundProducts.map(p => p.partNumber));
     const notFound = partNumbers.filter(pn => !foundPartNumbers.has(pn));
+
+    if (notFound.length > 0) {
+      logUnmatchedEvents(
+        notFound.map((pn) => ({
+          source: 'CATALOG_CREATOR_LOOKUP',
+          process: 'lookupPartNumbers',
+          eventType: 'PART_NOT_FOUND',
+          submittedValue: pn,
+          submittedField: 'partNumber',
+          matchedAgainst: 'Part'
+        })),
+        { userId: req.user?.id ?? undefined }
+      ).catch(() => {});
+    }
 
     res.json({
       products: foundProducts,

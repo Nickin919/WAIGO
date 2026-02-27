@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Package, Video, FolderKanban, Upload, BookOpen, Film, Image, AlertCircle } from 'lucide-react';
+import { Users, Package, Video, FolderKanban, Upload, BookOpen, Film, Image, AlertCircle, FileSearch } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 
 const AdminDashboard = () => {
@@ -121,6 +121,13 @@ const AdminDashboard = () => {
           >
             <AlertCircle className="w-5 h-5" />
             <span>Failure Report</span>
+          </button>
+          <button
+            onClick={() => navigate('/admin/unmatched-submissions')}
+            className="btn btn-primary flex items-center justify-center space-x-2"
+          >
+            <FileSearch className="w-5 h-5" />
+            <span>Unmatched Submissions</span>
           </button>
           <button
             onClick={() => navigate('/admin/data-management')}

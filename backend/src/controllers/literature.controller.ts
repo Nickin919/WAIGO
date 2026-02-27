@@ -17,6 +17,7 @@ import {
   bulkUpdateAssociationsFromCsv,
 } from '../lib/literatureService';
 import type { LiteratureType } from '@prisma/client';
+import { logUnmatchedEvents } from '../lib/unmatchedLogger';
 
 /** Upload literature PDF with part/series/keyword associations (admin). */
 export const uploadLiterature = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -45,6 +46,19 @@ export const uploadLiterature = async (req: AuthRequest, res: Response): Promise
       { title, description: req.body.description, type, partNumbers, seriesNames, keywords, industryTags },
       req.user.id
     );
+    if (unresolvedParts.length > 0) {
+      logUnmatchedEvents(
+        unresolvedParts.map((pn) => ({
+          source: 'LITERATURE_UPLOAD',
+          process: 'uploadLiterature',
+          eventType: 'PART_NOT_FOUND',
+          submittedValue: pn,
+          submittedField: 'partNumber',
+          matchedAgainst: 'Part'
+        })),
+        { userId: req.user.id, entityType: 'literature', entityId: literature?.id }
+      ).catch(() => {});
+    }
     res.status(201).json({ literature, unresolvedParts });
   } catch (error) {
     console.error('Upload literature error:', error);
