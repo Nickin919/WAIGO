@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle, Filter, RefreshCw } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { AlertCircle, CheckCircle, Filter, RefreshCw, Search } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 
@@ -73,6 +74,15 @@ const FailureReport = () => {
     }
   };
 
+  const getInspectPartNumbers = (context: Record<string, unknown> | null): string[] => {
+    if (!context) return [];
+    const out: string[] = [];
+    if (typeof context.partNumber === 'string' && context.partNumber.trim()) out.push(String(context.partNumber).trim());
+    if (typeof context.partNumberA === 'string' && context.partNumberA.trim()) out.push(String(context.partNumberA).trim());
+    if (typeof context.partNumberB === 'string' && context.partNumberB.trim()) out.push(String(context.partNumberB).trim());
+    return [...new Set(out)];
+  };
+
   return (
     <div className="container-custom py-6">
       <h1 className="text-3xl font-bold text-gray-900 mb-6">Failure Report</h1>
@@ -126,7 +136,7 @@ const FailureReport = () => {
                   <th className="text-left p-3 font-semibold">Message</th>
                   <th className="text-left p-3 font-semibold">Date</th>
                   <th className="text-left p-3 font-semibold">Resolved</th>
-                  <th className="text-left p-3 font-semibold w-24">Actions</th>
+                  <th className="text-left p-3 font-semibold w-32">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -159,15 +169,26 @@ const FailureReport = () => {
                         )}
                       </td>
                       <td className="p-3">
-                        {!r.resolvedAt && (
-                          <button
-                            type="button"
-                            onClick={() => { setModalId(r.id); setResolveNote(''); }}
-                            className="text-green-600 hover:underline"
-                          >
-                            Resolve
-                          </button>
-                        )}
+                        <div className="flex flex-wrap gap-2 items-center">
+                          {!r.resolvedAt && (
+                            <button
+                              type="button"
+                              onClick={() => { setModalId(r.id); setResolveNote(''); }}
+                              className="text-green-600 hover:underline"
+                            >
+                              Resolve
+                            </button>
+                          )}
+                          {getInspectPartNumbers(r.context).map((pn) => (
+                            <Link
+                              key={pn}
+                              to={`/admin/product-inspection?partNumber=${encodeURIComponent(pn)}`}
+                              className="text-wago-green hover:underline flex items-center gap-1"
+                            >
+                              <Search className="w-4 h-4" /> Inspect {pn}
+                            </Link>
+                          ))}
+                        </div>
                       </td>
                     </tr>
                   ))

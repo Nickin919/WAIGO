@@ -713,3 +713,48 @@ export const ackUnmatchedSubmission = async (req: AuthRequest, res: Response): P
     res.status(500).json({ error: 'Failed to acknowledge' });
   }
 };
+
+// ---------------------------------------------------------------------------
+// Admin parts search (product inspection) – search across all catalogs
+// ---------------------------------------------------------------------------
+
+export const searchParts = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { q, catalogId, limit = '50', offset = '0' } = req.query;
+    const where: any = {};
+    if (catalogId && typeof catalogId === 'string') where.catalogId = catalogId;
+    if (q && typeof q === 'string' && q.trim()) {
+      const term = (q as string).trim();
+      where.OR = [
+        { partNumber: { contains: term, mode: 'insensitive' } },
+        { series: { contains: term, mode: 'insensitive' } },
+        { description: { contains: term, mode: 'insensitive' } }
+      ];
+    }
+    if (!where.catalogId && !where.OR) {
+      res.status(400).json({ error: 'Provide at least q (search term) or catalogId' });
+      return;
+    }
+    const take = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 50));
+    const skip = Math.max(0, parseInt(String(offset), 10) || 0);
+
+    const [parts, total] = await Promise.all([
+      prisma.part.findMany({
+        where,
+        include: {
+          category: { select: { id: true, name: true } },
+          catalog: { select: { id: true, name: true } }
+        },
+        orderBy: { partNumber: 'asc' },
+        take,
+        skip
+      }),
+      prisma.part.count({ where })
+    ]);
+
+    res.json({ parts, total, limit: take, offset: skip });
+  } catch (error) {
+    console.error('Admin search parts error:', error);
+    res.status(500).json({ error: 'Failed to search parts' });
+  }
+};

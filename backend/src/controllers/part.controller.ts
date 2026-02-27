@@ -290,21 +290,44 @@ export const updatePart = async (req: AuthRequest, res: Response): Promise<void>
       minQty,
       packageQty,
       level,
-      basePrice
+      basePrice,
+      series,
+      englishDescription,
+      active,
+      gridLevelNumber,
+      gridLevelName,
+      gridSublevelNumber,
+      gridSublevelName,
+      listPricePer100,
+      distributorDiscount,
+      wagoIdent,
+      priceDate
     } = req.body;
+
+    const data: Record<string, unknown> = {};
+    if (categoryId !== undefined) data.categoryId = categoryId;
+    if (partNumber !== undefined) data.partNumber = partNumber;
+    if (description !== undefined) data.description = description;
+    if (thumbnailUrl !== undefined) data.thumbnailUrl = thumbnailUrl;
+    if (minQty !== undefined) data.minQty = minQty;
+    if (packageQty !== undefined) data.packageQty = packageQty;
+    if (level !== undefined) data.level = level;
+    if (basePrice !== undefined) data.basePrice = basePrice;
+    if (series !== undefined) data.series = series;
+    if (englishDescription !== undefined) data.englishDescription = englishDescription;
+    if (active !== undefined) data.active = Boolean(active);
+    if (gridLevelNumber !== undefined) data.gridLevelNumber = gridLevelNumber == null ? null : Number(gridLevelNumber);
+    if (gridLevelName !== undefined) data.gridLevelName = gridLevelName;
+    if (gridSublevelNumber !== undefined) data.gridSublevelNumber = gridSublevelNumber == null ? null : Number(gridSublevelNumber);
+    if (gridSublevelName !== undefined) data.gridSublevelName = gridSublevelName;
+    if (listPricePer100 !== undefined) data.listPricePer100 = listPricePer100 == null ? null : Number(listPricePer100);
+    if (distributorDiscount !== undefined) data.distributorDiscount = Number(distributorDiscount);
+    if (wagoIdent !== undefined) data.wagoIdent = wagoIdent;
+    if (priceDate !== undefined) data.priceDate = priceDate ? new Date(priceDate) : null;
 
     const part = await prisma.part.update({
       where: { id },
-      data: {
-        ...(categoryId && { categoryId }),
-        ...(partNumber && { partNumber }),
-        ...(description && { description }),
-        ...(thumbnailUrl !== undefined && { thumbnailUrl }),
-        ...(minQty !== undefined && { minQty }),
-        ...(packageQty !== undefined && { packageQty }),
-        ...(level !== undefined && { level }),
-        ...(basePrice !== undefined && { basePrice })
-      }
+      data: data as any
     });
 
     res.json(part);

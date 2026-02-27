@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Package, Video, FolderKanban, Upload, BookOpen, Film, Image, AlertCircle, FileSearch } from 'lucide-react';
+import { Users, Package, Video, FolderKanban, Upload, BookOpen, Film, Image, AlertCircle, FileSearch, Search } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 
 const AdminDashboard = () => {
@@ -77,87 +77,119 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      <div className="card p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          <button
-            onClick={() => navigate('/accounts')}
-            className="btn btn-primary flex items-center justify-center space-x-2"
-          >
-            <Users className="w-5 h-5" />
-            <span>Accounts</span>
-          </button>
-          <button
-            onClick={() => navigate('/videos')}
-            className="btn btn-primary flex items-center justify-center space-x-2"
-          >
-            <Video className="w-5 h-5" />
-            <span>Review Videos</span>
-          </button>
-          <button
-            onClick={() => navigate('/catalog-list')}
-            className="btn btn-primary flex items-center justify-center space-x-2"
-          >
-            <FolderKanban className="w-5 h-5" />
-            <span>Manage Project Books</span>
-          </button>
-          <button
-            onClick={() => navigate('/admin/import-products')}
-            className="btn btn-primary flex items-center justify-center space-x-2"
-          >
-            <Upload className="w-5 h-5" />
-            <span>Product Import</span>
-          </button>
-          <button
-            onClick={() => navigate('/admin/import-cross-references')}
-            className="btn btn-primary flex items-center justify-center space-x-2"
-          >
-            <Upload className="w-5 h-5" />
-            <span>Cross Reference Import</span>
-          </button>
-          <button
-            onClick={() => navigate('/admin/failure-report')}
-            className="btn btn-primary flex items-center justify-center space-x-2"
-          >
-            <AlertCircle className="w-5 h-5" />
-            <span>Failure Report</span>
-          </button>
-          <button
-            onClick={() => navigate('/admin/unmatched-submissions')}
-            className="btn btn-primary flex items-center justify-center space-x-2"
-          >
-            <FileSearch className="w-5 h-5" />
-            <span>Unmatched Submissions</span>
-          </button>
-          <button
-            onClick={() => navigate('/admin/data-management')}
-            className="btn btn-primary flex items-center justify-center space-x-2"
-          >
-            <FolderKanban className="w-5 h-5" />
-            <span>Reference Data</span>
-          </button>
-          <button
-            onClick={() => navigate('/admin/literature')}
-            className="btn btn-primary flex items-center justify-center space-x-2"
-          >
-            <BookOpen className="w-5 h-5" />
-            <span>Literature Library</span>
-          </button>
-          <button
-            onClick={() => navigate('/admin/video-library')}
-            className="btn btn-primary flex items-center justify-center space-x-2"
-          >
-            <Film className="w-5 h-5" />
-            <span>Video Library</span>
-          </button>
-          <button
-            onClick={() => navigate('/admin/quote-banners')}
-            className="btn btn-primary flex items-center justify-center space-x-2"
-          >
-            <Image className="w-5 h-5" />
-            <span>Quote PDF Assets</span>
-          </button>
-        </div>
+      <div className="space-y-8">
+        {/* Users & accounts */}
+        <section>
+          <h2 className="text-lg font-semibold text-gray-900 mb-3">Users & accounts</h2>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => navigate('/accounts')}
+              className="btn btn-primary flex items-center gap-2"
+            >
+              <Users className="w-5 h-5" />
+              Accounts
+            </button>
+            <button
+              onClick={() => navigate('/videos')}
+              className="btn btn-secondary flex items-center gap-2"
+            >
+              <Video className="w-5 h-5" />
+              Review Videos
+            </button>
+            <button
+              onClick={() => navigate('/catalog-list')}
+              className="btn btn-secondary flex items-center gap-2"
+            >
+              <FolderKanban className="w-5 h-5" />
+              Manage Project Books
+            </button>
+          </div>
+        </section>
+
+        {/* Imports & reference data */}
+        <section>
+          <h2 className="text-lg font-semibold text-gray-900 mb-3">Imports & reference data</h2>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => navigate('/admin/import-products')}
+              className="btn btn-primary flex items-center gap-2"
+            >
+              <Upload className="w-5 h-5" />
+              Product Import
+            </button>
+            <button
+              onClick={() => navigate('/admin/import-cross-references')}
+              className="btn btn-secondary flex items-center gap-2"
+            >
+              <Upload className="w-5 h-5" />
+              Cross Reference Import
+            </button>
+            <button
+              onClick={() => navigate('/admin/data-management')}
+              className="btn btn-secondary flex items-center gap-2"
+            >
+              <FolderKanban className="w-5 h-5" />
+              Reference Data
+            </button>
+          </div>
+        </section>
+
+        {/* Reports & resolution */}
+        <section>
+          <h2 className="text-lg font-semibold text-gray-900 mb-3">Reports & resolution</h2>
+          <p className="text-sm text-gray-600 mb-3">Resolve failure reports and submission issues; inspect and fix product data.</p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => navigate('/admin/product-inspection')}
+              className="btn btn-primary flex items-center gap-2"
+            >
+              <Search className="w-5 h-5" />
+              Product Inspection
+            </button>
+            <button
+              onClick={() => navigate('/admin/failure-report')}
+              className="btn btn-secondary flex items-center gap-2"
+            >
+              <AlertCircle className="w-5 h-5" />
+              Failure Report
+            </button>
+            <button
+              onClick={() => navigate('/admin/unmatched-submissions')}
+              className="btn btn-secondary flex items-center gap-2"
+            >
+              <FileSearch className="w-5 h-5" />
+              Unmatched Submissions
+            </button>
+          </div>
+        </section>
+
+        {/* Libraries & assets */}
+        <section>
+          <h2 className="text-lg font-semibold text-gray-900 mb-3">Libraries & assets</h2>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => navigate('/admin/literature')}
+              className="btn btn-secondary flex items-center gap-2"
+            >
+              <BookOpen className="w-5 h-5" />
+              Literature Library
+            </button>
+            <button
+              onClick={() => navigate('/admin/video-library')}
+              className="btn btn-secondary flex items-center gap-2"
+            >
+              <Film className="w-5 h-5" />
+              Video Library
+            </button>
+            <button
+              onClick={() => navigate('/admin/quote-banners')}
+              className="btn btn-secondary flex items-center gap-2"
+            >
+              <Image className="w-5 h-5" />
+              Quote PDF Assets
+            </button>
+          </div>
+        </section>
       </div>
     </div>
   );

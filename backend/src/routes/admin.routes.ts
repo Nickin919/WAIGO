@@ -31,4 +31,7 @@ router.patch('/failure-reports/:id/resolve', adminController.resolveFailureRepor
 router.get('/unmatched-submissions', adminController.getUnmatchedSubmissions);
 router.patch('/unmatched-submissions/:id/ack', adminController.ackUnmatchedSubmission);
 
+// Admin parts search (product inspection)
+router.get('/parts/search', adminController.searchParts);
+
 export default router;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle, Filter, RefreshCw } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { AlertCircle, CheckCircle, Filter, RefreshCw, Search } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 
@@ -193,7 +194,7 @@ const UnmatchedSubmissionsReport = () => {
                   <th className="text-left p-3 font-semibold">Manufacturer</th>
                   <th className="text-left p-3 font-semibold">User</th>
                   <th className="text-left p-3 font-semibold">Status</th>
-                  <th className="text-left p-3 font-semibold w-24">Actions</th>
+                  <th className="text-left p-3 font-semibold w-28">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -231,16 +232,24 @@ const UnmatchedSubmissionsReport = () => {
                         )}
                       </td>
                       <td className="p-3">
-                        {e.status === 'OPEN' && (
-                          <button
-                            type="button"
-                            onClick={() => handleAck(e.id)}
-                            disabled={ackingId !== null}
-                            className="text-green-600 hover:underline"
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <Link
+                            to={`/admin/product-inspection?partNumber=${encodeURIComponent(e.submittedValue)}`}
+                            className="text-wago-green hover:underline flex items-center gap-1"
                           >
-                            {ackingId === e.id ? '...' : 'Ack'}
-                          </button>
-                        )}
+                            <Search className="w-4 h-4" /> Inspect
+                          </Link>
+                          {e.status === 'OPEN' && (
+                            <button
+                              type="button"
+                              onClick={() => handleAck(e.id)}
+                              disabled={ackingId !== null}
+                              className="text-green-600 hover:underline"
+                            >
+                              {ackingId === e.id ? '...' : 'Ack'}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))

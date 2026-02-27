@@ -584,6 +584,13 @@ export const adminApi = {
     api.get('/admin/unmatched-submissions', { params }),
   ackUnmatchedSubmission: (id: string) =>
     api.patch(`/admin/unmatched-submissions/${id}/ack`),
+
+  /** Product inspection: search parts across all catalogs */
+  searchParts: (params?: { q?: string; catalogId?: string; limit?: number; offset?: number }) =>
+    api.get('/admin/parts/search', { params }),
+  /** Update part (admin only; supports all editable Part fields) */
+  updatePart: (id: string, data: Record<string, unknown>) =>
+    api.patch(`/parts/${id}`, data),
 };
 
 // ============================================================================
