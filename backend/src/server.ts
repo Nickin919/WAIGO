@@ -92,17 +92,17 @@ if (process.env.NODE_ENV === 'development') {
 ensureUploadDirs();
 app.use('/uploads', express.static(getUploadDir()));
 
-// Rate limiting: general API (200 req/15 min per IP), stricter for auth (20 req/15 min)
+// Rate limiting: general API (1000 req/15 min per IP), stricter for auth (100 req/15 min)
 app.use('/api', rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX ?? '200', 10),
+  max: parseInt(process.env.RATE_LIMIT_MAX ?? '1000', 10),
   message: { error: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 }));
 app.use('/api/auth', rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_AUTH_MAX ?? '20', 10),
+  max: parseInt(process.env.RATE_LIMIT_AUTH_MAX ?? '100', 10),
   message: { error: 'Too many login attempts, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
