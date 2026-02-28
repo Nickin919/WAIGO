@@ -166,6 +166,9 @@ export const videoApi = {
       headers: { 'Content-Type': 'multipart/form-data' }
     }),
   
+  getFeed: (catalogId: string) =>
+    api.get('/videos/feed', { params: { catalogId } }),
+
   // Admin
   getPending: () =>
     api.get('/videos/pending/all'),
@@ -392,6 +395,7 @@ export const assignmentsApi = {
     api.get('/assignments/users', { params }),
   getAssignmentUser: (userId: string) => api.get(`/assignments/users/${userId}`),
   getMyAssignments: () => api.get('/assignments/me'),
+  setPrimaryProjectBook: (catalogId: string) => api.patch('/assignments/me/primary', { catalogId }),
   assignCatalogs: (data: { userId?: string; userIds?: string[]; catalogIds: string[]; primaryCatalogId?: string }) =>
     api.post('/assignments/catalogs', data),
   assignContracts: (data: { userId?: string; userIds?: string[]; contractIds: string[] }) =>

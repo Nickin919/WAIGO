@@ -5,6 +5,7 @@ import { authenticate, authorize } from '../middleware/auth';
 const router = Router();
 
 router.get('/me', authenticate, assignmentsController.getMyAssignments);
+router.patch('/me/primary', authenticate, assignmentsController.setMyPrimaryProjectBook);
 router.get('/tree', authenticate, authorize('ADMIN', 'RSM', 'DISTRIBUTOR'), assignmentsController.getTree);
 router.get('/users', authenticate, authorize('ADMIN', 'RSM', 'DISTRIBUTOR'), assignmentsController.getUsers);
 router.get('/users/:userId', authenticate, authorize('ADMIN', 'RSM', 'DISTRIBUTOR'), assignmentsController.getAssignmentUser);

@@ -211,7 +211,7 @@ model CostTableItem {
 }
 
 // ============================================================================
-// CATALOG ASSIGNMENTS (Distributors assign catalogs to users)
+// CATALOG ASSIGNMENTS (Distributors assign project books to users; Master can be default)
 // ============================================================================
 
 model CatalogAssignment {
@@ -234,6 +234,9 @@ model CatalogAssignment {
 // ============================================================================
 // CATALOGS & CATEGORIES
 // ============================================================================
+// Terminology: There is exactly ONE Catalog — the MASTER Catalog (isMaster: true).
+// All other rows in this table are Project Books. The table is mapped as
+// "project_books"; use "Catalog" only for the Master, "Project Book" for the rest.
 
 enum CatalogSourceType {
   MANUAL
@@ -246,8 +249,9 @@ model Catalog {
   description      String?
   isActive         Boolean           @default(true) @map("is_active")
   isPublic         Boolean           @default(false) @map("is_public")
-  isMaster         Boolean           @default(false) @map("is_master") // Label: single source of truth (ADMIN)
-  sourceCatalogId  String?           @map("source_project_book_id") // Catalog/Project Book this was built from (MASTER or secondary)
+  isMaster         Boolean           @default(false) @map("is_master") // Exactly one row = true: the single MASTER Catalog; all others are Project Books
+  isDefault        Boolean           @default(false) @map("is_default") // Exactly one row = true: auto-assigned to every new user as their starter project book
+  sourceCatalogId  String?           @map("source_project_book_id") // Project Book (or Master) this was built from
   sourceType       CatalogSourceType @default(MANUAL) @map("source_type") // MANUAL | CONVERTED_FROM_BOM
   sourceProjectId  String?           @map("source_project_id") // Set when converted from Project BOM
   sourceRevision   String?           @map("source_revision") @db.VarChar(100) // BOM revision at conversion

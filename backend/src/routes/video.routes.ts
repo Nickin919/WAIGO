@@ -6,6 +6,7 @@ import { uploadVideo } from '../middleware/upload';
 const router = Router();
 
 // Public/authenticated routes
+router.get('/feed', authenticate, videoController.getVideoFeed);
 router.get('/part/:partId', videoController.getVideosByPart);
 router.get('/:id', videoController.getVideoById);
 router.post('/:id/view', authenticate, videoController.trackVideoView);

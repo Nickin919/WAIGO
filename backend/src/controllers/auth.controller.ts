@@ -27,6 +27,10 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
     // Reclaim: if existing user is FREE (e.g. downgraded by admin), allow re-registration to restore account
     if (existingUser?.role === 'FREE') {
       const passwordHash = await bcrypt.hash(password, 10);
+      const reclaimDefaultBook = await prisma.catalog.findFirst({
+        where: { isDefault: true, isActive: true },
+        select: { id: true },
+      });
       const user = await prisma.user.update({
         where: { id: existingUser.id },
         data: {
@@ -36,6 +40,7 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
           lastName: lastName ?? existingUser.lastName,
           role: role || 'BASIC',
           isActive: true,
+          ...(reclaimDefaultBook && !existingUser.catalogId ? { catalogId: reclaimDefaultBook.id } : {}),
         },
         select: {
           id: true,
@@ -50,6 +55,14 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
           createdAt: true,
         },
       });
+      if (reclaimDefaultBook) {
+        const hasAssignment = await prisma.catalogAssignment.findFirst({ where: { userId: user.id } });
+        if (!hasAssignment) {
+          await prisma.catalogAssignment.create({
+            data: { catalogId: reclaimDefaultBook.id, userId: user.id, isPrimary: true, assignedById: user.id },
+          }).catch(() => {});
+        }
+      }
       const token = generateToken({
         userId: user.id,
         email: user.email ?? '',
@@ -69,6 +82,12 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
+    // Look up the default project book before creating user so we can set catalogId inline
+    const defaultBook = await prisma.catalog.findFirst({
+      where: { isDefault: true, isActive: true },
+      select: { id: true },
+    });
+
     // Create user (full schema: passwordHash, firstName, lastName, catalogId, etc.)
     const user = await prisma.user.create({
       data: {
@@ -76,7 +95,8 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
         passwordHash,
         firstName,
         lastName,
-        role: role || 'BASIC'
+        role: role || 'BASIC',
+        ...(defaultBook ? { catalogId: defaultBook.id } : {}),
       },
       select: {
         id: true,
@@ -91,6 +111,18 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
         createdAt: true
       }
     });
+
+    // Auto-assign the default project book (creates CatalogAssignment so /assignments/me returns it)
+    if (defaultBook) {
+      await prisma.catalogAssignment.create({
+        data: {
+          catalogId: defaultBook.id,
+          userId: user.id,
+          isPrimary: true,
+          assignedById: user.id,
+        },
+      }).catch(() => {}); // safe: ignore if already exists
+    }
 
     // Generate token
     const token = generateToken({

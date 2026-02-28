@@ -402,10 +402,53 @@ export const getMyAssignments = async (req: AuthRequest, res: Response): Promise
     res.json({
       catalogs: catalogsPayload,
       primaryCatalogId,
+      hasAssignedProjectBooks: catalogAssignments.length > 0,
       priceContracts: priceContractAssignments.map((a) => a.contract),
     });
   } catch (error) {
     console.error('Get my assignments error:', error);
     res.status(500).json({ error: 'Failed to load assignments' });
+  }
+};
+
+/**
+ * PATCH /api/assignments/me/primary – current user sets their own active project book
+ */
+export const setMyPrimaryProjectBook = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const { catalogId } = req.body as { catalogId?: string };
+    if (!catalogId) {
+      res.status(400).json({ error: 'catalogId is required' });
+      return;
+    }
+    const userId = req.user.id;
+
+    // Verify this project book is actually assigned to the user
+    const assignment = await prisma.catalogAssignment.findUnique({
+      where: { catalogId_userId: { catalogId, userId } },
+    });
+    if (!assignment) {
+      res.status(403).json({ error: 'This project book is not assigned to you' });
+      return;
+    }
+
+    // Transaction: clear all primaries → set new primary → update user.catalogId
+    await prisma.$transaction([
+      prisma.catalogAssignment.updateMany({ where: { userId }, data: { isPrimary: false } }),
+      prisma.catalogAssignment.update({
+        where: { catalogId_userId: { catalogId, userId } },
+        data: { isPrimary: true },
+      }),
+      prisma.user.update({ where: { id: userId }, data: { catalogId } }),
+    ]);
+
+    res.json({ success: true, primaryCatalogId: catalogId });
+  } catch (error) {
+    console.error('Set primary project book error:', error);
+    res.status(500).json({ error: 'Failed to set primary project book' });
   }
 };

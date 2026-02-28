@@ -310,3 +310,43 @@ export const deleteVideo = async (req: AuthRequest, res: Response): Promise<void
     res.status(500).json({ error: 'Failed to delete video' });
   }
 };
+
+/**
+ * GET /api/videos/feed?catalogId= – video feed for a project book
+ * Returns all APPROVED videos whose parts are in the given project book (via CatalogItem).
+ */
+export const getVideoFeed = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { catalogId } = req.query as { catalogId?: string };
+    if (!catalogId) {
+      res.status(400).json({ error: 'catalogId is required' });
+      return;
+    }
+
+    // Collect part IDs that belong to this project book
+    const catalogItems = await prisma.catalogItem.findMany({
+      where: { catalogId },
+      select: { productId: true },
+    });
+    const partIds = catalogItems.map((i) => i.productId).filter((id): id is string => id !== null);
+
+    if (partIds.length === 0) {
+      res.json({ videos: [] });
+      return;
+    }
+
+    const videos = await prisma.video.findMany({
+      where: { partId: { in: partIds }, status: 'APPROVED' },
+      include: {
+        part: { select: { partNumber: true, description: true } },
+        _count: { select: { views: true, comments: true } },
+      },
+      orderBy: [{ level: 'asc' }, { createdAt: 'desc' }],
+    });
+
+    res.json({ videos });
+  } catch (error) {
+    console.error('Get video feed error:', error);
+    res.status(500).json({ error: 'Failed to load video feed' });
+  }
+};

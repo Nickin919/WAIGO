@@ -304,8 +304,34 @@ export const deleteUserCatalog = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
-    await prisma.catalog.delete({
-      where: { id }
+    // Resolve blocking references (DB FKs were re-added without ON DELETE)
+    const masterCatalog = await prisma.catalog.findFirst({
+      where: { isMaster: true, isActive: true, id: { not: id } },
+      select: { id: true }
+    });
+    const quotesUsingCatalog = await prisma.quote.count({ where: { catalogId: id } });
+    if (quotesUsingCatalog > 0 && !masterCatalog) {
+      res.status(400).json({
+        error: 'Cannot delete project book',
+        detail: `${quotesUsingCatalog} quote(s) use this project book. Reassign them to another project book first, or ensure a Master project book exists.`
+      });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Clear or reassign references so FK constraints allow delete
+      await tx.user.updateMany({ where: { catalogId: id }, data: { catalogId: null } });
+      await tx.project.updateMany({ where: { catalogId: id }, data: { catalogId: null } });
+      if (masterCatalog && quotesUsingCatalog > 0) {
+        await tx.quote.updateMany({ where: { catalogId: id }, data: { catalogId: masterCatalog.id } });
+      }
+      await tx.catalog.updateMany({ where: { sourceCatalogId: id }, data: { sourceCatalogId: null } });
+      // Delete dependents in order (Part → Category due to Part.categoryId)
+      await tx.catalogItem.deleteMany({ where: { catalogId: id } });
+      await tx.part.deleteMany({ where: { catalogId: id } });
+      await tx.category.deleteMany({ where: { catalogId: id } });
+      await tx.catalogAssignment.deleteMany({ where: { catalogId: id } });
+      await tx.catalog.delete({ where: { id } });
     });
 
     res.status(204).send();

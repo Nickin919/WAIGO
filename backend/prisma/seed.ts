@@ -38,6 +38,105 @@ async function main() {
       console.log('⏭️ Master Catalog already exists');
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Default Project Book ("WAGO Getting Started")
+    // Auto-assigned to every new user on registration so they see content immediately.
+    // ─────────────────────────────────────────────────────────────────────────
+    let defaultProjectBook = await prisma.catalog.findFirst({
+      where: { isDefault: true },
+    });
+
+    if (!defaultProjectBook) {
+      defaultProjectBook = await prisma.catalog.create({
+        data: {
+          name: 'WAGO Getting Started',
+          description: 'Your starter project book. Contains introductory WAGO products curated for new users.',
+          isDefault: true,
+          isActive: true,
+          isPublic: false,
+        },
+      });
+      console.log('✅ Created Default Project Book: WAGO Getting Started');
+    } else {
+      console.log('⏭️ Default Project Book already exists');
+    }
+
+    // Find the seed part: search by $0.01 price OR description containing "Default item"
+    const seedPart = await prisma.part.findFirst({
+      where: {
+        OR: [
+          { basePrice: 0.01 },
+          { description: { contains: 'Default item', mode: 'insensitive' } },
+          { partNumber: { contains: 'WAGO-Hist', mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true, gridLevelNumber: true, gridSublevelNumber: true },
+    });
+
+    if (seedPart) {
+      // 1. Set grid metadata (Level 1 / Sublevel 1 = first cell in Quick Grid)
+      if (!seedPart.gridLevelNumber || !seedPart.gridSublevelNumber) {
+        await prisma.part.update({
+          where: { id: seedPart.id },
+          data: { gridLevelNumber: 1, gridSublevelNumber: 1, gridLevelName: 'Level 1', gridSublevelName: '001' },
+        });
+        console.log('✅ Set grid metadata on seed part (Level 1 / Sublevel 1)');
+      }
+
+      // 2. Link the default project book to the seed part via CatalogItem
+      const existingItem = await prisma.catalogItem.findFirst({
+        where: { catalogId: defaultProjectBook.id, productId: seedPart.id },
+      });
+      if (!existingItem) {
+        await prisma.catalogItem.create({
+          data: { catalogId: defaultProjectBook.id, productId: seedPart.id },
+        });
+        console.log('✅ Linked seed part to Default Project Book');
+      }
+
+      // 3. Link an existing APPROVED video to the seed part (if not already linked)
+      const existingVideo = await prisma.video.findFirst({ where: { partId: seedPart.id, status: 'APPROVED' } });
+      if (!existingVideo) {
+        const unlinkedVideo = await prisma.video.findFirst({ where: { partId: null, status: 'APPROVED' } });
+        if (unlinkedVideo) {
+          await prisma.video.update({ where: { id: unlinkedVideo.id }, data: { partId: seedPart.id } });
+          console.log('✅ Linked approved video to seed part');
+        }
+      }
+
+      // 4. Link an existing literature item to the seed part (if not already linked)
+      const existingLitLink = await prisma.literaturePart.findFirst({ where: { partId: seedPart.id } });
+      if (!existingLitLink) {
+        const literature = await prisma.literature.findFirst({
+          where: { parts: { none: { partId: seedPart.id } } },
+        });
+        if (literature) {
+          await prisma.literaturePart.create({ data: { literatureId: literature.id, partId: seedPart.id } });
+          console.log('✅ Linked literature to seed part');
+        }
+      }
+    } else {
+      console.log('⚠️  Seed part not found (no part with $0.01 price in Master Catalog). Skipping part wiring.');
+    }
+
+    // Backfill: assign default project book to all existing non-FREE users with no catalog assignments
+    const unassignedUsers = await prisma.user.findMany({
+      where: {
+        role: { notIn: ['FREE'] },
+        catalogAssignments: { none: {} },
+      },
+      select: { id: true },
+    });
+    if (unassignedUsers.length > 0) {
+      for (const u of unassignedUsers) {
+        await prisma.catalogAssignment.create({
+          data: { catalogId: defaultProjectBook.id, userId: u.id, isPrimary: true, assignedById: u.id },
+        }).catch(() => {});
+        await prisma.user.update({ where: { id: u.id }, data: { catalogId: defaultProjectBook.id } });
+      }
+      console.log(`✅ Backfilled ${unassignedUsers.length} user(s) with Default Project Book`);
+    }
+
     // Literature zip milestone (bytes; default 15MB)
     const zipKey = 'literature_zip_milestone';
     const existingZip = await prisma.settings.findUnique({ where: { key: zipKey } });

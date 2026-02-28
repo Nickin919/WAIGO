@@ -58,7 +58,8 @@ const CatalogList = () => {
       loadCatalogs();
     } catch (error: any) {
       console.error('Delete error:', error);
-      toast.error(error.response?.data?.error || 'Failed to delete project book');
+      const msg = error.response?.data?.detail || error.response?.data?.error || 'Failed to delete project book';
+      toast.error(msg);
     } finally {
       setDeletingCatalogId(null);
     }
