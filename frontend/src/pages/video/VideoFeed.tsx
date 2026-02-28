@@ -431,9 +431,9 @@ const VideoFeed = () => {
             </div>
           </div>
 
-          {/* Action buttons — stopPropagation so tap doesn't toggle play; high z-index and visible on any video */}
+          {/* Action buttons — stopPropagation so tap doesn't toggle play; high z-index and visible on any video; raised to avoid overlapping PiP control */}
           <div
-            className="absolute right-4 bottom-24 flex flex-col space-y-6 z-20"
+            className="absolute right-4 bottom-40 flex flex-col space-y-6 z-20"
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
           >
@@ -563,7 +563,7 @@ const VideoFeed = () => {
       {showPlaylistDropdown && (
         <div className="fixed inset-0 z-50" onClick={() => setShowPlaylistDropdown(false)}>
           <div
-            className="absolute right-4 bottom-32 w-56 bg-gray-900 border border-gray-700 rounded-xl shadow-xl py-2"
+            className="absolute right-4 bottom-56 w-56 bg-gray-900 border border-gray-700 rounded-xl shadow-xl py-2"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-3 py-2 text-xs text-gray-400 border-b border-gray-700">Add to playlist</div>
