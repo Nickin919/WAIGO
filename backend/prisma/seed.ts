@@ -119,22 +119,31 @@ async function main() {
       console.log('⚠️  Seed part not found (no part with $0.01 price in Master Catalog). Skipping part wiring.');
     }
 
-    // Backfill: assign default project book to all existing non-FREE users with no catalog assignments
-    const unassignedUsers = await prisma.user.findMany({
-      where: {
-        role: { notIn: ['FREE'] },
-        catalogAssignments: { none: {} },
-      },
+    // Backfill: ensure ALL non-FREE users have the default project book assigned and set as primary.
+    // This runs safely for users who already have other assignments (adds the default book without removing others).
+    const allNonFreeUsers = await prisma.user.findMany({
+      where: { role: { notIn: ['FREE'] } },
       select: { id: true },
     });
-    if (unassignedUsers.length > 0) {
-      for (const u of unassignedUsers) {
-        await prisma.catalogAssignment.create({
-          data: { catalogId: defaultProjectBook.id, userId: u.id, isPrimary: true, assignedById: u.id },
-        }).catch(() => {});
-        await prisma.user.update({ where: { id: u.id }, data: { catalogId: defaultProjectBook.id } });
-      }
-      console.log(`✅ Backfilled ${unassignedUsers.length} user(s) with Default Project Book`);
+    let backfillCount = 0;
+    for (const u of allNonFreeUsers) {
+      // Upsert the default project book assignment (safe if already exists)
+      await prisma.catalogAssignment.upsert({
+        where: { catalogId_userId: { catalogId: defaultProjectBook.id, userId: u.id } },
+        create: { catalogId: defaultProjectBook.id, userId: u.id, isPrimary: true, assignedById: u.id },
+        update: { isPrimary: true },
+      });
+      // Clear isPrimary on all other assignments for this user
+      await prisma.catalogAssignment.updateMany({
+        where: { userId: u.id, catalogId: { not: defaultProjectBook.id } },
+        data: { isPrimary: false },
+      });
+      // Set user.catalogId to the default project book
+      await prisma.user.update({ where: { id: u.id }, data: { catalogId: defaultProjectBook.id } });
+      backfillCount++;
+    }
+    if (backfillCount > 0) {
+      console.log(`✅ Backfilled/updated ${backfillCount} user(s): Default Project Book set as primary`);
     }
 
     // Literature zip milestone (bytes; default 15MB)
