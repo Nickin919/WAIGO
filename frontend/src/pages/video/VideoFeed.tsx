@@ -9,6 +9,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
+// #region agent log
+const DEBUG_LOG = (message: string, data?: Record<string, unknown>) => {
+  const payload = { sessionId: '0288e1', location: 'VideoFeed.tsx', message, data: data ?? {}, timestamp: Date.now() };
+  console.log('[VideoFeed debug]', message, payload);
+  fetch('http://127.0.0.1:7242/ingest/3b168631-beca-4109-b9fb-808d8bac595c', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0288e1' },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+};
+// #endregion
+
 interface Video {
   id: string;
   title: string;
@@ -91,6 +103,9 @@ const VideoFeed = () => {
   }, [currentIndex]);
 
   const togglePlay = useCallback(() => {
+    // #region agent log
+    DEBUG_LOG('togglePlay called');
+    // #endregion
     if (didSwipeRef.current) return;
     const v = videoRef.current;
     if (!v) return;
@@ -121,6 +136,10 @@ const VideoFeed = () => {
 
   const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
+    // #region agent log
+    DEBUG_LOG('handleLike called', { videoId: currentVideo?.id, guest });
+    // #endregion
     if (guest) { toast.error('Sign in to save favorites'); return; }
     if (!currentVideo) return;
     try {
@@ -144,6 +163,10 @@ const VideoFeed = () => {
 
   const handleComment = (e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
+    // #region agent log
+    DEBUG_LOG('handleComment called', { guest });
+    // #endregion
     if (guest) { toast.error('Sign in to view comments'); return; }
     setShowComments(true);
   };
@@ -179,6 +202,10 @@ const VideoFeed = () => {
 
   const handleShare = (e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
+    // #region agent log
+    DEBUG_LOG('handleShare called');
+    // #endregion
     const url = window.location.href;
     if (navigator.share && typeof navigator.share === 'function') {
       navigator
@@ -202,6 +229,10 @@ const VideoFeed = () => {
 
   const handleBookmark = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
+    // #region agent log
+    DEBUG_LOG('handleBookmark called', { guest });
+    // #endregion
     if (guest) { toast.error('Sign in to save to playlist'); return; }
     try {
       const res = await videoLibraryApi.getPlaylists();
@@ -306,6 +337,12 @@ const VideoFeed = () => {
 
   const currentVideo = videos[currentIndex];
 
+  // #region agent log
+  useEffect(() => {
+    DEBUG_LOG('VideoFeed render with videos', { videoCount: videos.length, currentIndex, hasCurrentVideo: !!currentVideo });
+  }, [videos.length, currentIndex, currentVideo]);
+  // #endregion
+
   return (
     <div
       ref={containerRef}
@@ -394,22 +431,42 @@ const VideoFeed = () => {
             </div>
           </div>
 
-          {/* Action buttons — stopPropagation so tap doesn't toggle play */}
-          <div className="absolute right-4 bottom-24 flex flex-col space-y-6 z-10" onClick={(e) => e.stopPropagation()}>
-            <button onClick={handleLike} className="flex flex-col items-center text-white hover:scale-110 transition-transform">
-              <Heart className={clsx('w-8 h-8 mb-1', currentVideo?.isFavorited && 'fill-red-500')} />
+          {/* Action buttons — stopPropagation so tap doesn't toggle play; high z-index and visible on any video */}
+          <div
+            className="absolute right-4 bottom-24 flex flex-col space-y-6 z-20"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={handleLike}
+              className="flex flex-col items-center justify-center min-w-[48px] min-h-[48px] rounded-xl bg-black/50 backdrop-blur-sm border border-white/30 text-white hover:scale-110 hover:bg-black/70 transition-all shadow-lg [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]"
+            >
+              <Heart className={clsx('w-8 h-8 mb-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]', currentVideo?.isFavorited && 'fill-red-500')} />
               <span className="text-xs">{currentVideo?._count?.favorites ?? 0}</span>
             </button>
-            <button onClick={handleComment} className="flex flex-col items-center text-white hover:scale-110 transition-transform">
-              <MessageCircle className="w-8 h-8 mb-1" />
+            <button
+              type="button"
+              onClick={handleComment}
+              className="flex flex-col items-center justify-center min-w-[48px] min-h-[48px] rounded-xl bg-black/50 backdrop-blur-sm border border-white/30 text-white hover:scale-110 hover:bg-black/70 transition-all shadow-lg [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]"
+            >
+              <MessageCircle className="w-8 h-8 mb-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]" />
               <span className="text-xs">{currentVideo?._count?.comments ?? 0}</span>
             </button>
-            <button onClick={handleShare} className="flex flex-col items-center text-white hover:scale-110 transition-transform">
-              <Share2 className="w-8 h-8 mb-1" />
+            <button
+              type="button"
+              onClick={handleShare}
+              className="flex flex-col items-center justify-center min-w-[48px] min-h-[48px] rounded-xl bg-black/50 backdrop-blur-sm border border-white/30 text-white hover:scale-110 hover:bg-black/70 transition-all shadow-lg [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]"
+            >
+              <Share2 className="w-8 h-8 mb-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]" />
               <span className="text-xs">Share</span>
             </button>
-            <button onClick={handleBookmark} className="flex flex-col items-center text-white hover:scale-110 transition-transform">
-              <Bookmark className="w-8 h-8 mb-1" />
+            <button
+              type="button"
+              onClick={handleBookmark}
+              className="flex flex-col items-center justify-center min-w-[48px] min-h-[48px] rounded-xl bg-black/50 backdrop-blur-sm border border-white/30 text-white hover:scale-110 hover:bg-black/70 transition-all shadow-lg [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]"
+            >
+              <Bookmark className="w-8 h-8 mb-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]" />
               <span className="text-xs">Save</span>
             </button>
           </div>
