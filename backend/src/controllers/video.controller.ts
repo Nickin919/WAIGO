@@ -339,12 +339,27 @@ export const getVideoFeed = async (req: AuthRequest, res: Response): Promise<voi
       where: { partId: { in: partIds }, status: 'APPROVED' },
       include: {
         part: { select: { partNumber: true, description: true } },
-        _count: { select: { views: true, comments: true } },
+        _count: { select: { views: true, comments: true, favorites: true } },
       },
       orderBy: [{ level: 'asc' }, { createdAt: 'desc' }],
     });
 
-    res.json({ videos });
+    const userId = req.user?.id;
+    let favoritedSet: Set<string> = new Set();
+    if (userId && videos.length > 0) {
+      const favs = await prisma.videoFavorite.findMany({
+        where: { userId, videoId: { in: videos.map((v) => v.id) } },
+        select: { videoId: true },
+      });
+      favoritedSet = new Set(favs.map((f) => f.videoId));
+    }
+
+    const videosWithFavorited = videos.map((v) => ({
+      ...v,
+      isFavorited: favoritedSet.has(v.id),
+    }));
+
+    res.json({ videos: videosWithFavorited });
   } catch (error) {
     console.error('Get video feed error:', error);
     res.status(500).json({ error: 'Failed to load video feed' });
