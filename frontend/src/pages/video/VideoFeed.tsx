@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Heart, MessageCircle, Share2, Bookmark, ChevronDown } from 'lucide-react';
 import { videoApi } from '@/lib/api';
 import { useAuthStore, isGuestUser } from '@/stores/authStore';
@@ -30,7 +30,10 @@ const VideoFeed = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const startY = useRef(0);
+  const [videoError, setVideoError] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const {
     activeCatalogId,
@@ -65,6 +68,22 @@ const VideoFeed = () => {
       setLoading(false);
     }
   };
+
+  // Reset video state when switching videos
+  useEffect(() => {
+    setVideoError(false);
+    setIsPlaying(false);
+    if (videoRef.current) {
+      videoRef.current.load();
+    }
+  }, [currentIndex]);
+
+  const togglePlay = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) { v.play(); setIsPlaying(true); }
+    else { v.pause(); setIsPlaying(false); }
+  }, []);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     startY.current = e.touches[0].clientY;
@@ -198,14 +217,41 @@ const VideoFeed = () => {
           className="absolute inset-0"
         >
           {/* Video Player */}
-          <div className="w-full h-full bg-gradient-to-br from-blue-700 to-green-600 flex items-center justify-center">
-            <div className="text-center text-white">
-              <svg className="w-24 h-24 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-              </svg>
-              <p className="text-lg">Video Player</p>
-              <p className="text-sm opacity-75">Swipe up/down for more videos</p>
-            </div>
+          <div className="w-full h-full bg-black relative" onClick={togglePlay}>
+            {currentVideo?.videoUrl && !videoError ? (
+              <>
+                <video
+                  ref={videoRef}
+                  src={currentVideo.videoUrl}
+                  className="w-full h-full object-cover"
+                  playsInline
+                  preload="metadata"
+                  onError={() => setVideoError(true)}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                />
+                {/* Play/pause tap indicator */}
+                {!isPlaying && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-16 h-16 bg-black/40 rounded-full flex items-center justify-center">
+                      <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-wago-dark to-green-800 flex items-center justify-center">
+                <div className="text-center text-white">
+                  <svg className="w-20 h-20 mx-auto mb-4 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-sm opacity-60">{videoError ? 'Video unavailable' : 'No preview available'}</p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Video overlay info */}

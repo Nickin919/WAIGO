@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, FolderOpen, Edit, Trash2, Package, ExternalLink } from 'lucide-react';
+import { Plus, FolderOpen, Edit, Trash2, Package, ExternalLink, CheckCircle2, Radio } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { assignmentsApi } from '@/lib/api';
+import { useAuthStore } from '@/stores/authStore';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface CreatedCatalog {
   id: string;
@@ -26,6 +28,10 @@ const CatalogList = () => {
   const [assignedCatalogs, setAssignedCatalogs] = useState<AssignedCatalog[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingCatalogId, setDeletingCatalogId] = useState<string | null>(null);
+  const [settingActiveCatalogId, setSettingActiveCatalogId] = useState<string | null>(null);
+
+  const updateUser = useAuthStore((s) => s.updateUser);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     loadCatalogs();
@@ -46,6 +52,26 @@ const CatalogList = () => {
       toast.error('Failed to load project books');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSetActive = async (catalogId: string) => {
+    setSettingActiveCatalogId(catalogId);
+    try {
+      await assignmentsApi.setPrimaryProjectBook(catalogId);
+      // Update auth store + invalidate assignments query so bar in Catalog/VideoFeed refreshes
+      updateUser({ catalogId });
+      queryClient.invalidateQueries({ queryKey: ['assignments', 'me'] });
+      // Update local state immediately
+      setAssignedCatalogs((prev) =>
+        prev.map((c) => ({ ...c, isPrimary: c.id === catalogId }))
+      );
+      toast.success('Active project book updated');
+    } catch (error: any) {
+      console.error('Set active error:', error);
+      toast.error(error?.response?.data?.error ?? 'Failed to set active project book');
+    } finally {
+      setSettingActiveCatalogId(null);
     }
   };
 
@@ -94,26 +120,70 @@ const CatalogList = () => {
       {/* Assigned to you */}
       {assignedCatalogs.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-3">Assigned to you</h2>
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-lg font-semibold text-gray-900">Assigned to you</h2>
+            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+              Your active project book drives Quick Grid and Video Academy content
+            </span>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {assignedCatalogs.map((c) => (
-              <Link
-                key={c.id}
-                to={`/catalog?catalogId=${encodeURIComponent(c.id)}`}
-                className="card p-4 hover:shadow-md transition-shadow flex items-center justify-between"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <FolderOpen className="w-5 h-5 text-green-600" />
+            {assignedCatalogs.map((c) => {
+              const isActive = c.isPrimary;
+              const isSetting = settingActiveCatalogId === c.id;
+              return (
+                <div
+                  key={c.id}
+                  className={`card p-4 transition-all ${isActive ? 'border-green-500 ring-1 ring-green-400' : 'border-gray-200'}`}
+                >
+                  {/* Top row: icon + name + active badge */}
+                  <div className="flex items-center gap-3 min-w-0 mb-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isActive ? 'bg-green-600' : 'bg-green-100'}`}>
+                      {isActive
+                        ? <CheckCircle2 className="w-5 h-5 text-white" />
+                        : <FolderOpen className="w-5 h-5 text-green-600" />
+                      }
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="font-medium text-gray-900 truncate block">{c.name}</span>
+                      {isActive && (
+                        <span className="text-xs text-green-700 font-medium">Active — driving your content</span>
+                      )}
+                    </div>
                   </div>
-                  <span className="font-medium text-gray-900 truncate">{c.name}</span>
-                  {c.isPrimary && (
-                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded flex-shrink-0">Primary</span>
-                  )}
+
+                  {/* Action row */}
+                  <div className="flex items-center gap-2">
+                    <Link
+                      to={`/catalog?catalogId=${encodeURIComponent(c.id)}`}
+                      className="btn btn-secondary flex items-center gap-1.5 text-xs flex-1 justify-center"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      View Grid
+                    </Link>
+                    {!isActive && (
+                      <button
+                        onClick={() => handleSetActive(c.id)}
+                        disabled={isSetting}
+                        className="btn btn-primary flex items-center gap-1.5 text-xs flex-1 justify-center disabled:opacity-60"
+                      >
+                        {isSetting ? (
+                          <span className="inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Radio className="w-3.5 h-3.5" />
+                        )}
+                        {isSetting ? 'Setting...' : 'Set as Active'}
+                      </button>
+                    )}
+                    {isActive && (
+                      <div className="flex items-center gap-1.5 text-xs text-green-700 font-medium flex-1 justify-center py-1.5 px-3 bg-green-50 rounded-lg border border-green-200">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Currently Active
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <ExternalLink className="w-4 h-4 text-gray-400 flex-shrink-0" />
-              </Link>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}

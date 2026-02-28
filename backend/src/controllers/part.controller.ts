@@ -10,45 +10,61 @@ export const getPartsByCatalog = async (req: AuthRequest, res: Response): Promis
   try {
     const { catalogId } = req.params;
     const { search, limit = '50', offset = '0' } = req.query;
+    const take = parseInt(limit as string);
+    const skip = parseInt(offset as string);
 
-    const where: any = { catalogId };
+    // Determine catalog type: Master Catalog owns parts directly (Part.catalogId).
+    // Project Books reference parts via CatalogItem. Resolve accordingly.
+    const catalog = await prisma.catalog.findUnique({
+      where: { id: catalogId },
+      select: { isMaster: true },
+    });
 
-    if (search) {
-      where.OR = [
-        { partNumber: { contains: search as string, mode: 'insensitive' } },
-        { description: { contains: search as string, mode: 'insensitive' } }
-      ];
+    let baseWhere: any;
+
+    if (!catalog || catalog.isMaster) {
+      // Master Catalog: query by Part.catalogId
+      baseWhere = { catalogId };
+    } else {
+      // Project Book: resolve parts via CatalogItem
+      const items = await prisma.catalogItem.findMany({
+        where: { catalogId, productId: { not: null } },
+        select: { productId: true },
+      });
+      const partIds = items.map((i) => i.productId).filter((id): id is string => id !== null);
+      if (partIds.length === 0) {
+        res.json({ parts: [], total: 0, limit: take, offset: skip });
+        return;
+      }
+      baseWhere = { id: { in: partIds } };
     }
+
+    const searchFilter = search
+      ? {
+          OR: [
+            { partNumber: { contains: search as string, mode: 'insensitive' } },
+            { description: { contains: search as string, mode: 'insensitive' } },
+          ],
+        }
+      : null;
+
+    const where = searchFilter ? { AND: [baseWhere, searchFilter] } : baseWhere;
 
     const [parts, total] = await Promise.all([
       prisma.part.findMany({
         where,
         include: {
-          category: {
-            select: {
-              id: true,
-              name: true
-            }
-          },
-          _count: {
-            select: {
-              videos: true
-            }
-          }
+          category: { select: { id: true, name: true } },
+          _count: { select: { videos: true } },
         },
-        take: parseInt(limit as string),
-        skip: parseInt(offset as string),
-        orderBy: { partNumber: 'asc' }
+        take,
+        skip,
+        orderBy: { partNumber: 'asc' },
       }),
-      prisma.part.count({ where })
+      prisma.part.count({ where }),
     ]);
 
-    res.json({
-      parts,
-      total,
-      limit: parseInt(limit as string),
-      offset: parseInt(offset as string)
-    });
+    res.json({ parts, total, limit: take, offset: skip });
   } catch (error) {
     console.error('Get parts by catalog error:', error);
     res.status(500).json({ error: 'Failed to fetch parts' });
