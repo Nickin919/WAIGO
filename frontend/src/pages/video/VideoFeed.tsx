@@ -412,7 +412,7 @@ const VideoFeed = () => {
           </div>
 
           {/* Video overlay info */}
-          <div className="absolute bottom-24 left-4 right-20 text-white z-10">
+          <div className="absolute bottom-24 left-4 right-20 text-white z-10 pointer-events-none">
             <h2 className="text-xl font-bold mb-2" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
               {currentVideo?.title}
             </h2>
@@ -431,50 +431,12 @@ const VideoFeed = () => {
             </div>
           </div>
 
-          {/* Action buttons — stopPropagation so tap doesn't toggle play; high z-index and visible on any video; raised to avoid overlapping PiP control */}
-          <div
-            className="absolute right-4 bottom-40 flex flex-col space-y-6 z-20"
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={handleLike}
-              className="flex flex-col items-center justify-center min-w-[48px] min-h-[48px] rounded-xl bg-black/50 backdrop-blur-sm border border-white/30 text-white hover:scale-110 hover:bg-black/70 transition-all shadow-lg [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]"
-            >
-              <Heart className={clsx('w-8 h-8 mb-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]', currentVideo?.isFavorited && 'fill-red-500')} />
-              <span className="text-xs">{currentVideo?._count?.favorites ?? 0}</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleComment}
-              className="flex flex-col items-center justify-center min-w-[48px] min-h-[48px] rounded-xl bg-black/50 backdrop-blur-sm border border-white/30 text-white hover:scale-110 hover:bg-black/70 transition-all shadow-lg [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]"
-            >
-              <MessageCircle className="w-8 h-8 mb-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]" />
-              <span className="text-xs">{currentVideo?._count?.comments ?? 0}</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleShare}
-              className="flex flex-col items-center justify-center min-w-[48px] min-h-[48px] rounded-xl bg-black/50 backdrop-blur-sm border border-white/30 text-white hover:scale-110 hover:bg-black/70 transition-all shadow-lg [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]"
-            >
-              <Share2 className="w-8 h-8 mb-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]" />
-              <span className="text-xs">Share</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleBookmark}
-              className="flex flex-col items-center justify-center min-w-[48px] min-h-[48px] rounded-xl bg-black/50 backdrop-blur-sm border border-white/30 text-white hover:scale-110 hover:bg-black/70 transition-all shadow-lg [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]"
-            >
-              <Bookmark className="w-8 h-8 mb-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]" />
-              <span className="text-xs">Save</span>
-            </button>
-          </div>
+          {/* Action buttons moved outside — see below (video layer was capturing clicks when playing) */}
 
           {/* Swipe hint */}
           {currentIndex < videos.length - 1 && (
             <motion.div
-              className="absolute bottom-8 left-1/2 transform -translate-x-1/2 text-white flex flex-col items-center"
+              className="absolute bottom-8 left-1/2 transform -translate-x-1/2 text-white flex flex-col items-center pointer-events-none"
               animate={{ y: [0, 10, 0] }}
               transition={{ repeat: Infinity, duration: 2 }}
             >
@@ -484,7 +446,7 @@ const VideoFeed = () => {
           )}
 
           {/* Progress indicator */}
-          <div className="absolute top-16 left-1/2 transform -translate-x-1/2 flex space-x-1 z-10">
+          <div className="absolute top-16 left-1/2 transform -translate-x-1/2 flex space-x-1 z-10 pointer-events-none">
             {videos.map((_, index) => (
               <div
                 key={index}
@@ -498,6 +460,45 @@ const VideoFeed = () => {
         </motion.div>
       </AnimatePresence>
 
+      {/* Action buttons OUTSIDE video layer so they always receive clicks when video is playing */}
+      <div className="absolute right-4 bottom-40 flex flex-col space-y-6 z-30" style={{ isolation: 'isolate' }}>
+        <button
+          type="button"
+          onClick={handleLike}
+          data-testid="video-feed-like"
+          className="flex flex-col items-center justify-center min-w-[48px] min-h-[48px] rounded-xl bg-black/50 backdrop-blur-sm border border-white/30 text-white hover:scale-110 hover:bg-black/70 transition-all shadow-lg [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]"
+        >
+          <Heart className={clsx('w-8 h-8 mb-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]', currentVideo?.isFavorited && 'fill-red-500')} />
+          <span className="text-xs">{currentVideo?._count?.favorites ?? 0}</span>
+        </button>
+        <button
+          type="button"
+          onClick={handleComment}
+          data-testid="video-feed-comment"
+          className="flex flex-col items-center justify-center min-w-[48px] min-h-[48px] rounded-xl bg-black/50 backdrop-blur-sm border border-white/30 text-white hover:scale-110 hover:bg-black/70 transition-all shadow-lg [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]"
+        >
+          <MessageCircle className="w-8 h-8 mb-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]" />
+          <span className="text-xs">{currentVideo?._count?.comments ?? 0}</span>
+        </button>
+        <button
+          type="button"
+          onClick={handleShare}
+          data-testid="video-feed-share"
+          className="flex flex-col items-center justify-center min-w-[48px] min-h-[48px] rounded-xl bg-black/50 backdrop-blur-sm border border-white/30 text-white hover:scale-110 hover:bg-black/70 transition-all shadow-lg [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]"
+        >
+          <Share2 className="w-8 h-8 mb-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]" />
+          <span className="text-xs">Share</span>
+        </button>
+        <button
+          type="button"
+          onClick={handleBookmark}
+          data-testid="video-feed-save"
+          className="flex flex-col items-center justify-center min-w-[48px] min-h-[48px] rounded-xl bg-black/50 backdrop-blur-sm border border-white/30 text-white hover:scale-110 hover:bg-black/70 transition-all shadow-lg [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]"
+        >
+          <Bookmark className="w-8 h-8 mb-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]" />
+          <span className="text-xs">Save</span>
+        </button>
+      </div>
       {/* Next-video preview strip — desktop only */}
       {videos.length > 1 && (
         <div className="hidden md:flex absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-black/90 to-transparent z-10 items-end justify-center gap-2 pb-2 px-4">
