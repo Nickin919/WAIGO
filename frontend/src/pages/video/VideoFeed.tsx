@@ -9,18 +9,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
-// #region agent log
-const DEBUG_LOG = (message: string, data?: Record<string, unknown>) => {
-  const payload = { sessionId: '0288e1', location: 'VideoFeed.tsx', message, data: data ?? {}, timestamp: Date.now() };
-  console.log('[VideoFeed debug]', message, payload);
-  fetch('http://127.0.0.1:7242/ingest/3b168631-beca-4109-b9fb-808d8bac595c', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0288e1' },
-    body: JSON.stringify(payload),
-  }).catch(() => {});
-};
-// #endregion
-
 interface Video {
   id: string;
   title: string;
@@ -103,9 +91,6 @@ const VideoFeed = () => {
   }, [currentIndex]);
 
   const togglePlay = useCallback(() => {
-    // #region agent log
-    DEBUG_LOG('togglePlay called');
-    // #endregion
     if (didSwipeRef.current) return;
     const v = videoRef.current;
     if (!v) return;
@@ -137,9 +122,6 @@ const VideoFeed = () => {
   const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    // #region agent log
-    DEBUG_LOG('handleLike called', { videoId: currentVideo?.id, guest });
-    // #endregion
     if (guest) { toast.error('Sign in to save favorites'); return; }
     if (!currentVideo) return;
     try {
@@ -164,9 +146,6 @@ const VideoFeed = () => {
   const handleComment = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    // #region agent log
-    DEBUG_LOG('handleComment called', { guest });
-    // #endregion
     if (guest) { toast.error('Sign in to view comments'); return; }
     setShowComments(true);
   };
@@ -203,9 +182,6 @@ const VideoFeed = () => {
   const handleShare = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    // #region agent log
-    DEBUG_LOG('handleShare called');
-    // #endregion
     const url = window.location.href;
     if (navigator.share && typeof navigator.share === 'function') {
       navigator
@@ -230,9 +206,6 @@ const VideoFeed = () => {
   const handleBookmark = async (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    // #region agent log
-    DEBUG_LOG('handleBookmark called', { guest });
-    // #endregion
     if (guest) { toast.error('Sign in to save to playlist'); return; }
     try {
       const res = await videoLibraryApi.getPlaylists();
@@ -336,12 +309,6 @@ const VideoFeed = () => {
   }
 
   const currentVideo = videos[currentIndex];
-
-  // #region agent log
-  useEffect(() => {
-    DEBUG_LOG('VideoFeed render with videos', { videoCount: videos.length, currentIndex, hasCurrentVideo: !!currentVideo });
-  }, [videos.length, currentIndex, currentVideo]);
-  // #endregion
 
   return (
     <div
