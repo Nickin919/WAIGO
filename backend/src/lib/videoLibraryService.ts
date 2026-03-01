@@ -588,6 +588,14 @@ export async function getFeedCandidateVideoIds(catalogId: string): Promise<strin
   });
   seriesFromLinkedVideos.forEach((r) => seriesFromParts.add(r.seriesName.trim()));
 
+  // Also include series from legacy-linked videos (video.partId in catalog). Otherwise only one video
+  // appears when that video is linked by partId but has no VideoLibraryPart and no Part.series match.
+  const seriesFromLegacyVideos = await prisma.videoLibrarySeries.findMany({
+    where: { video: { partId: { in: allPartIds }, status: 'APPROVED' } },
+    select: { seriesName: true },
+  });
+  seriesFromLegacyVideos.forEach((r) => seriesFromParts.add(r.seriesName.trim()));
+
   const seriesNames = [...seriesFromParts];
 
   const [legacyVideos, libraryPartVideos, seriesVideos] = await Promise.all([
