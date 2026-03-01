@@ -66,6 +66,8 @@ const VideoFeed = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialVideoId = searchParams.get('videoId');
 
+  const currentVideo = videos[currentIndex];
+
   useEffect(() => {
     if (pbLoading) return;
     if (!canShowContent || !activeCatalogId) {
@@ -372,8 +374,6 @@ const VideoFeed = () => {
       </div>
     );
   }
-
-  const currentVideo = videos[currentIndex];
 
   return (
     <div
