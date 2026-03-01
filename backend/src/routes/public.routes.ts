@@ -17,6 +17,37 @@ router.get('/feature-flags', (_req: Request, res: Response): void => {
 });
 
 /**
+ * Public video watch - single APPROVED video by ID (no auth).
+ * Used for share links so recipients without login can view.
+ */
+router.get('/videos/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const video = await prisma.video.findUnique({
+      where: { id, status: 'APPROVED' },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        videoUrl: true,
+        thumbnailUrl: true,
+        level: true,
+        partId: true,
+        part: { select: { partNumber: true, description: true } },
+      },
+    });
+    if (!video) {
+      res.status(404).json({ error: 'Video not found' });
+      return;
+    }
+    res.json(video);
+  } catch (error) {
+    console.error('Public video error:', error);
+    res.status(500).json({ error: 'Failed to load video' });
+  }
+});
+
+/**
  * Product Finder - Search products (FREE user access)
  */
 router.get('/parts/search', async (req: Request, res: Response): Promise<void> => {

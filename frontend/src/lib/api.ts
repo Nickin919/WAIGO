@@ -52,6 +52,8 @@ export const publicApi = {
   getCatalogs: () => api.get('/public/catalogs'),
   getFeatureFlags: () =>
     api.get<{ bomAnalyzer: boolean; projects: boolean }>('/public/feature-flags'),
+  getPublicVideo: (id: string) =>
+    api.get<{ id: string; title: string; description?: string; videoUrl: string; thumbnailUrl?: string; level: number; part?: { partNumber: string; description: string } }>('/public/videos/' + id),
   searchParts: (q: string, params?: { category?: string; limit?: number }) =>
     api.get('/public/parts/search', { params: { q, ...params } }),
   crossReference: (manufacturer: string, partNumber: string) =>

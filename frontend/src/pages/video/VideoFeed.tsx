@@ -255,7 +255,7 @@ const VideoFeed = () => {
     e.stopPropagation();
     e.preventDefault();
     const base = window.location.origin;
-    const url = currentVideo?.id ? `${base}/videos?videoId=${encodeURIComponent(currentVideo.id)}` : window.location.href;
+    const url = currentVideo?.id ? `${base}/watch/${encodeURIComponent(currentVideo.id)}` : window.location.href;
     if (navigator.share && typeof navigator.share === 'function') {
       navigator
         .share({
@@ -279,7 +279,7 @@ const VideoFeed = () => {
   }
 
   const getShareUrl = () =>
-    currentVideo?.id ? `${window.location.origin}/videos?videoId=${encodeURIComponent(currentVideo.id)}` : window.location.href;
+    currentVideo?.id ? `${window.location.origin}/watch/${encodeURIComponent(currentVideo.id)}` : window.location.href;
 
   const handleBookmark = async (e: React.MouseEvent) => {
     e.stopPropagation();

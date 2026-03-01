@@ -14,6 +14,7 @@ import CategoryView from './pages/catalog/CategoryView';
 import PartDetail from './pages/catalog/PartDetail';
 import VideoPlayer from './pages/video/VideoPlayer';
 import VideoFeed from './pages/video/VideoFeed';
+import PublicVideoWatch from './pages/video/PublicVideoWatch';
 import Projects from './pages/projects/Projects';
 import ProjectDetail from './pages/projects/ProjectDetail';
 import NewProject from './pages/projects/NewProject';
@@ -169,6 +170,9 @@ function App() {
         <Route path="/admin/video-library" element={<VideoLibrary />} />
         <Route path="/admin/quote-banners" element={<QuoteBanners />} />
       </Route>
+
+      {/* Public watch (no login required) */}
+      <Route path="/watch/:videoId" element={<PublicVideoWatch />} />
 
       {/* 404 */}
       <Route path="*" element={<NotFound />} />
