@@ -245,7 +245,13 @@ const VideoFeed = () => {
     }
   };
 
-  const handleShare = (e: React.MouseEvent) => {
+  const handleShareClick = (e: React.MouseEvent | React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setShowShare(true);
+  };
+
+  const handleShare = (e: React.MouseEvent | React.PointerEvent) => {
     e.stopPropagation();
     e.preventDefault();
     const base = window.location.origin;
@@ -257,18 +263,23 @@ const VideoFeed = () => {
           text: currentVideo?.description ?? '',
           url,
         })
-        .then(() => toast.success('Shared'))
+        .then(() => { toast.success('Shared'); setShowShare(false); })
         .catch((err) => {
           if (err.name !== 'AbortError') copyShareUrl(url);
+          setShowShare(false);
         });
     } else {
       copyShareUrl(url);
+      setShowShare(false);
     }
   };
 
   function copyShareUrl(url: string) {
-    navigator.clipboard.writeText(url).then(() => toast.success('Link copied to clipboard'));
+    navigator.clipboard.writeText(url).then(() => { toast.success('Link copied to clipboard'); setShowShare(false); });
   }
+
+  const getShareUrl = () =>
+    currentVideo?.id ? `${window.location.origin}/videos?videoId=${encodeURIComponent(currentVideo.id)}` : window.location.href;
 
   const handleBookmark = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -415,6 +426,8 @@ const VideoFeed = () => {
                   className="w-full h-full object-cover"
                   playsInline
                   preload="metadata"
+                  disablePictureInPicture
+                  disableRemotePlayback
                   onError={() => setVideoError(true)}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
@@ -519,7 +532,8 @@ const VideoFeed = () => {
         </button>
         <button
           type="button"
-          onClick={handleShare}
+          onClick={handleShareClick}
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
           data-testid="video-feed-share"
           className="flex flex-col items-center justify-center min-w-[48px] min-h-[48px] rounded-xl bg-black/50 backdrop-blur-sm border border-white/30 text-white hover:scale-110 hover:bg-black/70 transition-all shadow-lg [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]"
         >
@@ -592,6 +606,53 @@ const VideoFeed = () => {
                   Post
                 </button>
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Share overlay — avoids video receiving tap and prevents PiP */}
+      {showShare && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-end justify-center pb-24" onClick={() => setShowShare(false)}>
+          <div
+            className="bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm mx-4 p-4 flex flex-col gap-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-white">Share video</h3>
+              <button type="button" onClick={() => setShowShare(false)} className="text-gray-400 hover:text-white p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => copyShareUrl(getShareUrl())}
+              className="w-full py-3 px-4 rounded-xl bg-gray-700 hover:bg-gray-600 text-white font-medium flex items-center justify-center gap-2"
+            >
+              <Share2 className="w-5 h-5" />
+              Copy link
+            </button>
+            {navigator.share && typeof navigator.share === 'function' && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const url = getShareUrl();
+                  navigator.share({
+                    title: currentVideo?.title ?? 'Video',
+                    text: currentVideo?.description ?? '',
+                    url,
+                  }).then(() => { toast.success('Shared'); setShowShare(false); }).catch((err) => {
+                    if (err.name !== 'AbortError') copyShareUrl(url);
+                    else setShowShare(false);
+                  });
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-wago-green hover:bg-green-600 text-white font-medium flex items-center justify-center gap-2"
+              >
+                <Share2 className="w-5 h-5" />
+                Share via…
+              </button>
             )}
           </div>
         </div>
