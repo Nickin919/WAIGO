@@ -1,9 +1,10 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Home, Grid3x3, PlayCircle, FolderKanban, DollarSign, Users, Calculator, Settings, BarChart3, Search, Link2, TrendingUp, UserCircle, ClipboardList, BookOpen, Film, LogOut } from 'lucide-react';
+import { Home, Grid3x3, PlayCircle, FolderKanban, DollarSign, Users, Calculator, Settings, BarChart3, Search, Link2, TrendingUp, UserCircle, ClipboardList, BookOpen, Film, LogOut, ChevronRight } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { effectiveRole } from '@/lib/quoteConstants';
 import { publicApi } from '@/lib/api';
+import { useActiveProjectBook } from '@/hooks/useActiveProjectBook';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
@@ -15,6 +16,14 @@ interface SidebarProps {
 const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
+  const {
+    activeCatalogName,
+    assignedProjectBooks,
+    hasAssignedProjectBooks,
+    canShowContent,
+    isLoading: projectBookLoading,
+  } = useActiveProjectBook();
+  const showActiveProjectBook = user && !projectBookLoading && hasAssignedProjectBooks;
   const { data: featureFlags } = useQuery({
     queryKey: ['feature-flags'],
     queryFn: async () => {
@@ -82,6 +91,24 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
+        {/* Active project book (Quick Grid + Video Academy) */}
+        {showActiveProjectBook && (
+          <div className="p-4 border-b border-gray-200 bg-green-50/80">
+            <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Active project book</div>
+            <p className="text-sm font-medium text-gray-900 truncate mb-1" title={activeCatalogName ?? undefined}>
+              {activeCatalogName ?? '—'}
+            </p>
+            <NavLink
+              to="/catalog-list"
+              onClick={onClose}
+              className="flex items-center gap-1 text-sm text-green-600 hover:text-green-700 font-medium"
+            >
+              {assignedProjectBooks.length > 1 ? 'Switch project book' : 'Manage project books'}
+              <ChevronRight className="w-4 h-4" />
+            </NavLink>
+          </div>
+        )}
+
         {/* Main Navigation */}
         <nav className="p-4 border-b border-gray-200">
           <div className="text-xs font-semibold text-gray-500 uppercase mb-3">Main</div>

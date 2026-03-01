@@ -1,4 +1,5 @@
 import { BookOpen } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 interface ProjectBook {
   id: string;
@@ -52,6 +53,12 @@ export function ActiveProjectBookBar({
       ) : (
         <span className="font-semibold text-green-700 truncate">{activeCatalogName}</span>
       )}
+      <Link
+        to="/catalog-list"
+        className="flex-shrink-0 text-green-600 hover:text-green-700 font-medium text-xs whitespace-nowrap ml-auto"
+      >
+        {hasMultiple ? 'Change' : 'Manage'}
+      </Link>
       {isSwitching && (
         <div className="w-3.5 h-3.5 border-2 border-green-600 border-t-transparent rounded-full animate-spin ml-1 flex-shrink-0" />
       )}

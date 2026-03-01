@@ -27,7 +27,7 @@ const MainLayout = () => {
       <main className="lg:ml-60 pt-16 min-h-screen pb-16 lg:pb-0">
         <Outlet />
       </main>
-      <BottomNav />
+      <BottomNav onMenuClick={() => setSidebarOpen(true)} />
     </div>
   );
 };

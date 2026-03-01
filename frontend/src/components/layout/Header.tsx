@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bell, User, Search, Menu, LogIn, LogOut } from 'lucide-react';
+import { Bell, User, Search, Menu, LogIn, LogOut, BookOpen, ChevronDown } from 'lucide-react';
 import { useAuthStore, isGuestUser } from '@/stores/authStore';
+import { useActiveProjectBook } from '@/hooks/useActiveProjectBook';
 import { notificationApi } from '@/lib/api';
+import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -34,6 +36,18 @@ const Header = ({ onMenuClick }: HeaderProps) => {
   const { user, logout } = useAuthStore();
   const isGuest = useAuthStore(isGuestUser);
   const navigate = useNavigate();
+  const {
+    activeCatalogId,
+    activeCatalogName,
+    assignedProjectBooks,
+    hasAssignedProjectBooks,
+    isLoading: projectBookLoading,
+    isSwitching,
+    setActiveProjectBook,
+  } = useActiveProjectBook();
+  const showProjectBookInHeader = !isGuest && !projectBookLoading && hasAssignedProjectBooks;
+  const [projectBookDropdownOpen, setProjectBookDropdownOpen] = useState(false);
+  const projectBookDropdownRef = useRef<HTMLDivElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -93,6 +107,9 @@ const Header = ({ onMenuClick }: HeaderProps) => {
       }
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setUserMenuOpen(false);
+      }
+      if (projectBookDropdownRef.current && !projectBookDropdownRef.current.contains(event.target as Node)) {
+        setProjectBookDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -170,6 +187,63 @@ const Header = ({ onMenuClick }: HeaderProps) => {
             />
           </div>
         </form>
+
+        {/* Active project book – always visible when user has assigned books */}
+        {showProjectBookInHeader && (
+          <div className="hidden sm:block relative" ref={projectBookDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setProjectBookDropdownOpen((o) => !o)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-green-200 bg-green-50 text-green-800 hover:bg-green-100 transition-colors text-sm font-medium max-w-[180px]"
+              title="Quick Grid and Video Academy use this project book"
+            >
+              <BookOpen className="w-4 h-4 flex-shrink-0" />
+              <span className="truncate">{activeCatalogName ?? 'Project book'}</span>
+              <ChevronDown className={clsx('w-4 h-4 flex-shrink-0 transition-transform', projectBookDropdownOpen && 'rotate-180')} />
+              {isSwitching && (
+                <span className="w-3 h-3 border-2 border-green-600 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+              )}
+            </button>
+            {projectBookDropdownOpen && (
+              <div className="absolute right-0 top-full mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 max-h-64 overflow-y-auto">
+                <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase border-b border-gray-100">
+                  Switch project book
+                </div>
+                {assignedProjectBooks.map((book) => (
+                  <button
+                    key={book.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveProjectBook(book.id);
+                      setProjectBookDropdownOpen(false);
+                    }}
+                    disabled={isSwitching}
+                    className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-2 ${book.id === activeCatalogId ? 'bg-green-50 text-green-800 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    <span className="truncate">{book.name}</span>
+                    {book.id === activeCatalogId && <span className="text-green-600 text-xs flex-shrink-0">Active</span>}
+                  </button>
+                ))}
+                <Link
+                  to="/catalog-list"
+                  onClick={() => setProjectBookDropdownOpen(false)}
+                  className="block px-3 py-2 text-sm text-green-600 hover:bg-green-50 border-t border-gray-100"
+                >
+                  Manage project books →
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
+        {showProjectBookInHeader && (
+          <Link
+            to="/catalog-list"
+            className="sm:hidden flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-green-50 text-green-800 text-sm font-medium"
+          >
+            <BookOpen className="w-4 h-4" />
+            <span className="truncate max-w-[100px]">{activeCatalogName ?? 'Book'}</span>
+          </Link>
+        )}
 
         <div className="flex items-center space-x-4">
           {/* Notifications – only when logged in */}

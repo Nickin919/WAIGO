@@ -3,7 +3,11 @@ import { Home, Grid3x3, PlayCircle, FolderKanban, Menu } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import clsx from 'clsx';
 
-const BottomNav = () => {
+interface BottomNavProps {
+  onMenuClick?: () => void;
+}
+
+const BottomNav = ({ onMenuClick }: BottomNavProps) => {
   const location = useLocation();
   const { user } = useAuthStore();
 
@@ -37,6 +41,8 @@ const BottomNav = () => {
           );
         })}
         <button
+          type="button"
+          onClick={onMenuClick}
           className="flex flex-col items-center justify-center flex-1 h-full text-gray-600"
         >
           <Menu className="w-6 h-6 mb-1" />
