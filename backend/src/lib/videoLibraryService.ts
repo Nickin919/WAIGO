@@ -541,7 +541,7 @@ export async function getAllVideosForExport() {
  * Returns approved video IDs eligible for the project book feed:
  * - Direct part links (CatalogItem.productId → Video.partId)
  * - Category-expanded parts (CatalogItem.categoryId → Part in that category → Video.partId / VideoLibraryPart)
- * - Series links (Part.series → VideoLibrarySeries.seriesName)
+ * - Series links: (1) Part.series for parts in the book, (2) VideoLibrarySeries.seriesName from any video already linked to a catalog part (so all videos with that series appear)
  * - Explicit video–part links (VideoLibraryPart.partId in resolved part set)
  */
 export async function getFeedCandidateVideoIds(catalogId: string): Promise<string[]> {
@@ -574,7 +574,21 @@ export async function getFeedCandidateVideoIds(catalogId: string): Promise<strin
     where: { id: { in: allPartIds }, series: { not: null } },
     select: { series: true },
   });
-  const seriesNames = [...new Set(seriesRows.map((r) => r.series!).filter(Boolean))];
+  const seriesFromParts = new Set(seriesRows.map((r) => r.series!.trim()).filter(Boolean));
+
+  // Also include series from videos already linked to catalog parts (VideoLibraryPart).
+  // So if any video linked to a catalog part has series "001", all videos with series "001" appear in the feed.
+  const seriesFromLinkedVideos = await prisma.videoLibrarySeries.findMany({
+    where: {
+      video: {
+        libraryParts: { some: { partId: { in: allPartIds } } },
+      },
+    },
+    select: { seriesName: true },
+  });
+  seriesFromLinkedVideos.forEach((r) => seriesFromParts.add(r.seriesName.trim()));
+
+  const seriesNames = [...seriesFromParts];
 
   const [legacyVideos, libraryPartVideos, seriesVideos] = await Promise.all([
     prisma.video.findMany({
