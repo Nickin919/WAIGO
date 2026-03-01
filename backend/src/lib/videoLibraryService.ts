@@ -534,3 +534,73 @@ export async function getAllVideosForExport() {
     orderBy: { title: 'asc' },
   });
 }
+
+// ─── Feed candidate resolver (project book → video IDs) ────────────────────────
+
+/**
+ * Returns approved video IDs eligible for the project book feed:
+ * - Direct part links (CatalogItem.productId → Video.partId)
+ * - Category-expanded parts (CatalogItem.categoryId → Part in that category → Video.partId / VideoLibraryPart)
+ * - Series links (Part.series → VideoLibrarySeries.seriesName)
+ * - Explicit video–part links (VideoLibraryPart.partId in resolved part set)
+ */
+export async function getFeedCandidateVideoIds(catalogId: string): Promise<string[]> {
+  const catalogItems = await prisma.catalogItem.findMany({
+    where: { catalogId },
+    select: { productId: true, categoryId: true },
+  });
+
+  const partIdsFromProducts = catalogItems
+    .map((i) => i.productId)
+    .filter((id): id is string => id != null);
+
+  const categoryIds = catalogItems
+    .map((i) => i.categoryId)
+    .filter((id): id is string => id != null);
+  const partIdsFromCategories =
+    categoryIds.length === 0
+      ? []
+      : await prisma.part
+          .findMany({
+            where: { catalogId, categoryId: { in: categoryIds } },
+            select: { id: true },
+          })
+          .then((parts) => parts.map((p) => p.id));
+
+  const allPartIds = [...new Set([...partIdsFromProducts, ...partIdsFromCategories])];
+  if (allPartIds.length === 0) return [];
+
+  const seriesRows = await prisma.part.findMany({
+    where: { id: { in: allPartIds }, series: { not: null } },
+    select: { series: true },
+  });
+  const seriesNames = [...new Set(seriesRows.map((r) => r.series!).filter(Boolean))];
+
+  const [legacyVideos, libraryPartVideos, seriesVideos] = await Promise.all([
+    prisma.video.findMany({
+      where: { partId: { in: allPartIds }, status: 'APPROVED' },
+      select: { id: true },
+    }),
+    prisma.videoLibraryPart.findMany({
+      where: { partId: { in: allPartIds } },
+      select: { videoId: true },
+    }),
+    seriesNames.length
+      ? prisma.videoLibrarySeries.findMany({
+          where: { seriesName: { in: seriesNames } },
+          select: { videoId: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const videoIds = new Set<string>();
+  legacyVideos.forEach((v) => videoIds.add(v.id));
+  libraryPartVideos.forEach((v) => videoIds.add(v.videoId));
+  seriesVideos.forEach((v) => videoIds.add(v.videoId));
+
+  const approved = await prisma.video.findMany({
+    where: { id: { in: [...videoIds] }, status: 'APPROVED' },
+    select: { id: true },
+  });
+  return approved.map((v) => v.id);
+}

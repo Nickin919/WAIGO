@@ -110,7 +110,7 @@ const PartDetail = () => {
               {part.videos.map((video: any) => (
                 <Link
                   key={video.id}
-                  to={`/video/${video.id}`}
+                  to={`/videos?videoId=${encodeURIComponent(video.id)}`}
                   className="card card-hover overflow-hidden"
                 >
                   <div className="relative aspect-video bg-gray-900">

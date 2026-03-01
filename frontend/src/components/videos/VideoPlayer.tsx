@@ -306,13 +306,19 @@ export default function VideoPlayer({ video, onClose, onFavoriteChange }: VideoP
 
   const handleFavorite = async () => {
     if (!user) { toast.error('Please log in to save favorites'); return; }
+    const prevFavorited = favorited;
+    const prevCount = favCount;
+    setFavorited(!prevFavorited);
+    setFavCount((c) => Math.max(0, c + (prevFavorited ? -1 : 1)));
     try {
       const { data } = await videoLibraryApi.toggleFavorite(video.id);
       setFavorited(data.favorited);
-      setFavCount((c) => c + (data.favorited ? 1 : -1));
+      setFavCount((c) => Math.max(0, prevCount + (data.favorited ? 1 : -1)));
       onFavoriteChange?.(video.id, data.favorited);
       toast.success(data.favorited ? 'Added to favorites' : 'Removed from favorites');
     } catch {
+      setFavorited(prevFavorited);
+      setFavCount(prevCount);
       toast.error('Failed to update favorites');
     }
   };
@@ -331,7 +337,7 @@ export default function VideoPlayer({ video, onClose, onFavoriteChange }: VideoP
     try {
       await videoLibraryApi.postComment(video.id, { content: commentText });
       setCommentText('');
-      loadComments();
+      await loadComments();
       toast.success('Comment posted');
     } catch {
       toast.error('Failed to post comment');
@@ -355,7 +361,7 @@ export default function VideoPlayer({ video, onClose, onFavoriteChange }: VideoP
     }
   };
 
-  const totalComments = video._count?.comments ?? comments.length;
+  const totalComments = comments.length > 0 ? comments.length : (video._count?.comments ?? 0);
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-start justify-center z-50 p-4 overflow-y-auto">

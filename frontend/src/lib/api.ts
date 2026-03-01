@@ -166,8 +166,8 @@ export const videoApi = {
       headers: { 'Content-Type': 'multipart/form-data' }
     }),
   
-  getFeed: (catalogId: string) =>
-    api.get('/videos/feed', { params: { catalogId } }),
+  getFeed: (catalogId: string, params?: { seed?: number; cursor?: string; limit?: number }) =>
+    api.get<{ videos: any[]; nextCursor: string | null; seed?: number }>('/videos/feed', { params: { catalogId, ...params } }),
 
   // Admin
   getPending: () =>

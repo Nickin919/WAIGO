@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Heart, MessageCircle, Share2, Bookmark, ChevronDown, X, ChevronRight } from 'lucide-react';
 import { videoApi, videoLibraryApi } from '@/lib/api';
 import { useAuthStore, isGuestUser } from '@/stores/authStore';
@@ -18,7 +19,7 @@ interface Video {
   part: {
     partNumber: string;
     description: string;
-  };
+  } | null;
   isFavorited?: boolean;
   _count: {
     views: number;
@@ -46,6 +47,10 @@ const VideoFeed = () => {
   const [submittingComment, setSubmittingComment] = useState(false);
   const wheelLockRef = useRef(false);
   const didSwipeRef = useRef(false);
+  const [feedSeed, setFeedSeed] = useState<number | undefined>(undefined);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
 
   const {
     activeCatalogId,
@@ -57,6 +62,9 @@ const VideoFeed = () => {
     isSwitching,
     setActiveProjectBook,
   } = useActiveProjectBook();
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialVideoId = searchParams.get('videoId');
 
   useEffect(() => {
     if (pbLoading) return;
@@ -70,9 +78,19 @@ const VideoFeed = () => {
   const loadVideos = async (catalogId: string) => {
     setLoading(true);
     setCurrentIndex(0);
+    setFeedSeed(undefined);
+    setNextCursor(null);
     try {
-      const { data } = await videoApi.getFeed(catalogId);
-      setVideos(Array.isArray(data.videos) ? data.videos : []);
+      const { data } = await videoApi.getFeed(catalogId, { limit: 24 });
+      const list = Array.isArray(data.videos) ? data.videos : [];
+      setVideos(list);
+      setFeedSeed(data.seed);
+      setNextCursor(data.nextCursor ?? null);
+      if (initialVideoId && list.length > 0) {
+        const idx = list.findIndex((v: Video) => v.id === initialVideoId);
+        if (idx >= 0) setCurrentIndex(idx);
+        setSearchParams({}, { replace: true });
+      }
     } catch (error) {
       console.error('Failed to load video feed:', error);
       setVideos([]);
@@ -80,6 +98,23 @@ const VideoFeed = () => {
       setLoading(false);
     }
   };
+
+  const loadMoreVideos = useCallback(async () => {
+    if (!activeCatalogId || !feedSeed || !nextCursor || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const { data } = await videoApi.getFeed(activeCatalogId, { seed: feedSeed, cursor: nextCursor, limit: 20 });
+      const list = Array.isArray(data.videos) ? data.videos : [];
+      setVideos((prev) => [...prev, ...list]);
+      setNextCursor(data.nextCursor ?? null);
+    } catch (error) {
+      console.error('Failed to load more videos:', error);
+    } finally {
+      setLoadingMore(false);
+      loadingMoreRef.current = false;
+    }
+  }, [activeCatalogId, feedSeed, nextCursor]);
 
   // Reset video state when switching videos
   useEffect(() => {
@@ -115,6 +150,11 @@ const VideoFeed = () => {
     if (currentIndex < videos.length - 1) setCurrentIndex((i) => i + 1);
   };
 
+  useEffect(() => {
+    if (videos.length === 0 || !nextCursor) return;
+    if (currentIndex >= videos.length - 3) loadMoreVideos();
+  }, [currentIndex, videos.length, nextCursor, loadMoreVideos]);
+
   const prevVideo = () => {
     if (currentIndex > 0) setCurrentIndex((i) => i - 1);
   };
@@ -124,21 +164,38 @@ const VideoFeed = () => {
     e.preventDefault();
     if (guest) { toast.error('Sign in to save favorites'); return; }
     if (!currentVideo) return;
+    const prevFavorited = currentVideo.isFavorited;
+    const prevCount = currentVideo._count.favorites ?? 0;
+    setVideos((prev) =>
+      prev.map((v) =>
+        v.id === currentVideo.id
+          ? {
+              ...v,
+              isFavorited: !prevFavorited,
+              _count: { ...v._count, favorites: prevCount + (prevFavorited ? -1 : 1) },
+            }
+          : v
+      )
+    );
     try {
       const { data } = await videoLibraryApi.toggleFavorite(currentVideo.id);
+      const newCount = prevCount + (data.favorited ? 1 : -1);
       setVideos((prev) =>
         prev.map((v) =>
           v.id === currentVideo.id
-            ? {
-                ...v,
-                isFavorited: data.favorited,
-                _count: { ...v._count, favorites: (v._count.favorites ?? 0) + (data.favorited ? 1 : -1) },
-              }
+            ? { ...v, isFavorited: data.favorited, _count: { ...v._count, favorites: Math.max(0, newCount) } }
             : v
         )
       );
       toast.success(data.favorited ? 'Added to favorites' : 'Removed from favorites');
     } catch {
+      setVideos((prev) =>
+        prev.map((v) =>
+          v.id === currentVideo.id
+            ? { ...v, isFavorited: prevFavorited, _count: { ...v._count, favorites: prevCount } }
+            : v
+        )
+      );
       toast.error('Failed to update favorite');
     }
   };
@@ -170,7 +227,14 @@ const VideoFeed = () => {
     try {
       await videoLibraryApi.postComment(currentVideo.id, { content: commentText.trim() });
       setCommentText('');
-      loadComments();
+      await loadComments();
+      setVideos((prev) =>
+        prev.map((v) =>
+          v.id === currentVideo.id
+            ? { ...v, _count: { ...v._count, comments: (v._count.comments ?? 0) + 1 } }
+            : v
+        )
+      );
       toast.success('Comment posted');
     } catch {
       toast.error('Failed to post comment');
@@ -182,7 +246,8 @@ const VideoFeed = () => {
   const handleShare = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    const url = window.location.href;
+    const base = window.location.origin;
+    const url = currentVideo?.id ? `${base}/videos?videoId=${encodeURIComponent(currentVideo.id)}` : window.location.href;
     if (navigator.share && typeof navigator.share === 'function') {
       navigator
         .share({
@@ -385,7 +450,7 @@ const VideoFeed = () => {
             </h2>
             <div className="flex items-center space-x-2 mb-2">
               <span className="px-3 py-1 bg-green-600 rounded-full text-xs font-medium">
-                {currentVideo?.part?.partNumber}
+                {currentVideo?.part?.partNumber ?? 'Video'}
               </span>
               <span className="px-3 py-1 bg-purple-600 rounded-full text-xs font-medium">
                 Level {currentVideo?.level}
@@ -393,15 +458,15 @@ const VideoFeed = () => {
             </div>
             <p className="text-sm opacity-90 mb-2">{currentVideo?.description}</p>
             <div className="flex items-center space-x-4 text-sm">
-              <span>❤️ {currentVideo?._count?.views?.toLocaleString()}</span>
-              <span>💬 {currentVideo?._count?.comments}</span>
+              <span>❤️ {(currentVideo?._count?.favorites ?? 0).toLocaleString()}</span>
+              <span>💬 {currentVideo?._count?.comments ?? 0}</span>
             </div>
           </div>
 
           {/* Action buttons moved outside — see below (video layer was capturing clicks when playing) */}
 
           {/* Swipe hint */}
-          {currentIndex < videos.length - 1 && (
+          {currentIndex < videos.length - 1 && !loadingMore && (
             <motion.div
               className="absolute bottom-8 left-1/2 transform -translate-x-1/2 text-white flex flex-col items-center pointer-events-none"
               animate={{ y: [0, 10, 0] }}
@@ -410,6 +475,11 @@ const VideoFeed = () => {
               <ChevronDown className="w-6 h-6" />
               <span className="text-xs">Swipe up</span>
             </motion.div>
+          )}
+          {loadingMore && (
+            <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 text-white/80 text-xs pointer-events-none">
+              Loading more...
+            </div>
           )}
 
           {/* Progress indicator */}

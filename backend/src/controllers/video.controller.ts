@@ -4,6 +4,9 @@ import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { sendVideoApprovalEmail } from '../lib/email';
 import { uploadToR2, getPublicUrl, deleteFromR2, R2_PUBLIC_BUCKET } from '../lib/r2';
+import { getFeedCandidateVideoIds } from '../lib/videoLibraryService';
+import { effectiveRole } from '../lib/roles';
+import { shuffleWithSeed } from '../lib/shuffle';
 
 /**
  * Get videos by part
@@ -312,39 +315,75 @@ export const deleteVideo = async (req: AuthRequest, res: Response): Promise<void
 };
 
 /**
- * GET /api/videos/feed?catalogId= – video feed for a project book
- * Returns all APPROVED videos whose parts are in the given project book (via CatalogItem).
+ * GET /api/videos/feed?catalogId= & optional seed=, cursor=, limit=
+ * Uses project-book candidate resolver; returns randomized feed with cursor pagination.
+ * User must be assigned to the catalog (or ADMIN/RSM).
  */
 export const getVideoFeed = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { catalogId } = req.query as { catalogId?: string };
+    const { catalogId, seed: seedParam, cursor, limit: limitParam } = req.query as {
+      catalogId?: string;
+      seed?: string;
+      cursor?: string;
+      limit?: string;
+    };
     if (!catalogId) {
       res.status(400).json({ error: 'catalogId is required' });
       return;
     }
 
-    // Collect part IDs that belong to this project book
-    const catalogItems = await prisma.catalogItem.findMany({
-      where: { catalogId },
-      select: { productId: true },
-    });
-    const partIds = catalogItems.map((i) => i.productId).filter((id): id is string => id !== null);
+    const userId = req.user?.id;
+    const role = req.user?.role ? effectiveRole(req.user.role) : '';
 
-    if (partIds.length === 0) {
-      res.json({ videos: [] });
+    const isPrivileged = role === 'ADMIN' || role === 'RSM';
+    if (!isPrivileged && userId) {
+      const assignment = await prisma.catalogAssignment.findUnique({
+        where: { catalogId_userId: { catalogId, userId } },
+      });
+      if (!assignment) {
+        res.status(403).json({ error: 'Not assigned to this project book' });
+        return;
+      }
+    } else if (!userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    const videoIds = await getFeedCandidateVideoIds(catalogId);
+    if (videoIds.length === 0) {
+      res.json({ videos: [], nextCursor: null, seed: undefined });
+      return;
+    }
+
+    const seed = seedParam ? parseInt(seedParam, 10) : Date.now();
+    const limit = Math.min(Math.max(parseInt(limitParam || '30', 10) || 30, 1), 100);
+    const orderedIds = shuffleWithSeed(videoIds, seed);
+
+    let startIndex = 0;
+    if (cursor) {
+      const idx = orderedIds.indexOf(cursor);
+      if (idx >= 0) startIndex = idx + 1;
+    }
+    const pageIds = orderedIds.slice(startIndex, startIndex + limit);
+    const nextCursor = pageIds.length === limit && startIndex + limit < orderedIds.length ? pageIds[pageIds.length - 1]! : null;
+
+    if (pageIds.length === 0) {
+      res.json({ videos: [], nextCursor: null, seed });
       return;
     }
 
     const videos = await prisma.video.findMany({
-      where: { partId: { in: partIds }, status: 'APPROVED' },
+      where: { id: { in: pageIds }, status: 'APPROVED' },
       include: {
         part: { select: { partNumber: true, description: true } },
+        libraryParts: { include: { part: { select: { partNumber: true, description: true } } }, take: 1 },
         _count: { select: { views: true, comments: true, favorites: true } },
       },
-      orderBy: [{ level: 'asc' }, { createdAt: 'desc' }],
     });
 
-    const userId = req.user?.id;
+    const orderMap = new Map(pageIds.map((id, i) => [id, i]));
+    videos.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+
     let favoritedSet: Set<string> = new Set();
     if (userId && videos.length > 0) {
       const favs = await prisma.videoFavorite.findMany({
@@ -354,12 +393,22 @@ export const getVideoFeed = async (req: AuthRequest, res: Response): Promise<voi
       favoritedSet = new Set(favs.map((f) => f.videoId));
     }
 
-    const videosWithFavorited = videos.map((v) => ({
-      ...v,
-      isFavorited: favoritedSet.has(v.id),
-    }));
+    const videosWithFavorited = videos.map((v) => {
+      const part = v.part ?? (v.libraryParts as any[])?.[0]?.part ?? null;
+      return {
+        id: v.id,
+        title: v.title,
+        description: v.description,
+        videoUrl: v.videoUrl,
+        thumbnailUrl: v.thumbnailUrl,
+        level: v.level,
+        part,
+        isFavorited: favoritedSet.has(v.id),
+        _count: v._count,
+      };
+    });
 
-    res.json({ videos: videosWithFavorited });
+    res.json({ videos: videosWithFavorited, nextCursor, seed });
   } catch (error) {
     console.error('Get video feed error:', error);
     res.status(500).json({ error: 'Failed to load video feed' });

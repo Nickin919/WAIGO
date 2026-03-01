@@ -14,7 +14,8 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:studio": "prisma studio",
     "lint": "eslint src --ext .ts",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "npm run build && node -e \"require('fs').mkdirSync('dist/lib', { recursive: true }); require('fs').copyFileSync('src/lib/shuffle.test.js', 'dist/lib/shuffle.test.js')\" && node --test dist/lib/shuffle.test.js"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
